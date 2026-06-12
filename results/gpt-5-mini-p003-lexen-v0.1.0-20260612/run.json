@@ -1,0 +1,75 @@
+{
+  "schema_version": "sensebench-run-v1",
+  "run_id": "gpt-5-mini-p003-lexen-v0.1.0-20260612",
+  "created_at": "2026-06-12T23:55:38.904286+00:00",
+  "git_commit": "33f8d0a9860d44479ebaed5d5cbc4bfd9e9687e9",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": "vassili@glite.ai"
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v0.1.0",
+    "dataset_revision": null,
+    "content_hash": "sha256:0222f3be1b54975692f2be67f271db0a351eb627e327e346d6b8155f9d1ba856",
+    "item_count": 4917
+  },
+  "prompt": {
+    "id": "p003",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "gpt-5-mini",
+    "requested_model": "gpt-5-mini",
+    "resolved_model": "gpt-5-mini-2025-08-07",
+    "resolved_model_counts": {
+      "gpt-5-mini-2025-08-07": 4917
+    },
+    "llm_vendor": "OpenAI",
+    "api_provider": "OpenAI",
+    "source_kind": "proprietary",
+    "license": null,
+    "model_url": null,
+    "reasoning_effort": "low",
+    "endpoint_base_url": null
+  },
+  "sampling": {
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": 1024,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "totals": {
+    "item_count": 4917,
+    "correct_count": 4356,
+    "accuracy": 0.8859060402684564,
+    "call_count": 4917,
+    "usage": {
+      "input_tokens": 3008931,
+      "cached_input_tokens": 0,
+      "output_tokens": 379527,
+      "reasoning_output_tokens": 300864
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 1.51128675,
+      "input_uncached_usd": 0.75223275,
+      "input_cached_usd": 0.0,
+      "output_usd": 0.759054,
+      "input_uncached_unit_price_usd": 2.5e-7,
+      "input_cached_unit_price_usd": 2.5e-8,
+      "output_unit_price_usd": 2e-6,
+      "source": "litellm_estimate"
+    },
+    "elapsed_seconds": 25.189778874977492
+  }
+}
