@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sensebench.datasets.detokenize import detokenize_pieces
 from sensebench.datasets.models import (
     DatasetBundle,
     DatasetIndex,
@@ -89,12 +90,55 @@ def _joined_offsets(
     return CharSpan(start=offset + target_start_in_sentence, end=offset + target_end_in_sentence)
 
 
+def _detokenized_window(
+    *,
+    selected: list[Sentence],
+    local_target_sentence_index: int,
+    target_token_index: int,
+    target_text: str,
+    item_id: str,
+) -> ContextWindow:
+    surfaces: list[str] = []
+    target_flat_index = -1
+    for sentence_index, sentence in enumerate(selected):
+        for token_index, token in enumerate(sentence.tokens):
+            if (
+                sentence_index == local_target_sentence_index
+                and token_index == target_token_index
+            ):
+                target_flat_index = len(surfaces)
+            surfaces.append(token.text)
+    if target_flat_index < 0:
+        raise ValueError(f"target_token_index out of range: {target_token_index}")
+    pieces = detokenize_pieces(surfaces=surfaces)
+    text = ""
+    target_start = -1
+    target_end = -1
+    for piece_index, piece in enumerate(pieces):
+        if piece.leading_space:
+            text += SENTENCE_SEPARATOR
+        if piece_index == target_flat_index:
+            target_start = len(text)
+            target_end = target_start + len(piece.text)
+        text += piece.text
+    if text[target_start:target_end] != target_text:
+        raise ValueError(f"context target offset mismatch for {item_id}")
+    return ContextWindow(
+        text=text,
+        target_start_char=target_start,
+        target_end_char=target_end,
+        sentences_before=local_target_sentence_index,
+        sentences_after=len(selected) - local_target_sentence_index - 1,
+    )
+
+
 def build_context_window(
     *,
     index: DatasetIndex,
     item: WsdItem,
     previous_sentences: int,
     next_sentences: int,
+    detokenize: bool = False,
 ) -> ContextWindow:
     if previous_sentences < 0:
         raise ValueError("previous_sentences must be non-negative")
@@ -113,8 +157,16 @@ def build_context_window(
     first_sentence_index = max(0, sentence_index - previous_sentences)
     last_sentence_exclusive = min(len(document.sentences), sentence_index + next_sentences + 1)
     selected: list[Sentence] = document.sentences[first_sentence_index:last_sentence_exclusive]
-    selected_texts: list[str] = [sentence_text(sentence=sentence) for sentence in selected]
     local_target_sentence_index = sentence_index - first_sentence_index
+    if detokenize:
+        return _detokenized_window(
+            selected=selected,
+            local_target_sentence_index=local_target_sentence_index,
+            target_token_index=item.target_token_index,
+            target_text=item.target_text,
+            item_id=item.item_id,
+        )
+    selected_texts: list[str] = [sentence_text(sentence=sentence) for sentence in selected]
     context_text = SENTENCE_SEPARATOR.join(selected_texts)
     absolute_span = _joined_offsets(
         sentence_texts=selected_texts,
