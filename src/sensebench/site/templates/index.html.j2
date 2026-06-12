@@ -75,13 +75,6 @@
       <option value="best">Best per model</option>
     </select>
   </label>
-  <label>
-    Chart
-    <select id="chart-mode">
-      <option value="cost_per_million_items">Accuracy vs cost / M items</option>
-      <option value="tokens_per_item">Accuracy vs tokens</option>
-    </select>
-  </label>
   <label class="checkbox-label">
     <input id="frontier-only" type="checkbox">
     Frontier only
@@ -192,7 +185,7 @@
   <h2>Method Notes</h2>
   <p>Public rows are rebuilt from verified run artifacts in the repository. Accuracy is recomputed from predictions, and official runs are checked against the registered dataset hash and prompt ID.</p>
   <p>The ± value under each accuracy is half the width of a fixed-seed bootstrap 95% confidence interval. The small range under each rank lists the positions a run could plausibly occupy among the visible rows given overlapping intervals.</p>
-  <p>Pareto frontiers use the visible rows: higher accuracy is better, and lower cost or token use is better. Starred rows are on the frontier for the selected chart metric.</p>
+  <p>The Pareto frontier uses the visible rows: higher accuracy is better, and lower cost per million items is better. Starred rows are on the frontier.</p>
   <p>Reference baselines are classic WSD systems scored from per-item predictions on the same dataset items; dashed chart lines show them for context.</p>
   <p>Comparing selected runs on the same dataset uses McNemar's test on paired per-item correctness, which detects differences that overlapping confidence intervals can miss.</p>
 </section>

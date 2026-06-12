@@ -207,7 +207,7 @@ dd {
 
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(190px, 1.6fr) repeat(6, minmax(125px, 1fr)) auto;
+  grid-template-columns: minmax(200px, 1.6fr) repeat(5, minmax(130px, 1fr)) auto;
   gap: 12px;
   align-items: end;
   margin-bottom: 16px;
