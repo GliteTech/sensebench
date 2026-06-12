@@ -37,7 +37,12 @@ from sensebench.paths import (
 from sensebench.prompts.models import PromptDefinition
 from sensebench.prompts.registry import load_prompt_definition
 from sensebench.prompts.render import render_task
-from sensebench.runner.client import LiteLlmClient
+from sensebench.runner.client import (
+    CompletionClient,
+    GeminiApiClient,
+    LiteLlmClient,
+    RateLimitedCompletionClient,
+)
 from sensebench.runner.run import CompletedRun, RunConfig, preflight_model, run_benchmark
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
@@ -62,6 +67,10 @@ DEFAULT_MAX_TOKENS: int = 512
 RUN_ID_DATE_FORMAT: str = "%Y%m%d"
 RUN_ID_COLLISION_TIME_FORMAT: str = "%H%M%S"
 RUN_ID_SLUG_KEEP_CHARACTERS: str = "._-"
+THINKING_EXTRA_KEY: str = "thinking"
+THINKING_DISABLED_VALUE: str = "disabled"
+GEMINI_MODEL_PREFIX: str = "gemini/"
+GEMINI_API_PROVIDER_NAME: str = "gemini api"
 SENSEBENCH_REPO_URL: str = "https://github.com/GliteTech/sensebench"
 MISSING_HANDLE_WARNING: str = (
     "warning: --github-handle not set; this run will not be leaderboard-eligible "
@@ -79,6 +88,13 @@ def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive number")
     return parsed
 
 
@@ -183,6 +199,16 @@ def _warn_if_unpriced(*, model: str) -> None:
             f"warning: no litellm pricing for {model}; run cost will be recorded as unavailable",
             file=sys.stderr,
         )
+
+
+def _uses_native_gemini_api(*, args: argparse.Namespace) -> bool:
+    api_provider = args.api_provider
+    if api_provider is None:
+        return False
+    return (
+        str(args.model).startswith(GEMINI_MODEL_PREFIX)
+        and str(api_provider).strip().lower() == GEMINI_API_PROVIDER_NAME
+    )
 
 
 def _print_run_preamble(*, config: RunConfig) -> None:
@@ -391,11 +417,15 @@ def _model_reference(*, args: argparse.Namespace) -> CloudLlmReference | SelfHos
 
 
 def _sampling(*, args: argparse.Namespace) -> SamplingParameters:
+    extra: dict[str, str] = {}
+    if args.disable_thinking:
+        extra[THINKING_EXTRA_KEY] = THINKING_DISABLED_VALUE
     return SamplingParameters(
         temperature=args.temperature,
         top_p=args.top_p,
         max_tokens=args.max_tokens,
         seed=args.seed,
+        extra=extra,
     )
 
 
@@ -441,7 +471,14 @@ async def _run_async(*, args: argparse.Namespace) -> int:
         show_progress=not bool(args.no_progress),
     )
     _print_run_preamble(config=config)
-    client = LiteLlmClient()
+    client: CompletionClient = (
+        GeminiApiClient() if _uses_native_gemini_api(args=args) else LiteLlmClient()
+    )
+    if args.requests_per_minute is not None:
+        client = RateLimitedCompletionClient(
+            client=client,
+            requests_per_minute=float(args.requests_per_minute),
+        )
     if not bool(args.skip_preflight):
         await preflight_model(config=config, client=client)
         print(f"preflight OK: {model.requested_model}", file=sys.stderr)
@@ -549,11 +586,21 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--skip-preflight", action="store_true")
     run_parser.add_argument("--votes", type=_positive_int, default=1)
     run_parser.add_argument("--concurrency", type=_positive_int, default=DEFAULT_RUN_CONCURRENCY)
+    run_parser.add_argument(
+        "--requests-per-minute",
+        type=_positive_float,
+        help="Throttle outbound model calls to this request rate.",
+    )
     run_parser.add_argument("--no-progress", action="store_true")
     run_parser.add_argument("--temperature", type=float)
     run_parser.add_argument("--top-p", type=float)
     run_parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     run_parser.add_argument("--seed", type=int)
+    run_parser.add_argument(
+        "--disable-thinking",
+        action="store_true",
+        help="Ask providers that expose thinking controls to disable hidden thinking.",
+    )
     run_parser.add_argument("--vendor")
     run_parser.add_argument("--api-provider")
     run_parser.add_argument(

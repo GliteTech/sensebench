@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sensebench.datasets.models import ItemID
 from sensebench.prompts.models import MessageRole
-from sensebench.runner.run import _model_with_resolved_snapshots
+from sensebench.runner.run import _llm_parameters, _model_with_resolved_snapshots
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
     AttemptKind,
@@ -14,6 +14,7 @@ from sensebench.runs.models import (
     CostSourceKind,
     MessageRecord,
     ModelSourceKind,
+    SamplingParameters,
     TokenUsage,
 )
 
@@ -92,3 +93,12 @@ def test_model_with_resolved_snapshots_keeps_distribution_for_mixed_models() -> 
         MODEL_SNAPSHOT_A: 1,
         MODEL_SNAPSHOT_B: 1,
     }
+
+
+def test_llm_parameters_maps_disabled_thinking() -> None:
+    parameters = _llm_parameters(
+        sampling=SamplingParameters(extra={"thinking": "disabled"}),
+    )
+
+    assert parameters["thinking"] == {"type": "disabled"}
+    assert parameters["allowed_openai_params"] == ["thinking"]

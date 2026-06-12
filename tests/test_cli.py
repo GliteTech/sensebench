@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sensebench.cli import DEFAULT_RUN_CONCURRENCY, _build_parser, main
+from sensebench.cli import DEFAULT_RUN_CONCURRENCY, _build_parser, _uses_native_gemini_api, main
 from sensebench.paths import (
     DEFAULT_LEXEN_RELEASE_ID,
     RUN_METADATA_FILENAME,
@@ -57,6 +57,32 @@ def test_run_cli_can_disable_progress() -> None:
     assert args.no_progress is True
 
 
+def test_run_cli_can_disable_thinking() -> None:
+    parser = _build_parser()
+
+    args = parser.parse_args([*RUN_ARGS, "--disable-thinking"])
+
+    assert args.disable_thinking is True
+
+
+def test_run_cli_uses_native_gemini_api_for_direct_gemini_provider() -> None:
+    parser = _build_parser()
+
+    args = parser.parse_args(
+        [
+            "run",
+            "--prompt",
+            "p001",
+            "--model",
+            "gemini/gemma-4-26b-a4b-it",
+            "--api-provider",
+            "Gemini API",
+        ]
+    )
+
+    assert _uses_native_gemini_api(args=args) is True
+
+
 def test_run_cli_rejects_non_positive_votes() -> None:
     parser = _build_parser()
 
@@ -69,6 +95,21 @@ def test_run_cli_rejects_non_positive_concurrency() -> None:
 
     with pytest.raises(SystemExit):
         parser.parse_args([*RUN_ARGS, "--concurrency", "0"])
+
+
+def test_run_cli_accepts_requests_per_minute() -> None:
+    parser = _build_parser()
+
+    args = parser.parse_args([*RUN_ARGS, "--requests-per-minute", "20.5"])
+
+    assert args.requests_per_minute == 20.5
+
+
+def test_run_cli_rejects_non_positive_requests_per_minute() -> None:
+    parser = _build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args([*RUN_ARGS, "--requests-per-minute", "0"])
 
 
 def test_run_cli_rejects_unknown_source_kind() -> None:

@@ -56,6 +56,9 @@ LLM_MAX_TOKENS_PARAMETER: str = "max_tokens"
 LLM_SEED_PARAMETER: str = "seed"
 LLM_API_BASE_PARAMETER: str = "api_base"
 LLM_REASONING_EFFORT_PARAMETER: str = "reasoning_effort"
+LLM_THINKING_PARAMETER: str = "thinking"
+LLM_THINKING_DISABLED_VALUE: str = "disabled"
+LLM_ALLOWED_OPENAI_PARAMS_PARAMETER: str = "allowed_openai_params"
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +128,11 @@ def _llm_parameters(*, sampling: SamplingParameters) -> dict[str, object]:
     if sampling.seed is not None:
         parameters[LLM_SEED_PARAMETER] = sampling.seed
     for key, value in sampling.extra.items():
-        parameters[key] = value
+        if key == LLM_THINKING_PARAMETER and value == LLM_THINKING_DISABLED_VALUE:
+            parameters[LLM_THINKING_PARAMETER] = {"type": LLM_THINKING_DISABLED_VALUE}
+            parameters[LLM_ALLOWED_OPENAI_PARAMS_PARAMETER] = [LLM_THINKING_PARAMETER]
+        else:
+            parameters[key] = value
     return parameters
 
 
