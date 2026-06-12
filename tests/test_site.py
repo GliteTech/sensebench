@@ -253,6 +253,9 @@ def test_build_site_emits_static_pages_and_data(
     assert (output_dir / "index.html").exists()
     assert (output_dir / "runs" / run_id / "index.html").exists()
     assert (output_dir / "data" / "runs" / f"{run_id}.json").exists()
+    assert (output_dir / "artifacts" / "runs" / run_id / "run.json").exists()
+    assert (output_dir / "artifacts" / "runs" / run_id / "predictions.jsonl").exists()
+    assert (output_dir / "artifacts" / "runs" / run_id / "calls.jsonl.gz").exists()
     assert (output_dir / "assets" / "vendor" / "echarts.min.js").exists()
     assert run_id in (output_dir / "sitemap.xml").read_text(encoding="utf-8")
 
@@ -276,7 +279,14 @@ def test_build_site_emits_static_pages_and_data(
     assert "latency_per_item" not in entry
 
     run_detail = json.loads((output_dir / "data" / "runs" / f"{run_id}.json").read_text())
-    assert run_detail["schema_version"] == "sensebench-run-detail-v2"
+    assert run_detail["schema_version"] == "sensebench-run-detail-v3"
+    assert run_detail["metadata"]["run_id"] == run_id
+    assert run_detail["metadata"]["totals"]["cost"]["total_usd"] == 0.02
+    assert {artifact["filename"] for artifact in run_detail["artifacts"]} == {
+        "run.json",
+        "predictions.jsonl",
+        "calls.jsonl.gz",
+    }
     example = run_detail["worst_examples"][0]
     assert len(example["context_sentences"]) == 2
     assert any("<mark>art</mark>" in sentence["html"] for sentence in example["context_sentences"])
@@ -289,6 +299,12 @@ def test_build_site_emits_static_pages_and_data(
     run_html = (output_dir / "runs" / run_id / "index.html").read_text(encoding="utf-8")
     assert "Show raw prompt" in run_html
     assert "Target lemma: art" in run_html
+    assert "Actual run cost" in run_html
+    assert "Download Raw Run Files" in run_html
+    assert "Price / 1M tokens" in run_html
+    assert "Price / token" not in run_html
+    assert "$100.00" in run_html
+    assert "artifacts/runs/fake-model-p001-lexen-v0.1.0-20260612/run.json" in run_html
 
 
 def test_build_site_strict_rejects_wrong_dataset_hash(

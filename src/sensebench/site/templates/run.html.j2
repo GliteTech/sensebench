@@ -2,6 +2,7 @@
 
 {% block content %}
 {% set entry = detail.entry %}
+{% set metadata = detail.metadata %}
 <section class="run-head">
   <div>
     <p class="eyebrow">Verified run</p>
@@ -22,6 +23,10 @@
       <dd>{{ entry.correct_count }} / {{ entry.item_count }}</dd>
     </div>
     <div>
+      <dt>Actual run cost</dt>
+      <dd>{{ entry.cost_usd|money }}</dd>
+    </div>
+    <div>
       <dt>Cost / M items</dt>
       <dd>{{ entry.cost_per_million_items|money }}</dd>
     </div>
@@ -32,22 +37,52 @@
   <div class="detail-block">
     <h2>Model</h2>
     <dl>
+      <dt>Display</dt><dd>{{ metadata.model.display_name }}</dd>
       <dt>Requested</dt><dd>{{ entry.requested_model }}</dd>
       <dt>Resolved</dt><dd>{{ entry.resolved_model or "n/a" }}</dd>
       <dt>Vendor</dt><dd>{{ entry.llm_vendor or "n/a" }}</dd>
+      <dt>API provider</dt><dd>{{ entry.api_provider or "n/a" }}</dd>
       <dt>Hosting</dt><dd>{{ entry.hosting_kind }}</dd>
       <dt>Source</dt><dd>{{ entry.source_kind }}</dd>
       <dt>License</dt><dd>{{ entry.license or "n/a" }}</dd>
+      <dt>Reasoning</dt><dd>{{ entry.reasoning_effort or "n/a" }}</dd>
+      <dt>Model URL</dt>
+      <dd>{% if entry.model_url %}<a href="{{ entry.model_url }}">{{ entry.model_url }}</a>{% else %}n/a{% endif %}</dd>
+      <dt>Endpoint</dt><dd class="hash">{{ metadata.model.endpoint_base_url or "n/a" }}</dd>
+      <dt>Resolved counts</dt>
+      <dd>
+        {% if metadata.model.resolved_model_counts %}
+        {% for model_name, count in metadata.model.resolved_model_counts.items() %}
+        <span class="kv-chip">{{ model_name }}: {{ count }}</span>
+        {% endfor %}
+        {% else %}
+        n/a
+        {% endif %}
+      </dd>
+      {% if metadata.model.hf_revision is defined %}
+      <dt>HF revision</dt><dd>{{ metadata.model.hf_revision or "n/a" }}</dd>
+      <dt>Quantization</dt><dd>{{ metadata.model.quantization or "n/a" }}</dd>
+      <dt>Inference engine</dt><dd>{{ metadata.model.inference_engine or "n/a" }}</dd>
+      <dt>Engine version</dt><dd>{{ metadata.model.inference_engine_version or "n/a" }}</dd>
+      <dt>GPU</dt><dd>{{ metadata.model.gpu or "n/a" }}</dd>
+      <dt>CPU</dt><dd>{{ metadata.model.cpu or "n/a" }}</dd>
+      {% endif %}
     </dl>
   </div>
   <div class="detail-block">
     <h2>Reproducibility</h2>
     <dl>
-      <dt>Dataset</dt><dd>{{ entry.dataset_version }}</dd>
+      <dt>Created</dt><dd>{{ entry.created_at }}</dd>
+      <dt>Run schema</dt><dd>{{ metadata.schema_version }}</dd>
+      <dt>Commit</dt><dd class="hash">{{ entry.git_commit or "n/a" }}</dd>
+      <dt>Dataset ID</dt><dd>{{ metadata.dataset.dataset_id }}</dd>
+      <dt>Dataset version</dt><dd>{{ entry.dataset_version }}</dd>
+      <dt>Dataset revision</dt><dd>{{ metadata.dataset.dataset_revision or "n/a" }}</dd>
+      <dt>Dataset items</dt><dd>{{ metadata.dataset.item_count|num }}</dd>
       <dt>Dataset hash</dt><dd class="hash">{{ entry.dataset_content_hash }}</dd>
       <dt>Prompt</dt><dd>{{ entry.prompt_id }}</dd>
-      <dt>Commit</dt><dd class="hash">{{ entry.git_commit or "n/a" }}</dd>
-      <dt>Artifacts</dt><dd><a href="{{ artifact_url }}">{{ artifact_path }}</a></dd>
+      <dt>Prompt version</dt><dd>{{ metadata.prompt.sensebench_version or "n/a" }}</dd>
+      <dt>Repository files</dt><dd><a href="{{ repository_artifact_url }}">Browse in GitHub</a></dd>
     </dl>
   </div>
   <div class="detail-block">
@@ -59,14 +94,57 @@
       <dt>Total cost</dt><dd>{{ entry.cost_usd|money }}</dd>
       <dt>Cost / M items</dt><dd>{{ entry.cost_per_million_items|money }}</dd>
       <dt>Cost source</dt><dd>{{ entry.cost_source }}</dd>
+      <dt>Elapsed</dt><dd>{{ entry.elapsed_seconds|seconds }}</dd>
+      <dt>Success items</dt><dd>{{ entry.success_count|num }}</dd>
+      <dt>Monosemous</dt><dd>{{ entry.monosemous_count|num }}</dd>
+      <dt>No candidates</dt><dd>{{ entry.no_candidates_count|num }}</dd>
+      <dt>No valid vote</dt><dd>{{ entry.no_valid_vote_count|num }}</dd>
       <dt>Invalid votes</dt><dd>{{ entry.invalid_output_vote_count }}</dd>
       <dt>Transport errors</dt><dd>{{ entry.transport_error_vote_count }}</dd>
+    </dl>
+  </div>
+  <div class="detail-block">
+    <h2>Runner</h2>
+    <dl>
+      <dt>GitHub</dt><dd>{{ metadata.runner.github_handle or "n/a" }}</dd>
+      <dt>Name</dt><dd>{{ metadata.runner.name or "n/a" }}</dd>
+      <dt>Contact</dt><dd>{{ metadata.runner.contact or "n/a" }}</dd>
+    </dl>
+  </div>
+  <div class="detail-block">
+    <h2>Sampling</h2>
+    <dl>
+      <dt>Temperature</dt><dd>{{ metadata.sampling.temperature|num }}</dd>
+      <dt>Top P</dt><dd>{{ metadata.sampling.top_p|num }}</dd>
+      <dt>Max tokens</dt><dd>{{ metadata.sampling.max_tokens|num }}</dd>
+      <dt>Seed</dt><dd>{{ metadata.sampling.seed|num }}</dd>
+      <dt>Extra</dt>
+      <dd>
+        {% if metadata.sampling.extra %}
+        {% for key, value in metadata.sampling.extra.items() %}
+        <span class="kv-chip">{{ key }}: {{ value }}</span>
+        {% endfor %}
+        {% else %}
+        n/a
+        {% endif %}
+      </dd>
+    </dl>
+  </div>
+  <div class="detail-block">
+    <h2>Policy</h2>
+    <dl>
+      <dt>Votes / item</dt><dd>{{ metadata.policy.votes_per_item|num }}</dd>
+      <dt>Reasks / invalid vote</dt>
+      <dd>{{ metadata.policy.semantic_reasks_per_invalid_vote|num }}</dd>
+      <dt>Tie break</dt><dd>{{ metadata.policy.tie_break }}</dd>
+      <dt>Monosemous</dt><dd>{{ metadata.policy.monosemous_policy }}</dd>
     </dl>
   </div>
 </section>
 
 <section class="cost-panel">
   <h2>Cost And Token Breakdown</h2>
+  <p class="note">Actual recorded run cost: {{ entry.cost_usd|money }}. Cost estimate source: {{ entry.cost_source }}.</p>
   <div class="table-scroll">
     <table>
       <thead>
@@ -74,8 +152,7 @@
           <th>Token Type</th>
           <th>Tokens</th>
           <th>Cost</th>
-          <th>Price / token</th>
-          <th>Price / M tokens</th>
+          <th>Price / 1M tokens</th>
         </tr>
       </thead>
       <tbody>
@@ -83,21 +160,18 @@
           <td>Input uncached</td>
           <td>{{ entry.input_uncached_tokens|num }}</td>
           <td>{{ entry.input_uncached_usd|money }}</td>
-          <td>{{ entry.input_uncached_unit_price_usd|token_price }}</td>
           <td>{{ entry.input_uncached_unit_price_usd|million_token_price }}</td>
         </tr>
         <tr>
           <td>Input cached</td>
           <td>{{ entry.cached_input_tokens|num }}</td>
           <td>{{ entry.input_cached_usd|money }}</td>
-          <td>{{ entry.input_cached_unit_price_usd|token_price }}</td>
           <td>{{ entry.input_cached_unit_price_usd|million_token_price }}</td>
         </tr>
         <tr>
           <td>Output</td>
           <td>{{ entry.output_tokens|num }}</td>
           <td>{{ entry.output_usd|money }}</td>
-          <td>{{ entry.output_unit_price_usd|token_price }}</td>
           <td>{{ entry.output_unit_price_usd|million_token_price }}</td>
         </tr>
         <tr>
@@ -105,12 +179,25 @@
           <td>{{ entry.reasoning_output_tokens|num }}</td>
           <td>included in output cost</td>
           <td>n/a</td>
-          <td>n/a</td>
         </tr>
       </tbody>
     </table>
   </div>
   <p class="note">Reasoning output tokens are shown separately when the provider reports them; recorded cost is stored in the output cost bucket.</p>
+</section>
+
+<section class="artifact-panel">
+  <h2>Download Raw Run Files</h2>
+  <div class="artifact-grid">
+    {% for artifact in detail.artifacts %}
+    <a class="artifact-card" href="{{ base_path }}{{ artifact.path }}" download>
+      <span class="artifact-title">{{ artifact.label }}</span>
+      <span class="artifact-filename">{{ artifact.filename }}</span>
+      <span class="artifact-description">{{ artifact.description }}</span>
+      <span class="artifact-size">{{ artifact.size_bytes|bytes }}</span>
+    </a>
+    {% endfor %}
+  </div>
 </section>
 
 <section>

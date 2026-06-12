@@ -31,20 +31,31 @@ from sensebench.leaderboard.aggregate import (
     collect_leaderboard_entries,
 )
 from sensebench.paths import (
+    CALLS_FILENAME,
     DEFAULT_LEXEN_RELEASE_ID,
+    PREDICTIONS_FILENAME,
     PROMPT_JSON_SUFFIX,
     PROMPT_REGISTRY_DIR,
+    RUN_METADATA_FILENAME,
 )
 from sensebench.prompts.models import MessageRole, PromptDefinition
 from sensebench.prompts.registry import load_prompt_definition, registered_prompt_paths
 from sensebench.runs.loaders import LoadedRun, load_run_directory
-from sensebench.runs.models import CallID, CallRecord, CallStatus, PredictionRecord, VoteStatus
+from sensebench.runs.models import (
+    CallID,
+    CallRecord,
+    CallStatus,
+    PredictionRecord,
+    RunMetadata,
+    VoteStatus,
+)
 from sensebench.wordnet import get_candidate_senses
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
 SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v2"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v2"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v3"
+RUN_ARTIFACT_ROOT: str = "artifacts/runs"
 SLICE_POS: str = "POS"
 SLICE_CANDIDATE_COUNT: str = "Candidate Count"
 SLICE_SOURCE_DATASET: str = "Source Dataset"
@@ -124,9 +135,19 @@ class RunExample(SiteModel):
     prompt_messages: list[ExamplePromptMessage]
 
 
+class RunArtifact(SiteModel):
+    label: str
+    filename: str
+    path: str
+    size_bytes: int
+    description: str
+
+
 class RunDetail(SiteModel):
     schema_version: str
     entry: LeaderboardEntry
+    metadata: RunMetadata
+    artifacts: list[RunArtifact]
     slices: list[SliceSummary]
     worst_examples: list[RunExample]
 
@@ -143,6 +164,32 @@ class StaticPage:
     title: str
     description: str
     sections: tuple[PageSection, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RunArtifactSpec:
+    filename: str
+    label: str
+    description: str
+
+
+RUN_ARTIFACT_SPECS: tuple[RunArtifactSpec, ...] = (
+    RunArtifactSpec(
+        filename=RUN_METADATA_FILENAME,
+        label="Run Metadata",
+        description="Submitted run.json with model, dataset, prompt, policy, totals, and costs.",
+    ),
+    RunArtifactSpec(
+        filename=PREDICTIONS_FILENAME,
+        label="Predictions",
+        description="One JSON record per benchmark item with candidates, votes, and correctness.",
+    ),
+    RunArtifactSpec(
+        filename=CALLS_FILENAME,
+        label="Raw Calls",
+        description="Gzipped JSONL call log with prompts, raw outputs, token usage, and costs.",
+    ),
+)
 
 
 def _base_url(*, base_url: str) -> str:
@@ -175,8 +222,9 @@ def _template_env() -> Environment:
     env.filters["pct"] = _format_percent
     env.filters["num"] = _format_number
     env.filters["money"] = _format_money
-    env.filters["token_price"] = _format_token_price
     env.filters["million_token_price"] = _format_million_token_price
+    env.filters["seconds"] = _format_seconds
+    env.filters["bytes"] = _format_bytes
     return env
 
 
@@ -204,16 +252,29 @@ def _format_money(value: float | None) -> str:
     return f"${value:,.2f}"
 
 
-def _format_token_price(value: float | None) -> str:
-    if value is None:
-        return "n/a"
-    return f"${value:.8f}"
-
-
 def _format_million_token_price(value: float | None) -> str:
     if value is None:
         return "n/a"
     return _format_money(value * 1_000_000)
+
+
+def _format_seconds(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    if value < 60:
+        return f"{value:.2f}s"
+    minutes = value / 60
+    return f"{minutes:.2f}m"
+
+
+def _format_bytes(value: int | None) -> str:
+    if value is None:
+        return "n/a"
+    if value < 1024:
+        return f"{value} B"
+    if value < 1024 * 1024:
+        return f"{value / 1024:.1f} KB"
+    return f"{value / (1024 * 1024):.1f} MB"
 
 
 def _write_text(*, path: Path, text: str) -> None:
@@ -243,6 +304,33 @@ def _copy_tree(*, source: Traversable, target: Path) -> None:
 def _copy_static_assets(*, output_dir: Path) -> None:
     static_root = files("sensebench.site").joinpath("static")
     _copy_tree(source=static_root, target=output_dir / "assets")
+
+
+def _copy_run_artifacts(
+    *,
+    output_dir: Path,
+    run_dir: Path,
+    run_id: str,
+) -> list[RunArtifact]:
+    copied: list[RunArtifact] = []
+    target_dir = output_dir / RUN_ARTIFACT_ROOT / run_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for spec in RUN_ARTIFACT_SPECS:
+        source = run_dir / spec.filename
+        if not source.exists():
+            continue
+        target = target_dir / spec.filename
+        shutil.copy2(src=source, dst=target)
+        copied.append(
+            RunArtifact(
+                label=spec.label,
+                filename=spec.filename,
+                path=f"{RUN_ARTIFACT_ROOT}/{run_id}/{spec.filename}",
+                size_bytes=source.stat().st_size,
+                description=spec.description,
+            )
+        )
+    return copied
 
 
 def _site_summary(*, collection: LeaderboardCollection) -> SiteSummary:
@@ -602,6 +690,7 @@ def _run_detail(
     entry: LeaderboardEntry,
     results_dir: Path,
     dataset_cache: dict[str, DatasetBundle],
+    artifacts: list[RunArtifact],
 ) -> RunDetail:
     loaded = load_run_directory(run_dir=results_dir / entry.run_id)
     dataset = _dataset_for_entry(entry=entry, cache=dataset_cache)
@@ -612,6 +701,8 @@ def _run_detail(
     return RunDetail(
         schema_version=RUN_DETAIL_SCHEMA_VERSION,
         entry=entry,
+        metadata=loaded.metadata,
+        artifacts=artifacts,
         slices=slices,
         worst_examples=_worst_examples(
             loaded=loaded,
@@ -696,7 +787,7 @@ def _static_pages() -> list[StaticPage]:
                 PageSection(
                     title="Ranking",
                     paragraphs=(
-                        "Runs sort by higher accuracy, then lower cost per 1,000 items "
+                        "Runs sort by higher accuracy, then lower cost per million items "
                         "when available, then newer creation time.",
                         "The default leaderboard view shows the best verified run per "
                         "model, dataset version, and prompt ID.",
@@ -884,7 +975,18 @@ def _render_run_pages(
     paths: list[str] = []
     dataset_cache: dict[str, DatasetBundle] = {}
     for entry in entries:
-        detail = _run_detail(entry=entry, results_dir=results_dir, dataset_cache=dataset_cache)
+        run_dir = results_dir / entry.run_id
+        artifacts = _copy_run_artifacts(
+            output_dir=output_dir,
+            run_dir=run_dir,
+            run_id=entry.run_id,
+        )
+        detail = _run_detail(
+            entry=entry,
+            results_dir=results_dir,
+            dataset_cache=dataset_cache,
+            artifacts=artifacts,
+        )
         data_path = output_dir / "data" / "runs" / f"{entry.run_id}.json"
         _write_json(path=data_path, value=detail)
         path = f"runs/{entry.run_id}/"
@@ -897,8 +999,9 @@ def _render_run_pages(
             path=path,
             context={
                 "detail": detail,
-                "artifact_path": f"results/{entry.run_id}/",
-                "artifact_url": f"{DEFAULT_REPOSITORY_TREE_URL}/results/{entry.run_id}/",
+                "repository_artifact_url": (
+                    f"{DEFAULT_REPOSITORY_TREE_URL}/results/{entry.run_id}/"
+                ),
             },
         )
         _write_text(path=output_dir / path / "index.html", text=html_text)
