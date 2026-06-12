@@ -390,6 +390,14 @@ excluded from rendered synonyms.
 Maximum number of synonyms or lemma names to include for each candidate sense. Must be `0` when
 `include_synonyms` is `false`.
 
+`detokenize`
+
+Optional boolean, default `false`. When `true`, the renderer detokenizes the Penn-Treebank-style
+source tokens of the context into natural English (attaching punctuation, joining contractions, and
+restoring `` `` ''` `` quotes to `"`) before marking the target. When omitted or `false`, the context
+is the space-joined tokens exactly as stored in the dataset. Because this changes the literal text
+the model receives, it is benchmark-relevant: a detokenized variant must be a new prompt ID.
+
 ## Candidate Sense Indexing
 
 Candidate senses shown to the model are always numbered starting from `1`.
@@ -524,11 +532,10 @@ order, plain integer output. Registered.
 
 `p003`
 
-Previous and next sentence, definitions, examples, POS, WordNet IDs, frequency order, JSON output.
+Identical to `p001` but with `detokenize: true`, so the context is rendered as natural English
+instead of Penn-Treebank-style tokens. Registered. Pairing it with `p001` on the same models gives a
+clean A/B on whether detokenized input changes accuracy.
 
-`p004`
-
-Same fields as `p003`, but deterministic shuffled sense order.
-
-This gives enough variation to study output format and sense-order effects without making the first
-benchmark release hard to audit.
+Further prompts (for example a deterministic shuffled sense order, or a POS-augmented variant) can
+follow as new IDs to study output-format and sense-order effects without making any single release
+hard to audit.

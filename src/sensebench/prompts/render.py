@@ -226,6 +226,7 @@ def render_task(
         item=item,
         previous_sentences=prompt.params.previous_sentences,
         next_sentences=prompt.params.next_sentences,
+        detokenize=prompt.params.detokenize,
     )
     ordered = _ordered_candidates(
         prompt=prompt,
