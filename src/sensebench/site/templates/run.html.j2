@@ -22,8 +22,8 @@
       <dd>{{ entry.correct_count }} / {{ entry.item_count }}</dd>
     </div>
     <div>
-      <dt>Cost</dt>
-      <dd>{{ entry.cost_usd|money }}</dd>
+      <dt>Cost / M items</dt>
+      <dd>{{ entry.cost_per_million_items|money }}</dd>
     </div>
   </dl>
 </section>
@@ -55,8 +55,7 @@
     <dl>
       <dt>Calls</dt><dd>{{ entry.call_count }}</dd>
       <dt>Tokens / item</dt><dd>{{ entry.tokens_per_item|num }}</dd>
-      <dt>Cost / 1k</dt><dd>{{ entry.cost_per_1k_items|money }}</dd>
-      <dt>Latency / item</dt><dd>{{ entry.latency_per_item|num }}s</dd>
+      <dt>Cost / M items</dt><dd>{{ entry.cost_per_million_items|money }}</dd>
       <dt>Invalid votes</dt><dd>{{ entry.invalid_output_vote_count }}</dd>
       <dt>Transport errors</dt><dd>{{ entry.transport_error_vote_count }}</dd>
     </dl>

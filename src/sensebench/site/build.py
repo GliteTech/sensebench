@@ -37,7 +37,7 @@ from sensebench.runs.models import PredictionRecord
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v1"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v2"
 RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v1"
 SLICE_POS: str = "POS"
 SLICE_CANDIDATE_COUNT: str = "Candidate Count"
@@ -783,6 +783,9 @@ def build_site(
     _clean_output_dir(output_dir=output_dir)
     _copy_static_assets(output_dir=output_dir)
     site_data = _site_data(collection=collection)
+    env.globals["asset_version"] = (
+        site_data.summary.generated_at.replace(":", "").replace("+", "")
+    )
     _write_json(path=output_dir / "data" / "leaderboard.json", value=site_data)
 
     paths: list[str] = []

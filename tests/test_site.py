@@ -234,13 +234,13 @@ def test_build_site_emits_static_pages_and_data(
     assert run_id in (output_dir / "sitemap.xml").read_text(encoding="utf-8")
 
     site_data = json.loads((output_dir / "data" / "leaderboard.json").read_text())
-    assert site_data["schema_version"] == "sensebench-site-data-v1"
+    assert site_data["schema_version"] == "sensebench-site-data-v2"
     assert site_data["summary"]["verified_run_count"] == 1
     entry = site_data["entries"][0]
     assert entry["accuracy"] == 1.0
-    assert entry["cost_per_1k_items"] == 20.0
+    assert entry["cost_per_million_items"] == 20_000.0
     assert entry["tokens_per_item"] == 110.0
-    assert entry["latency_per_item"] == 0.5
+    assert "latency_per_item" not in entry
 
 
 def test_build_site_strict_rejects_wrong_dataset_hash(
