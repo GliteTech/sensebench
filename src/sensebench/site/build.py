@@ -14,7 +14,7 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-from jinja2 import Environment, PackageLoader, select_autoescape
+from jinja2 import Environment, PackageLoader
 from pydantic import BaseModel, ConfigDict
 
 from sensebench.datasets.context import build_context_window, build_dataset_index
@@ -217,7 +217,7 @@ def _absolute_url(*, base_url: str, path: str) -> str:
 def _template_env() -> Environment:
     env = Environment(
         loader=PackageLoader("sensebench.site", "templates"),
-        autoescape=select_autoescape(["html", "xml"]),
+        autoescape=True,
     )
     env.filters["pct"] = _format_percent
     env.filters["num"] = _format_number
