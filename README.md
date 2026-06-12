@@ -6,10 +6,10 @@
 [![License](https://img.shields.io/pypi/l/sensebench)](LICENSE)
 
 SenseBench is a benchmark and leaderboard for evaluating English word sense disambiguation (WSD) on
-lexEN and related datasets. A model is shown a target word in context plus its candidate WordNet
-senses and must answer with the index of the correct sense. Prompts are immutable, registered
-definitions; runs produce fully auditable artifacts that anyone can re-verify down to the raw API
-responses.
+[lexEN](https://github.com/GliteTech/lexen) and related datasets. A model is shown a target word in
+context plus its candidate WordNet senses and must answer with the index of the correct sense.
+Prompts are immutable, registered definitions; runs produce fully auditable artifacts that anyone
+can re-verify down to the raw API responses.
 
 **Live leaderboard:** <https://glitetech.github.io/sensebench/>
 
@@ -36,8 +36,11 @@ export OPENAI_API_KEY=...
 ## Run a benchmark
 
 ```bash
-sensebench run --model gpt-5.5 --prompt p001
+sensebench run --model gpt-5.5 --reasoning-effort medium --max-tokens 4096 --prompt p001
 ```
+
+For reasoning models, always pass `--reasoning-effort` explicitly (it is recorded in the run
+metadata and shown on the leaderboard) and give the thinking budget headroom with `--max-tokens`.
 
 On first use this downloads the NLTK WordNet corpus and the registered dataset release
 (`lexen-v0.1.0`, cached under `~/.cache/sensebench/`, integrity-checked against a pinned SHA-256
