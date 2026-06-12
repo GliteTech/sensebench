@@ -92,29 +92,65 @@
 
 <section>
   <h2>Worst-Bucket Examples</h2>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Bucket</th>
-          <th>Item</th>
-          <th>Sentence</th>
-          <th>Predicted</th>
-          <th>Gold</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for example in detail.worst_examples %}
-        <tr>
-          <td>{{ example.bucket_group }}: {{ example.bucket_value }}</td>
-          <td>{{ example.item_id }}</td>
-          <td>{{ example.sentence }}</td>
-          <td>{{ example.predicted_sense_key or "n/a" }}</td>
-          <td>{{ example.gold_sense_keys|join(", ") }}</td>
-        </tr>
+  <div class="example-list">
+    {% for example in detail.worst_examples %}
+    <article class="example-card">
+      <header class="example-header">
+        <div>
+          <h3>{{ example.lemma }} {{ example.pos|title }}</h3>
+          <p class="example-meta">
+            Instance: {{ example.item_id }}
+            <span>Dataset: {{ example.source_dataset }}</span>
+            <span>Bucket: {{ example.bucket_group }} / {{ example.bucket_value }}</span>
+          </p>
+        </div>
+        <div class="example-outcome">
+          {% if example.is_correct %}
+          <span class="badge badge-correct">Correct</span>
+          {% else %}
+          <span class="badge badge-wrong">Incorrect</span>
+          {% endif %}
+        </div>
+      </header>
+
+      <div class="context-block">
+        {% for sentence in example.context_sentences %}
+        <p class="{% if sentence.is_target_sentence %}target-context{% endif %}">
+          {{ sentence.html|safe }}
+        </p>
         {% endfor %}
-      </tbody>
-    </table>
+      </div>
+
+      <h4>WordNet 3.0 senses</h4>
+      <ol class="sense-list">
+        {% for candidate in example.candidates %}
+        <li class="sense-row{% if candidate.is_gold %} is-gold{% endif %}{% if candidate.is_selected %} is-selected{% endif %}">
+          <div class="sense-main">
+            <span class="sense-index">{{ candidate.index }}</span>
+            <div>
+              <p class="sense-definition">{{ candidate.definition or "Definition unavailable" }}</p>
+              <p class="sense-key">{{ candidate.sense_key }} · {{ candidate.synset_id }}</p>
+              {% if candidate.examples %}
+              <ul class="sense-examples">
+                {% for usage in candidate.examples[:2] %}
+                <li>{{ usage }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+              {% if candidate.synonyms %}
+              <p class="sense-synonyms">Synonyms: {{ candidate.synonyms|join(", ") }}</p>
+              {% endif %}
+            </div>
+          </div>
+          <div class="sense-badges">
+            {% if candidate.is_gold %}<span class="badge badge-gold">Gold</span>{% endif %}
+            {% if candidate.is_selected %}<span class="badge badge-selected">Selected</span>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </article>
+    {% endfor %}
   </div>
 </section>
 {% endblock %}

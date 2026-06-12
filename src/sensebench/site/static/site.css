@@ -353,6 +353,164 @@ pre {
   padding: 14px;
 }
 
+.example-list {
+  display: grid;
+  gap: 18px;
+}
+
+.example-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.example-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.example-header h3 {
+  margin: 0 0 4px;
+  font-size: 1.22rem;
+}
+
+.example-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.context-block {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 14px;
+  border-left: 4px solid var(--line);
+  background: var(--surface-2);
+}
+
+.context-block p {
+  margin: 0;
+}
+
+.target-context {
+  color: var(--text);
+  font-weight: 600;
+}
+
+mark {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+  padding: 1px 3px;
+}
+
+.sense-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sense-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.sense-row.is-gold {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.sense-row.is-selected {
+  background: color-mix(in srgb, var(--accent-2) 9%, var(--surface));
+}
+
+.sense-main {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.sense-index {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sense-definition,
+.sense-key,
+.sense-synonyms {
+  margin: 0;
+}
+
+.sense-key,
+.sense-synonyms {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.sense-examples {
+  margin: 8px 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.sense-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-content: flex-start;
+  justify-content: flex-end;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.badge-gold {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+
+.badge-selected {
+  background: color-mix(in srgb, var(--accent-2) 20%, transparent);
+  color: var(--accent-2);
+}
+
+.badge-correct {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+
+.badge-wrong {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
 .site-footer {
   display: flex;
   gap: 16px;
@@ -405,5 +563,18 @@ pre {
 
   h1 {
     font-size: 2rem;
+  }
+
+  .example-header,
+  .sense-row {
+    grid-template-columns: 1fr;
+  }
+
+  .example-header {
+    display: grid;
+  }
+
+  .sense-badges {
+    justify-content: flex-start;
   }
 }

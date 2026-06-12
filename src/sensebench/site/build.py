@@ -34,6 +34,7 @@ from sensebench.paths import DEFAULT_LEXEN_RELEASE_ID
 from sensebench.prompts.registry import load_prompt_definition, registered_prompt_paths
 from sensebench.runs.loaders import LoadedRun, load_run_directory
 from sensebench.runs.models import PredictionRecord
+from sensebench.wordnet import get_candidate_senses
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
@@ -79,17 +80,37 @@ class SliceSummary(SiteModel):
     accuracy: float | None
 
 
+class ExampleContextSentence(SiteModel):
+    html: str
+    is_target_sentence: bool
+
+
+class ExampleCandidate(SiteModel):
+    index: int
+    sense_key: str
+    synset_id: str
+    definition: str | None
+    synonyms: list[str]
+    examples: list[str]
+    is_gold: bool
+    is_selected: bool
+
+
 class RunExample(SiteModel):
     bucket_group: str
     bucket_value: str
     item_id: ItemID
+    lemma: str
     target_text: str
-    sentence: str
     pos: str
     source_dataset: str
     candidate_count: int
+    is_correct: bool | None
+    predicted_sense_index: int | None
     predicted_sense_key: str | None
     gold_sense_keys: list[str]
+    context_sentences: list[ExampleContextSentence]
+    candidates: list[ExampleCandidate]
 
 
 class RunDetail(SiteModel):
@@ -292,23 +313,62 @@ def _slice_summaries(*, loaded: LoadedRun, dataset: DatasetBundle) -> list[Slice
     return sorted(summaries, key=lambda summary: (summary.group, summary.value))
 
 
-def _sentence_text(*, item: WsdItem, dataset: DatasetBundle) -> str:
+def _context_sentences(*, item: WsdItem, dataset: DatasetBundle) -> list[ExampleContextSentence]:
     index = build_dataset_index(bundle=dataset)
     document = index.documents_by_id.get(item.document_id)
     sentence_indexes = index.document_sentence_indexes.get(item.document_id)
     if document is None or sentence_indexes is None:
-        return item.target_text
-    sentence_index = sentence_indexes.get(item.sentence_id)
-    if sentence_index is None:
-        return item.target_text
-    sentence = document.sentences[sentence_index]
-    pieces: list[str] = []
-    for token_index, token in enumerate(sentence.tokens):
-        if token_index == item.target_token_index or token.item_id == item.item_id:
-            pieces.append(f"<t>{token.text}</t>")
-        else:
-            pieces.append(token.text)
-    return " ".join(pieces)
+        return [
+            ExampleContextSentence(
+                html=f"<mark>{html.escape(item.target_text)}</mark>",
+                is_target_sentence=True,
+            )
+        ]
+    target_sentence_index = sentence_indexes.get(item.sentence_id)
+    context: list[ExampleContextSentence] = []
+    for sentence_index, sentence in enumerate(document.sentences):
+        is_target_sentence = sentence_index == target_sentence_index
+        pieces: list[str] = []
+        for token_index, token in enumerate(sentence.tokens):
+            token_text = html.escape(token.text)
+            is_target_token = token.item_id == item.item_id or (
+                is_target_sentence and token_index == item.target_token_index
+            )
+            pieces.append(f"<mark>{token_text}</mark>" if is_target_token else token_text)
+        context.append(
+            ExampleContextSentence(
+                html=" ".join(pieces),
+                is_target_sentence=is_target_sentence,
+            )
+        )
+    return context
+
+
+def _example_candidates(
+    *,
+    prediction: PredictionRecord,
+    item: WsdItem,
+) -> list[ExampleCandidate]:
+    wordnet_by_key = {
+        candidate.sense_key: candidate
+        for candidate in get_candidate_senses(lemma=item.lemma, pos=item.pos)
+    }
+    candidates: list[ExampleCandidate] = []
+    for candidate in prediction.candidates:
+        wordnet_candidate = wordnet_by_key.get(candidate.sense_key)
+        candidates.append(
+            ExampleCandidate(
+                index=candidate.index,
+                sense_key=candidate.sense_key,
+                synset_id=candidate.synset_id,
+                definition=wordnet_candidate.definition if wordnet_candidate is not None else None,
+                synonyms=wordnet_candidate.synonyms if wordnet_candidate is not None else [],
+                examples=wordnet_candidate.examples if wordnet_candidate is not None else [],
+                is_gold=candidate.sense_key in prediction.gold_sense_keys,
+                is_selected=candidate.sense_key == prediction.predicted_sense_key,
+            )
+        )
+    return candidates
 
 
 def _example(
@@ -323,13 +383,17 @@ def _example(
         bucket_group=bucket_group,
         bucket_value=bucket_value,
         item_id=prediction.item_id,
+        lemma=item.lemma,
         target_text=item.target_text,
-        sentence=_sentence_text(item=item, dataset=dataset),
         pos=item.pos,
         source_dataset=_source_dataset(item=item),
         candidate_count=len(prediction.candidates),
+        is_correct=prediction.is_correct,
+        predicted_sense_index=prediction.predicted_sense_index,
         predicted_sense_key=prediction.predicted_sense_key,
         gold_sense_keys=list(prediction.gold_sense_keys),
+        context_sentences=_context_sentences(item=item, dataset=dataset),
+        candidates=_example_candidates(prediction=prediction, item=item),
     )
 
 

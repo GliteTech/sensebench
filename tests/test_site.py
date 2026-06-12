@@ -99,20 +99,32 @@ def _write_verified_run(
     run_id: str,
     model_name: str = "fake-model",
     content_hash: str | None = None,
+    choose_gold: bool = True,
 ) -> None:
     prompt = load_prompt_definition(path=PROMPT_REGISTRY_DIR / f"p001{PROMPT_JSON_SUFFIX}")
     item = dataset.items[0]
     index = build_dataset_index(bundle=dataset)
     candidates = get_candidate_senses(lemma=item.lemma, pos=item.pos)
     rendered = render_task(prompt=prompt, item=item, dataset_index=index, candidates=candidates)
-    chosen = next(
-        candidate
-        for candidate in rendered.candidates
-        if candidate.sense_key in item.gold_sense_keys
-    )
+    if choose_gold:
+        chosen = next(
+            candidate
+            for candidate in rendered.candidates
+            if candidate.sense_key in item.gold_sense_keys
+        )
+    else:
+        chosen = next(
+            candidate
+            for candidate in rendered.candidates
+            if candidate.sense_key not in item.gold_sense_keys
+        )
     call_id = f"{item.item_id}__v1__a1"
     usage = TokenUsage(input_tokens=100, cached_input_tokens=0, output_tokens=10)
     cost = CostBreakdown(total_usd=0.02, source=CostSourceKind.LITELLM_ESTIMATE)
+    is_correct = prediction_is_correct(
+        predicted_sense_key=chosen.sense_key,
+        gold_sense_keys=item.gold_sense_keys,
+    )
     prediction = PredictionRecord(
         item_id=item.item_id,
         gold_sense_keys=item.gold_sense_keys,
@@ -135,10 +147,7 @@ def _write_verified_run(
         ],
         predicted_sense_index=chosen.index,
         predicted_sense_key=chosen.sense_key,
-        is_correct=prediction_is_correct(
-            predicted_sense_key=chosen.sense_key,
-            gold_sense_keys=item.gold_sense_keys,
-        ),
+        is_correct=is_correct,
         status=PredictionStatus.SUCCESS,
         was_monosemous=False,
         usage=usage,
@@ -175,8 +184,8 @@ def _write_verified_run(
         ),
         totals=RunTotals(
             item_count=1,
-            correct_count=1,
-            accuracy=1.0,
+            correct_count=1 if is_correct else 0,
+            accuracy=1.0 if is_correct else 0.0,
             call_count=1,
             usage=usage,
             cost=cost,
@@ -218,7 +227,12 @@ def test_build_site_emits_static_pages_and_data(
     results_dir = tmp_path / "results"
     output_dir = tmp_path / "_site"
     run_id = "fake-model-p001-lexen-v0.1.0-20260612"
-    _write_verified_run(results_dir=results_dir, dataset=dataset, run_id=run_id)
+    _write_verified_run(
+        results_dir=results_dir,
+        dataset=dataset,
+        run_id=run_id,
+        choose_gold=False,
+    )
 
     site_build_module.build_site(
         results_dir=results_dir,
@@ -237,10 +251,17 @@ def test_build_site_emits_static_pages_and_data(
     assert site_data["schema_version"] == "sensebench-site-data-v2"
     assert site_data["summary"]["verified_run_count"] == 1
     entry = site_data["entries"][0]
-    assert entry["accuracy"] == 1.0
+    assert entry["accuracy"] == 0.0
     assert entry["cost_per_million_items"] == 20_000.0
     assert entry["tokens_per_item"] == 110.0
     assert "latency_per_item" not in entry
+
+    run_detail = json.loads((output_dir / "data" / "runs" / f"{run_id}.json").read_text())
+    example = run_detail["worst_examples"][0]
+    assert example["context_sentences"]
+    assert example["candidates"]
+    assert any(candidate["is_gold"] for candidate in example["candidates"])
+    assert any(candidate["is_selected"] for candidate in example["candidates"])
 
 
 def test_build_site_strict_rejects_wrong_dataset_hash(
