@@ -1,10 +1,17 @@
 # SenseBench
 
-SenseBench is benchmark and leaderboard tooling for evaluating English word sense disambiguation
-(WSD) on lexEN and related datasets. A model is shown a target word in context plus its candidate
-WordNet senses and must answer with the index of the correct sense. Prompts are immutable,
-registered definitions; runs produce fully auditable artifacts that anyone can re-verify down to
-the raw API responses.
+[![PyPI](https://img.shields.io/pypi/v/sensebench)](https://pypi.org/project/sensebench/)
+[![Python](https://img.shields.io/pypi/pyversions/sensebench)](https://pypi.org/project/sensebench/)
+[![CI](https://github.com/GliteTech/sensebench/actions/workflows/ci.yml/badge.svg)](https://github.com/GliteTech/sensebench/actions/workflows/ci.yml)
+[![License](https://img.shields.io/pypi/l/sensebench)](LICENSE)
+
+SenseBench is a benchmark and leaderboard for evaluating English word sense disambiguation (WSD) on
+lexEN and related datasets. A model is shown a target word in context plus its candidate WordNet
+senses and must answer with the index of the correct sense. Prompts are immutable, registered
+definitions; runs produce fully auditable artifacts that anyone can re-verify down to the raw API
+responses.
+
+**Live leaderboard:** <https://glitetech.github.io/sensebench/>
 
 ## Install
 
@@ -57,10 +64,36 @@ correctness against gold — from the stored artifacts:
 sensebench verify runs/<run-id> --dataset lexen-v0.1.0 --prompt p001
 ```
 
+## Dataset
+
+lexEN dataset releases are immutable JSONL exports published as
+[GitHub release assets](https://github.com/GliteTech/lexen/releases) and downloaded automatically on
+first use. Every release is pinned inside the package by URL, SHA-256 content hash, and item count,
+and the loader rejects any file that does not match. `lexen-v0.1.0` contains 4,917 items derived
+from Senseval-2, Senseval-3, SemEval-2013, and SemEval-2015, with candidate senses drawn from
+WordNet 3.0.
+
+```bash
+sensebench fetch-dataset lexen-v0.1.0
+```
+
 ## Prompts
 
 Registered prompts are immutable JSON definitions under `src/sensebench/prompts/registered/`. Any
 benchmark-relevant change requires a new prompt ID. See `docs/prompts.md`.
+
+## Submitting results
+
+Anyone can submit a run to the public leaderboard:
+
+1. Run the benchmark with the released package and your own API key.
+2. Verify it locally: `sensebench verify runs/<run-id> --dataset lexen-v0.1.0 --prompt p001`.
+3. Open a pull request that places the complete run directory (`run.json`, `predictions.jsonl`,
+   `calls.jsonl.gz`) under `results/<run-id>/`.
+
+CI re-verifies every submitted run from the raw API responses and builds a site preview; merging to
+`main` deploys the updated leaderboard automatically. Partial runs and runs that fail verification
+are rejected.
 
 ## Leaderboard
 
@@ -78,9 +111,7 @@ sensebench site build --results-dir results --output-dir _site --strict
 
 The generated site includes an interactive leaderboard, Pareto charts, static run-detail pages,
 dataset and prompt reference pages, submission instructions, a sitemap, and static JSON under
-`_site/data/`. Pull requests that add public results must place complete run artifacts under
-`results/<run-id>/`; CI verifies all submitted results and builds a preview artifact. Merges to
-`main` deploy the rebuilt site automatically.
+`_site/data/`.
 
 ## Development
 
