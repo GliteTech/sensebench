@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run ruff check src tests tools
+      - run: uv run mypy src
+      - run: uv run pytest -q
+      - run: uv run python tools/verify_prompt.py --all
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv build
+      - run: uv venv /tmp/smoke-venv
+      - run: uv pip install --python /tmp/smoke-venv/bin/python dist/*.whl
+      - name: Installed-package smoke test outside the repo
+        working-directory: ${{ runner.temp }}
+        run: |
+          /tmp/smoke-venv/bin/sensebench render \
+            --dataset-jsonl "$GITHUB_WORKSPACE/tests/data/smoke_items.jsonl" \
+            --prompt p001 --limit 1 > render.json
+          grep -q '<t>art</t>' render.json

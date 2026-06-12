@@ -34,13 +34,12 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "datasets>=3.0",
     "litellm>=1.0",
     "nltk>=3.9",
     "numpy>=2.0",
     "pydantic>=2.0",
-    "rich>=13.0",
-    "scipy>=1.14",
+    "python-dotenv>=1.0",
+    "tqdm>=4.66",
 ]
 
 [project.urls]
@@ -83,6 +82,7 @@ dev = [
     "pre-commit>=4.0",
     "pytest>=8.0",
     "ruff>=0.8",
+    "types-tqdm>=4.67",
 ]
 
 [tool.flowmark]
