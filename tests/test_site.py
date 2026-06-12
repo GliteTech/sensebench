@@ -299,6 +299,9 @@ def test_build_site_emits_static_pages_and_data(
     run_html = (output_dir / "runs" / run_id / "index.html").read_text(encoding="utf-8")
     assert "Show raw prompt" in run_html
     assert "Target lemma: art" in run_html
+    assert "&lt;t&gt;art&lt;/t&gt;" in run_html
+    assert "<t>art</t>" not in run_html
+    assert "<mark>art</mark>" in run_html
     assert "Actual run cost" in run_html
     assert "Download Raw Run Files" in run_html
     assert "Price / 1M tokens" in run_html
