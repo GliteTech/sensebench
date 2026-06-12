@@ -8,11 +8,8 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from sensebench.paths import CALLS_FILENAME, PREDICTIONS_FILENAME, RUN_METADATA_FILENAME
 from sensebench.runs.models import CallRecord, PredictionRecord, RunMetadata
-
-RUN_METADATA_FILENAME: str = "run.json"
-PREDICTIONS_FILENAME: str = "predictions.jsonl"
-CALLS_FILENAME: str = "calls.jsonl.gz"
 
 
 @dataclass(frozen=True, slots=True)

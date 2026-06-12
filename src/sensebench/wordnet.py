@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -53,9 +54,20 @@ def wordnet_pos(*, pos: str) -> WordNetPos | None:
     return PROJECT_POS_TO_WORDNET.get(pos)
 
 
+def _download_wordnet_corpus() -> None:
+    import nltk  # type: ignore[import-untyped]
+
+    print("Downloading the NLTK WordNet corpus (one-time setup)...", file=sys.stderr)
+    nltk.download("wordnet", quiet=True)
+
+
 def wordnet_version() -> str:
     wn = _wordnet()
-    version = str(wn.get_version())
+    try:
+        version = str(wn.get_version())
+    except LookupError:
+        _download_wordnet_corpus()
+        version = str(wn.get_version())
     if version != EXPECTED_WORDNET_VERSION:
         raise RuntimeError(f"Expected WordNet {EXPECTED_WORDNET_VERSION}, got {version}")
     return version

@@ -6,14 +6,26 @@ import argparse
 import asyncio
 import json
 import sys
+from collections import Counter
 from collections.abc import Callable, Sequence
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import assert_never
+
+from dotenv import find_dotenv, load_dotenv
 
 from sensebench.datasets.context import build_dataset_index
 from sensebench.datasets.loaders import load_jsonl_dataset
+from sensebench.datasets.models import DatasetBundle
+from sensebench.datasets.releases import (
+    fetch_dataset_release,
+    get_dataset_release,
+    load_registered_dataset,
+)
 from sensebench.leaderboard.aggregate import emit_leaderboard
 from sensebench.paths import (
+    DEFAULT_LEXEN_RELEASE_ID,
     LEADERBOARD_JSON_PATH,
     LOCAL_RUNS_DIR,
     PROMPT_JSON_SUFFIX,
@@ -24,19 +36,41 @@ from sensebench.prompts.models import PromptDefinition
 from sensebench.prompts.registry import load_prompt_definition
 from sensebench.prompts.render import render_task
 from sensebench.runner.client import LiteLlmClient
-from sensebench.runner.run import RunConfig, run_benchmark
+from sensebench.runner.run import CompletedRun, RunConfig, preflight_model, run_benchmark
 from sensebench.runs.models import (
-    ModelExecutionKind,
+    CLOUD_LLM_KIND,
+    SELF_HOSTED_LLM_KIND,
+    CloudLlmReference,
     ModelHostingKind,
-    ModelReference,
     ModelSourceKind,
+    PredictionStatus,
     RunnerIdentity,
     SamplingParameters,
+    SelfHostedLlmReference,
+    VoteStatus,
 )
 from sensebench.verify.runs import RunValidationReport, verify_run_directory
-from sensebench.wordnet import SenseCandidate, get_candidate_senses
+from sensebench.wordnet import SenseCandidate, get_candidate_senses, wordnet_version
 
 CommandHandler = Callable[..., int]
+DEFAULT_RUN_CONCURRENCY: int = 512
+DEFAULT_MAX_TOKENS: int = 512
+RUN_ID_DATE_FORMAT: str = "%Y%m%d"
+RUN_ID_COLLISION_TIME_FORMAT: str = "%H%M%S"
+RUN_ID_SLUG_KEEP_CHARACTERS: str = "._-"
+
+
+def _load_local_env() -> None:
+    dotenv_path = find_dotenv(usecwd=True)
+    if len(dotenv_path) > 0:
+        load_dotenv(dotenv_path=dotenv_path, override=False)
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def _prompt_path(*, prompt: str) -> Path:
@@ -65,30 +99,127 @@ def _print_run_report(*, report: RunValidationReport) -> None:
         print(f"  [{issue.rule.value}] {issue.location}: {issue.message}")
 
 
-def _add_dataset_args(*, parser: argparse.ArgumentParser) -> None:
+def _add_dataset_args(*, parser: argparse.ArgumentParser, default_release: str | None) -> None:
     parser.add_argument(
-        "--dataset-jsonl", required=True, help="Local SenseBench JSONL dataset file."
+        "--dataset",
+        default=default_release,
+        help="Registered dataset release ID (downloaded and cached automatically).",
     )
     parser.add_argument(
-        "--dataset-id", default="local", help="Dataset identifier recorded in metadata."
+        "--dataset-jsonl",
+        default=None,
+        help="Local SenseBench JSONL dataset file (overrides --dataset).",
     )
     parser.add_argument(
-        "--dataset-version", default=None, help="Dataset version recorded in metadata."
+        "--dataset-id",
+        default="local",
+        help="Dataset identifier recorded in metadata for --dataset-jsonl runs.",
     )
+    parser.add_argument(
+        "--dataset-version",
+        default=None,
+        help="Dataset version recorded in metadata for --dataset-jsonl runs.",
+    )
+
+
+def _resolve_dataset(*, args: argparse.Namespace) -> DatasetBundle | None:
+    if args.dataset_jsonl is not None:
+        return load_jsonl_dataset(
+            path=Path(str(args.dataset_jsonl)),
+            dataset_id=str(args.dataset_id),
+            dataset_version=_optional_arg(value=args.dataset_version),
+        )
+    if args.dataset is None:
+        return None
+    release = get_dataset_release(release_id=str(args.dataset))
+    return load_registered_dataset(release=release)
+
+
+def _slugify(*, value: str) -> str:
+    slug_characters = [
+        character if character.isalnum() or character in RUN_ID_SLUG_KEEP_CHARACTERS else "-"
+        for character in value.lower()
+    ]
+    slug = "".join(slug_characters).strip("-")
+    if len(slug) == 0:
+        return "model"
+    return slug
+
+
+def _default_run_id(
+    *,
+    model: str,
+    prompt_id: str,
+    dataset_label: str,
+    output_root: Path,
+) -> str:
+    now = datetime.now(tz=UTC)
+    base = (
+        f"{_slugify(value=model)}-{prompt_id}-{dataset_label}-{now.strftime(RUN_ID_DATE_FORMAT)}"
+    )
+    if not (output_root / base).exists():
+        return base
+    return f"{base}-{now.strftime(RUN_ID_COLLISION_TIME_FORMAT)}"
+
+
+def _warn_if_unpriced(*, model: str) -> None:
+    import litellm
+
+    try:
+        litellm.get_model_info(model)
+    except Exception:
+        print(
+            f"warning: no litellm pricing for {model}; run cost will be recorded as unavailable",
+            file=sys.stderr,
+        )
+
+
+def _print_run_summary(*, completed: CompletedRun) -> None:
+    totals = completed.metadata.totals
+    status_counts: Counter[PredictionStatus] = Counter(
+        prediction.status for prediction in completed.predictions
+    )
+    invalid_output_votes = sum(
+        1
+        for prediction in completed.predictions
+        for vote in prediction.votes
+        if vote.status == VoteStatus.INVALID_OUTPUT
+    )
+    transport_error_votes = sum(
+        1
+        for prediction in completed.predictions
+        for vote in prediction.votes
+        if vote.status == VoteStatus.TRANSPORT_ERROR
+    )
+    accuracy_text = "n/a" if totals.accuracy is None else f"{totals.accuracy:.4f}"
+    cost_text = "unavailable" if totals.cost.total_usd is None else f"${totals.cost.total_usd:.2f}"
+    elapsed_text = "n/a" if totals.elapsed_seconds is None else f"{totals.elapsed_seconds:.1f}s"
+    print(f"run_id: {completed.metadata.run_id}")
+    print(f"accuracy: {accuracy_text} ({totals.correct_count}/{totals.item_count} correct)")
+    print(
+        "items: "
+        f"success={status_counts.get(PredictionStatus.SUCCESS, 0)} "
+        f"monosemous={status_counts.get(PredictionStatus.MONOSEMOUS, 0)} "
+        f"no_valid_vote={status_counts.get(PredictionStatus.NO_VALID_VOTE, 0)} "
+        f"no_candidates={status_counts.get(PredictionStatus.NO_CANDIDATES, 0)}"
+    )
+    print(f"votes: invalid_output={invalid_output_votes} transport_error={transport_error_votes}")
+    print(f"calls: {totals.call_count}  cost: {cost_text}  elapsed: {elapsed_text}")
+    print(completed.run_dir)
 
 
 def _cmd_render(*, args: argparse.Namespace) -> int:
-    dataset = load_jsonl_dataset(
-        path=Path(args.dataset_jsonl),
-        dataset_id=str(args.dataset_id),
-        dataset_version=_optional_arg(value=args.dataset_version),
-    )
+    wordnet_version()
+    dataset = _resolve_dataset(args=args)
+    assert dataset is not None, "the render command defines a default dataset release"
     prompt = _load_prompt(prompt=str(args.prompt))
     index = build_dataset_index(bundle=dataset)
     rendered_count = 0
     for item in dataset.items:
         if args.item_id is not None and item.item_id != args.item_id:
             continue
+        if args.limit is not None and rendered_count >= args.limit:
+            break
         candidates: list[SenseCandidate] = get_candidate_senses(lemma=item.lemma, pos=item.pos)
         rendered = render_task(prompt=prompt, item=item, dataset_index=index, candidates=candidates)
         print(
@@ -115,31 +246,55 @@ def _cmd_render(*, args: argparse.Namespace) -> int:
             )
         )
         rendered_count += 1
-        if args.limit is not None and rendered_count >= args.limit:
-            break
     return 0
 
 
-def _model_reference(*, args: argparse.Namespace) -> ModelReference:
-    return ModelReference(
-        execution_kind=ModelExecutionKind.LLM,
+def _cloud_model_reference(*, args: argparse.Namespace) -> CloudLlmReference:
+    return CloudLlmReference(
+        kind=CLOUD_LLM_KIND,
         display_name=str(args.model),
         requested_model=str(args.model),
         resolved_model=None,
-        vendor=args.vendor,
+        llm_vendor=args.vendor,
         api_provider=args.api_provider,
-        hosting_kind=ModelHostingKind(str(args.hosting_kind)),
         source_kind=ModelSourceKind(str(args.source_kind)),
         license=args.license,
         model_url=args.model_url,
         reasoning_effort=args.reasoning_effort,
+        endpoint_base_url=args.endpoint_base_url,
+    )
+
+
+def _self_hosted_model_reference(*, args: argparse.Namespace) -> SelfHostedLlmReference:
+    endpoint_base_url = _optional_arg(value=args.endpoint_base_url)
+    if endpoint_base_url is None:
+        raise ValueError("--endpoint-base-url is required for --hosting-kind self_hosted")
+    return SelfHostedLlmReference(
+        kind=SELF_HOSTED_LLM_KIND,
+        display_name=str(args.model),
+        requested_model=str(args.model),
+        resolved_model=None,
+        llm_vendor=args.vendor,
+        source_kind=ModelSourceKind(str(args.source_kind)),
+        license=args.license,
+        model_url=args.model_url,
+        hf_revision=args.hf_revision,
         quantization=args.quantization,
         inference_engine=args.inference_engine,
         inference_engine_version=args.inference_engine_version,
-        endpoint_base_url=args.endpoint_base_url,
+        endpoint_base_url=endpoint_base_url,
         gpu=args.gpu,
         cpu=args.cpu,
     )
+
+
+def _model_reference(*, args: argparse.Namespace) -> CloudLlmReference | SelfHostedLlmReference:
+    hosting_kind = ModelHostingKind(str(args.hosting_kind))
+    if hosting_kind == ModelHostingKind.CLOUD_API:
+        return _cloud_model_reference(args=args)
+    if hosting_kind == ModelHostingKind.SELF_HOSTED:
+        return _self_hosted_model_reference(args=args)
+    assert_never(hosting_kind)
 
 
 def _sampling(*, args: argparse.Namespace) -> SamplingParameters:
@@ -152,18 +307,36 @@ def _sampling(*, args: argparse.Namespace) -> SamplingParameters:
 
 
 async def _run_async(*, args: argparse.Namespace) -> int:
-    dataset = load_jsonl_dataset(
-        path=Path(args.dataset_jsonl),
-        dataset_id=str(args.dataset_id),
-        dataset_version=_optional_arg(value=args.dataset_version),
-    )
+    _load_local_env()
+    dataset = _resolve_dataset(args=args)
+    assert dataset is not None, "the run command defines a default dataset release"
+    if args.limit is not None:
+        dataset = replace(dataset, items=dataset.items[: int(args.limit)])
+        print(
+            f"PARTIAL RUN: --limit {args.limit}; this run is not eligible for the leaderboard",
+            file=sys.stderr,
+        )
     prompt = _load_prompt(prompt=str(args.prompt))
+    model = _model_reference(args=args)
+    output_root = Path(args.output_root)
+    run_id = _optional_arg(value=args.run_id)
+    if run_id is None:
+        dataset_label = (
+            dataset.dataset_version if dataset.dataset_version is not None else dataset.dataset_id
+        )
+        run_id = _default_run_id(
+            model=model.requested_model,
+            prompt_id=prompt.id,
+            dataset_label=dataset_label,
+            output_root=output_root,
+        )
+        print(f"run_id: {run_id}", file=sys.stderr)
     config = RunConfig(
-        run_id=str(args.run_id),
-        output_root=Path(args.output_root),
+        run_id=run_id,
+        output_root=output_root,
         dataset=dataset,
         prompt=prompt,
-        model=_model_reference(args=args),
+        model=model,
         runner=RunnerIdentity(
             github_handle=args.github_handle,
             name=args.runner_name,
@@ -173,10 +346,15 @@ async def _run_async(*, args: argparse.Namespace) -> int:
         votes_per_item=int(args.votes),
         semantic_reasks_per_invalid_vote=1,
         concurrency=int(args.concurrency),
+        show_progress=not bool(args.no_progress),
     )
     client = LiteLlmClient()
+    if not bool(args.skip_preflight):
+        await preflight_model(config=config, client=client)
+        print(f"preflight OK: {model.requested_model}", file=sys.stderr)
+    _warn_if_unpriced(model=model.requested_model)
     completed = await run_benchmark(config=config, client=client)
-    print(completed.run_dir)
+    _print_run_summary(completed=completed)
     return 0
 
 
@@ -185,14 +363,9 @@ def _cmd_run(*, args: argparse.Namespace) -> int:
 
 
 def _cmd_verify(*, args: argparse.Namespace) -> int:
-    dataset = None
+    wordnet_version()
+    dataset = _resolve_dataset(args=args)
     prompt = None
-    if args.dataset_jsonl is not None:
-        dataset = load_jsonl_dataset(
-            path=Path(args.dataset_jsonl),
-            dataset_id=str(args.dataset_id),
-            dataset_version=_optional_arg(value=args.dataset_version),
-        )
     if args.prompt is not None:
         prompt = _load_prompt(prompt=str(args.prompt))
     report = verify_run_directory(run_dir=Path(args.run_dir), dataset=dataset, prompt=prompt)
@@ -206,6 +379,13 @@ def _cmd_leaderboard(*, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_fetch_dataset(*, args: argparse.Namespace) -> int:
+    release = get_dataset_release(release_id=str(args.release))
+    path = fetch_dataset_release(release=release)
+    print(path)
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SenseBench runner and verifier.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -213,31 +393,51 @@ def _build_parser() -> argparse.ArgumentParser:
     render_parser = subparsers.add_parser(
         "render", help="Render prompt messages for dataset items."
     )
-    _add_dataset_args(parser=render_parser)
+    _add_dataset_args(parser=render_parser, default_release=DEFAULT_LEXEN_RELEASE_ID)
     render_parser.add_argument("--prompt", required=True)
     render_parser.add_argument("--item-id")
-    render_parser.add_argument("--limit", type=int)
+    render_parser.add_argument("--limit", type=_positive_int)
     render_parser.set_defaults(func=_cmd_render)
 
     run_parser = subparsers.add_parser("run", help="Run a model and write local run artifacts.")
-    _add_dataset_args(parser=run_parser)
+    _add_dataset_args(parser=run_parser, default_release=DEFAULT_LEXEN_RELEASE_ID)
     run_parser.add_argument("--prompt", required=True)
     run_parser.add_argument("--model", required=True)
-    run_parser.add_argument("--run-id", required=True)
+    run_parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Run identifier; generated from model, prompt, and dataset when omitted.",
+    )
     run_parser.add_argument("--output-root", default=str(LOCAL_RUNS_DIR))
-    run_parser.add_argument("--votes", type=int, default=1)
-    run_parser.add_argument("--concurrency", type=int, default=4)
+    run_parser.add_argument(
+        "--limit",
+        type=_positive_int,
+        help="Evaluate only the first N items (smoke runs; not leaderboard-eligible).",
+    )
+    run_parser.add_argument("--skip-preflight", action="store_true")
+    run_parser.add_argument("--votes", type=_positive_int, default=1)
+    run_parser.add_argument("--concurrency", type=_positive_int, default=DEFAULT_RUN_CONCURRENCY)
+    run_parser.add_argument("--no-progress", action="store_true")
     run_parser.add_argument("--temperature", type=float)
     run_parser.add_argument("--top-p", type=float)
-    run_parser.add_argument("--max-tokens", type=int, default=32)
+    run_parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     run_parser.add_argument("--seed", type=int)
     run_parser.add_argument("--vendor")
     run_parser.add_argument("--api-provider")
-    run_parser.add_argument("--hosting-kind", default=ModelHostingKind.CLOUD_API.value)
-    run_parser.add_argument("--source-kind", default=ModelSourceKind.UNKNOWN.value)
+    run_parser.add_argument(
+        "--hosting-kind",
+        choices=[kind.value for kind in ModelHostingKind],
+        default=ModelHostingKind.CLOUD_API.value,
+    )
+    run_parser.add_argument(
+        "--source-kind",
+        choices=[kind.value for kind in ModelSourceKind],
+        default=ModelSourceKind.UNKNOWN.value,
+    )
     run_parser.add_argument("--license")
     run_parser.add_argument("--model-url")
     run_parser.add_argument("--reasoning-effort")
+    run_parser.add_argument("--hf-revision")
     run_parser.add_argument("--quantization")
     run_parser.add_argument("--inference-engine")
     run_parser.add_argument("--inference-engine-version")
@@ -251,9 +451,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     verify_parser = subparsers.add_parser("verify", help="Verify a run directory.")
     verify_parser.add_argument("run_dir")
-    verify_parser.add_argument("--dataset-jsonl")
-    verify_parser.add_argument("--dataset-id", default="local")
-    verify_parser.add_argument("--dataset-version", default=None)
+    _add_dataset_args(parser=verify_parser, default_release=None)
     verify_parser.add_argument("--prompt")
     verify_parser.set_defaults(func=_cmd_verify)
 
@@ -261,14 +459,27 @@ def _build_parser() -> argparse.ArgumentParser:
     leaderboard_parser.add_argument("--results-dir", default=str(SUBMITTED_RESULTS_DIR))
     leaderboard_parser.add_argument("--output", default=str(LEADERBOARD_JSON_PATH))
     leaderboard_parser.set_defaults(func=_cmd_leaderboard)
+
+    fetch_parser = subparsers.add_parser(
+        "fetch-dataset", help="Download and cache a registered dataset release."
+    )
+    fetch_parser.add_argument("release", nargs="?", default=DEFAULT_LEXEN_RELEASE_ID)
+    fetch_parser.set_defaults(func=_cmd_fetch_dataset)
     return parser
+
+
+def _run_command_handler(*, args: argparse.Namespace) -> int:
+    handler: object = args.func
+    assert callable(handler), "args.func is callable"
+    result = handler(args=args)
+    assert isinstance(result, int), "command handler returns int"
+    return result
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    handler = cast(CommandHandler, args.func)
-    return handler(args=args)
+    return _run_command_handler(args=args)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, assert_never
 
 from sensebench.prompts.models import SENSE_INDEX_FIELD, OutputMode
 
@@ -86,4 +86,4 @@ def extract_sense_index(
         return _parse_json_output(text=stripped, candidate_count=candidate_count)
     if output_mode == OutputMode.PLAIN_SENSE_INDEX:
         return _parse_plain_output(text=stripped, candidate_count=candidate_count)
-    raise ValueError(f"Unsupported output mode: {output_mode}")
+    assert_never(output_mode)

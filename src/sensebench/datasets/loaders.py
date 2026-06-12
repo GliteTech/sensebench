@@ -1,15 +1,15 @@
-"""Dataset loaders for local JSONL and Hugging Face datasets."""
+"""Dataset loaders for local JSONL files."""
 
 from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from sensebench.datasets.models import (
     DatasetBundle,
+    DatasetID,
     Document,
     DocumentID,
     ItemID,
@@ -20,10 +20,11 @@ from sensebench.datasets.models import (
     WsdItem,
 )
 
-DEFAULT_HF_DATASET_NAME: str = "GliteTech/lexen"
-DEFAULT_HF_SPLIT: str = "test"
 DEFAULT_DATASET_VERSION: str | None = None
-EMPTY_CONTENT_HASH: str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+HASH_CHUNK_SIZE_BYTES: int = 1024 * 1024
+CONTEXT_DOCUMENT_ID_SUFFIX: str = "::context"
+ORIGINAL_DOCUMENT_ID_METADATA_KEY: str = "original_document_id"
+ORIGINAL_SENTENCE_ID_METADATA_KEY: str = "original_sentence_id"
 
 
 class JsonDatasetRecord(BaseModel):
@@ -42,11 +43,11 @@ class JsonDatasetRecord(BaseModel):
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
-def _content_hash(*, path: Path) -> str:
+def file_content_hash(*, path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         while True:
-            chunk = handle.read(1024 * 1024)
+            chunk = handle.read(HASH_CHUNK_SIZE_BYTES)
             if len(chunk) == 0:
                 break
             digest.update(chunk)
@@ -70,10 +71,22 @@ def _tokens_from_sentence(
     return tokens
 
 
+def _context_document_id(*, record: JsonDatasetRecord) -> DocumentID:
+    return f"{record.item_id}{CONTEXT_DOCUMENT_ID_SUFFIX}"
+
+
+def _item_metadata(*, record: JsonDatasetRecord) -> dict[str, str]:
+    metadata: dict[str, str] = dict(record.metadata)
+    metadata[ORIGINAL_DOCUMENT_ID_METADATA_KEY] = record.document_id
+    if record.sentence_id is not None:
+        metadata[ORIGINAL_SENTENCE_ID_METADATA_KEY] = record.sentence_id
+    return metadata
+
+
 def _bundle_from_records(
     *,
     records: list[JsonDatasetRecord],
-    dataset_id: str,
+    dataset_id: DatasetID,
     dataset_version: str | None,
     dataset_revision: str | None,
     content_hash: str | None,
@@ -81,6 +94,7 @@ def _bundle_from_records(
     documents: list[Document] = []
     items: list[WsdItem] = []
     for record in records:
+        context_document_id = _context_document_id(record=record)
         sentences: list[Sentence] = []
         for sentence_index, words in enumerate(record.sentences):
             sentence_id = (
@@ -101,18 +115,18 @@ def _bundle_from_records(
             if record.sentence_id is not None
             else f"{record.item_id}.s{record.sentence_index}"
         )
-        documents.append(Document(document_id=record.document_id, sentences=sentences))
+        documents.append(Document(document_id=context_document_id, sentences=sentences))
         items.append(
             WsdItem(
                 item_id=record.item_id,
-                document_id=record.document_id,
+                document_id=context_document_id,
                 sentence_id=item_sentence_id,
                 target_token_index=record.target_token_index,
                 target_text=record.target_text,
                 lemma=record.lemma,
                 pos=record.pos,
                 gold_sense_keys=record.gold_sense_keys,
-                metadata=record.metadata,
+                metadata=_item_metadata(record=record),
             )
         )
     return DatasetBundle(
@@ -128,7 +142,7 @@ def _bundle_from_records(
 def load_jsonl_dataset(
     *,
     path: Path,
-    dataset_id: str,
+    dataset_id: DatasetID,
     dataset_version: str | None = DEFAULT_DATASET_VERSION,
     dataset_revision: str | None = None,
 ) -> DatasetBundle:
@@ -144,29 +158,5 @@ def load_jsonl_dataset(
         dataset_id=dataset_id,
         dataset_version=dataset_version,
         dataset_revision=dataset_revision,
-        content_hash=_content_hash(path=path) if path.exists() else EMPTY_CONTENT_HASH,
-    )
-
-
-def _record_from_hf_row(*, row: dict[str, Any]) -> JsonDatasetRecord:
-    return JsonDatasetRecord.model_validate(row)
-
-
-def load_hf_dataset(
-    *,
-    dataset_name: str = DEFAULT_HF_DATASET_NAME,
-    split: str = DEFAULT_HF_SPLIT,
-    revision: str | None = None,
-    dataset_version: str | None = DEFAULT_DATASET_VERSION,
-) -> DatasetBundle:
-    from datasets import load_dataset  # type: ignore[import-untyped]
-
-    loaded = load_dataset(dataset_name, split=split, revision=revision)
-    records: list[JsonDatasetRecord] = [_record_from_hf_row(row=dict(row)) for row in loaded]
-    return _bundle_from_records(
-        records=records,
-        dataset_id=dataset_name,
-        dataset_version=dataset_version,
-        dataset_revision=revision,
-        content_hash=None,
+        content_hash=file_content_hash(path=path),
     )

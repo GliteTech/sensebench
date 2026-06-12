@@ -3,34 +3,29 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from sensebench.prompts.models import MessageRole
+from sensebench.datasets.models import DatasetID, ItemID, SenseKey
+from sensebench.prompts.models import MessageRole, PromptID
+from sensebench.wordnet import SynsetID
 
 RUN_SCHEMA_VERSION: Literal["sensebench-run-v1"] = "sensebench-run-v1"
+CLOUD_LLM_KIND: Literal["cloud_llm"] = "cloud_llm"
+SELF_HOSTED_LLM_KIND: Literal["self_hosted_llm"] = "self_hosted_llm"
 
 type RunID = str
 type CallID = str
-type ItemID = str
-type PromptID = str
-type SenseKey = str
 
 
 class StrictRunModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
-class ModelExecutionKind(StrEnum):
-    LLM = "llm"
-    CUSTOM = "custom"
-
-
 class ModelHostingKind(StrEnum):
     CLOUD_API = "cloud_api"
     SELF_HOSTED = "self_hosted"
-    NONE = "none"
 
 
 class ModelSourceKind(StrEnum):
@@ -70,8 +65,14 @@ class MonosemousPolicyKind(StrEnum):
     SHORT_CIRCUIT = "short_circuit"
 
 
+class CostSourceKind(StrEnum):
+    LITELLM_ESTIMATE = "litellm_estimate"
+    NO_CALLS = "no_calls"
+    UNAVAILABLE = "unavailable"
+
+
 class DatasetReference(StrictRunModel):
-    dataset_id: str
+    dataset_id: DatasetID
     dataset_version: str | None = None
     dataset_revision: str | None = None
     content_hash: str | None = None
@@ -83,24 +84,44 @@ class PromptReference(StrictRunModel):
     sensebench_version: str | None = None
 
 
-class ModelReference(StrictRunModel):
-    execution_kind: ModelExecutionKind
+class CloudLlmReference(StrictRunModel):
+    kind: Literal["cloud_llm"]
     display_name: str
-    requested_model: str | None = None
+    requested_model: str
     resolved_model: str | None = None
-    vendor: str | None = None
+    resolved_model_counts: dict[str, int] = Field(default_factory=dict)
+    llm_vendor: str | None = None
     api_provider: str | None = None
-    hosting_kind: ModelHostingKind
     source_kind: ModelSourceKind
     license: str | None = None
     model_url: str | None = None
     reasoning_effort: str | None = None
+    endpoint_base_url: str | None = None
+
+
+class SelfHostedLlmReference(StrictRunModel):
+    kind: Literal["self_hosted_llm"]
+    display_name: str
+    requested_model: str
+    resolved_model: str | None = None
+    resolved_model_counts: dict[str, int] = Field(default_factory=dict)
+    llm_vendor: str | None = None
+    source_kind: ModelSourceKind
+    license: str | None = None
+    model_url: str | None = None
+    hf_revision: str | None = None
     quantization: str | None = None
     inference_engine: str | None = None
     inference_engine_version: str | None = None
-    endpoint_base_url: str | None = None
+    endpoint_base_url: str
     gpu: str | None = None
     cpu: str | None = None
+
+
+type ModelReference = Annotated[
+    CloudLlmReference | SelfHostedLlmReference,
+    Field(discriminator="kind"),
+]
 
 
 class SamplingParameters(StrictRunModel):
@@ -122,6 +143,19 @@ class TokenUsage(StrictRunModel):
     input_tokens: int | None = None
     cached_input_tokens: int | None = None
     output_tokens: int | None = None
+    reasoning_output_tokens: int | None = None
+
+
+class CostBreakdown(StrictRunModel):
+    currency: Literal["USD"] = "USD"
+    total_usd: float | None = None
+    input_uncached_usd: float | None = None
+    input_cached_usd: float | None = None
+    output_usd: float | None = None
+    input_uncached_unit_price_usd: float | None = None
+    input_cached_unit_price_usd: float | None = None
+    output_unit_price_usd: float | None = None
+    source: CostSourceKind
 
 
 class RunTotals(StrictRunModel):
@@ -130,7 +164,7 @@ class RunTotals(StrictRunModel):
     accuracy: float | None = None
     call_count: int = Field(ge=0)
     usage: TokenUsage
-    cost_usd: float | None = None
+    cost: CostBreakdown
     elapsed_seconds: float | None = None
 
 
@@ -157,7 +191,7 @@ class RunMetadata(StrictRunModel):
 class CandidateRecord(StrictRunModel):
     index: int = Field(ge=1)
     sense_key: SenseKey
-    synset_id: str
+    synset_id: SynsetID
 
 
 class VoteRecord(StrictRunModel):
@@ -180,7 +214,7 @@ class PredictionRecord(StrictRunModel):
     status: PredictionStatus
     was_monosemous: bool
     usage: TokenUsage
-    cost_usd: float | None = None
+    cost: CostBreakdown
     latency_seconds: float | None = None
 
 
@@ -202,7 +236,7 @@ class CallRecord(StrictRunModel):
     raw_output: str | None = None
     raw_response: dict[str, object] | None = None
     usage: TokenUsage
-    cost_usd: float | None = None
+    cost: CostBreakdown
     latency_seconds: float | None = None
     http_status: int | None = None
     provider_request_id: str | None = None

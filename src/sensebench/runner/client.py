@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Protocol
+from typing import Any, Protocol
 
+from sensebench.runner.costs import unavailable_cost
 from sensebench.runner.models import CompletionRequest, CompletionResult
-from sensebench.runs.models import CallRecord, CallStatus, MessageRecord, TokenUsage
+from sensebench.runs.models import (
+    CallRecord,
+    CallStatus,
+    CostBreakdown,
+    CostSourceKind,
+    MessageRecord,
+    TokenUsage,
+)
 
 DEFAULT_TRANSPORT_RETRIES: int = 2
 DEFAULT_RETRY_SLEEP_SECONDS: float = 1.0
@@ -67,10 +75,17 @@ def _usage_from_payload(*, payload: dict[str, object]) -> TokenUsage:
         cached_tokens = prompt_details.get("cached_tokens")
         if isinstance(cached_tokens, int):
             cached_input_tokens = cached_tokens
+    reasoning_output_tokens: int | None = None
+    completion_details = usage.get("completion_tokens_details")
+    if isinstance(completion_details, dict):
+        reasoning_tokens = completion_details.get("reasoning_tokens")
+        if isinstance(reasoning_tokens, int):
+            reasoning_output_tokens = reasoning_tokens
     return TokenUsage(
         input_tokens=input_tokens if isinstance(input_tokens, int) else None,
         cached_input_tokens=cached_input_tokens,
         output_tokens=output_tokens if isinstance(output_tokens, int) else None,
+        reasoning_output_tokens=reasoning_output_tokens,
     )
 
 
@@ -79,6 +94,86 @@ def _model_from_payload(*, payload: dict[str, object], requested_model: str) -> 
     if isinstance(raw_model, str) and len(raw_model) > 0:
         return raw_model
     return requested_model
+
+
+def _unit_price(*, model_info: dict[str, object], key: str) -> float | None:
+    value = model_info.get(key)
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _component_cost(*, tokens: int | None, unit_price: float | None) -> float | None:
+    if tokens is None:
+        return None
+    if tokens == 0:
+        return 0.0
+    if unit_price is None:
+        return None
+    return tokens * unit_price
+
+
+def _completion_cost(
+    *,
+    litellm_module: Any,
+    response: object,
+) -> float | None:
+    try:
+        raw_cost = litellm_module.completion_cost(completion_response=response)
+    except Exception:
+        return None
+    if isinstance(raw_cost, int | float):
+        return float(raw_cost)
+    return None
+
+
+def _cost_from_response(
+    *,
+    litellm_module: Any,
+    response: object,
+    model: str,
+    usage: TokenUsage,
+) -> CostBreakdown:
+    total_usd = _completion_cost(litellm_module=litellm_module, response=response)
+    raw_model_info = litellm_module.model_cost.get(model)
+    model_info: dict[str, object] = raw_model_info if isinstance(raw_model_info, dict) else {}
+    input_unit_price = _unit_price(model_info=model_info, key="input_cost_per_token")
+    cached_input_unit_price = _unit_price(
+        model_info=model_info,
+        key="cache_read_input_token_cost",
+    )
+    output_unit_price = _unit_price(model_info=model_info, key="output_cost_per_token")
+
+    cached_tokens = usage.cached_input_tokens if usage.cached_input_tokens is not None else 0
+    uncached_tokens: int | None = None
+    if usage.input_tokens is not None:
+        uncached_tokens = max(usage.input_tokens - cached_tokens, 0)
+    input_uncached_usd = _component_cost(
+        tokens=uncached_tokens,
+        unit_price=input_unit_price,
+    )
+    input_cached_usd = _component_cost(
+        tokens=cached_tokens,
+        unit_price=cached_input_unit_price,
+    )
+    output_usd = _component_cost(tokens=usage.output_tokens, unit_price=output_unit_price)
+    component_total = sum(
+        value for value in [input_uncached_usd, input_cached_usd, output_usd] if value is not None
+    )
+    if total_usd is None and component_total > 0:
+        total_usd = component_total
+    if total_usd is None and input_uncached_usd is None and output_usd is None:
+        return unavailable_cost()
+    return CostBreakdown(
+        total_usd=total_usd,
+        input_uncached_usd=input_uncached_usd,
+        input_cached_usd=input_cached_usd,
+        output_usd=output_usd,
+        input_uncached_unit_price_usd=input_unit_price,
+        input_cached_unit_price_usd=cached_input_unit_price,
+        output_unit_price_usd=output_unit_price,
+        source=CostSourceKind.LITELLM_ESTIMATE,
+    )
 
 
 class LiteLlmClient:
@@ -105,13 +200,8 @@ class LiteLlmClient:
                     **request.parameters,
                 )
                 payload = _response_to_dict(response=response)
-                cost_usd: float | None = None
-                try:
-                    raw_cost = litellm.completion_cost(completion_response=response)
-                    if isinstance(raw_cost, int | float):
-                        cost_usd = float(raw_cost)
-                except Exception:
-                    cost_usd = None
+                usage = _usage_from_payload(payload=payload)
+                model = _model_from_payload(payload=payload, requested_model=request.model)
                 return CompletionResult(
                     call=CallRecord(
                         call_id=request.call_id,
@@ -121,15 +211,20 @@ class LiteLlmClient:
                         attempt_kind=request.attempt_kind,
                         transport_retry_count=retry_count,
                         status=CallStatus.SUCCESS,
-                        model=_model_from_payload(payload=payload, requested_model=request.model),
+                        model=model,
                         messages=[
                             MessageRecord(role=message.role, content=message.content)
                             for message in request.messages
                         ],
                         raw_output=_raw_output_from_response(payload=payload),
                         raw_response=payload,
-                        usage=_usage_from_payload(payload=payload),
-                        cost_usd=cost_usd,
+                        usage=usage,
+                        cost=_cost_from_response(
+                            litellm_module=litellm,
+                            response=response,
+                            model=model,
+                            usage=usage,
+                        ),
                         latency_seconds=time.monotonic() - started,
                     )
                 )
@@ -155,7 +250,7 @@ class LiteLlmClient:
                     for message in request.messages
                 ],
                 usage=TokenUsage(),
-                cost_usd=None,
+                cost=unavailable_cost(),
                 latency_seconds=time.monotonic() - started,
                 error_kind=type(last_error).__name__,
                 error_message=str(last_error),

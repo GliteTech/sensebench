@@ -5,27 +5,35 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import time
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from tqdm import tqdm
+
 from sensebench import __version__
 from sensebench.datasets.context import build_dataset_index
 from sensebench.datasets.models import DatasetBundle, DatasetIndex, WsdItem
-from sensebench.prompts.models import PromptDefinition
-from sensebench.prompts.render import render_task
+from sensebench.prompts.models import MessageRole, PromptDefinition
+from sensebench.prompts.render import ChatMessage, render_task
 from sensebench.runner.client import CompletionClient
+from sensebench.runner.costs import sum_costs
 from sensebench.runner.evaluate import EvaluationConfig, evaluate_item
-from sensebench.runner.models import ItemEvaluation
+from sensebench.runner.models import CompletionRequest, ItemEvaluation
 from sensebench.runner.writer import write_run_artifacts
 from sensebench.runs.models import (
+    CLOUD_LLM_KIND,
     RUN_SCHEMA_VERSION,
+    AttemptKind,
     CallRecord,
+    CallStatus,
     DatasetReference,
     ModelReference,
     MonosemousPolicyKind,
     PredictionRecord,
     PromptReference,
+    RunID,
     RunMetadata,
     RunnerIdentity,
     RunPolicy,
@@ -37,11 +45,15 @@ from sensebench.runs.models import (
 from sensebench.wordnet import SenseCandidate, get_candidate_senses, wordnet_version
 
 UNKNOWN_GIT_COMMIT: str | None = None
+PROGRESS_DESCRIPTION: str = "Evaluating items"
+PROGRESS_UNIT: str = "item"
+PREFLIGHT_CALL_ID: str = "preflight"
+PREFLIGHT_PROMPT: str = "Reply with the number 1."
 
 
 @dataclass(frozen=True, slots=True)
 class RunConfig:
-    run_id: str
+    run_id: RunID
     output_root: Path
     dataset: DatasetBundle
     prompt: PromptDefinition
@@ -51,6 +63,7 @@ class RunConfig:
     votes_per_item: int
     semantic_reasks_per_invalid_vote: int
     concurrency: int
+    show_progress: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +72,12 @@ class CompletedRun:
     metadata: RunMetadata
     predictions: list[PredictionRecord]
     calls: list[CallRecord]
+
+
+@dataclass(frozen=True, slots=True)
+class IndexedItemEvaluation:
+    item_index: int
+    evaluation: ItemEvaluation
 
 
 def git_commit() -> str | None:
@@ -93,6 +112,8 @@ def _completion_parameters(*, config: RunConfig) -> dict[str, object]:
     parameters: dict[str, object] = _llm_parameters(sampling=config.sampling)
     if config.model.endpoint_base_url is not None:
         parameters["api_base"] = config.model.endpoint_base_url
+    if config.model.kind == CLOUD_LLM_KIND and config.model.reasoning_effort is not None:
+        parameters["reasoning_effort"] = config.model.reasoning_effort
     return parameters
 
 
@@ -114,16 +135,10 @@ def _sum_usage(*, predictions: list[PredictionRecord]) -> TokenUsage:
         output_tokens=_sum_optional_ints(
             values=[prediction.usage.output_tokens for prediction in predictions],
         ),
+        reasoning_output_tokens=_sum_optional_ints(
+            values=[prediction.usage.reasoning_output_tokens for prediction in predictions],
+        ),
     )
-
-
-def _sum_cost(*, predictions: list[PredictionRecord]) -> float | None:
-    values: list[float] = [
-        prediction.cost_usd for prediction in predictions if prediction.cost_usd is not None
-    ]
-    if len(values) == 0:
-        return None
-    return sum(values)
 
 
 def _totals(
@@ -141,8 +156,38 @@ def _totals(
         accuracy=accuracy,
         call_count=len(calls),
         usage=_sum_usage(predictions=predictions),
-        cost_usd=_sum_cost(predictions=predictions),
+        cost=sum_costs(costs=[prediction.cost for prediction in predictions]),
         elapsed_seconds=elapsed_seconds,
+    )
+
+
+def _resolved_model_counts(*, calls: list[CallRecord]) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for call in calls:
+        if call.status == CallStatus.SUCCESS and len(call.model) > 0:
+            counts[call.model] += 1
+    return dict(sorted(counts.items()))
+
+
+def _single_resolved_model(*, resolved_model_counts: dict[str, int]) -> str | None:
+    if len(resolved_model_counts) != 1:
+        return None
+    return next(iter(resolved_model_counts))
+
+
+def _model_with_resolved_snapshots(
+    *,
+    model: ModelReference,
+    calls: list[CallRecord],
+) -> ModelReference:
+    resolved_model_counts: dict[str, int] = _resolved_model_counts(calls=calls)
+    return model.model_copy(
+        update={
+            "resolved_model": _single_resolved_model(
+                resolved_model_counts=resolved_model_counts,
+            ),
+            "resolved_model_counts": resolved_model_counts,
+        },
     )
 
 
@@ -176,22 +221,100 @@ async def _evaluate_one(
         )
 
 
-async def run_benchmark(*, config: RunConfig, client: CompletionClient) -> CompletedRun:
-    wordnet_version()
-    started = time.monotonic()
-    semaphore = asyncio.Semaphore(config.concurrency)
-    dataset_index = build_dataset_index(bundle=config.dataset)
-    evaluations: list[ItemEvaluation] = await asyncio.gather(
-        *[
-            _evaluate_one(
+async def _evaluate_one_indexed(
+    *,
+    item_index: int,
+    item: WsdItem,
+    dataset_index: DatasetIndex,
+    config: RunConfig,
+    client: CompletionClient,
+    semaphore: asyncio.Semaphore,
+) -> IndexedItemEvaluation:
+    evaluation = await _evaluate_one(
+        item=item,
+        dataset_index=dataset_index,
+        config=config,
+        client=client,
+        semaphore=semaphore,
+    )
+    return IndexedItemEvaluation(item_index=item_index, evaluation=evaluation)
+
+
+async def _evaluate_items(
+    *,
+    dataset_index: DatasetIndex,
+    config: RunConfig,
+    client: CompletionClient,
+    semaphore: asyncio.Semaphore,
+) -> list[ItemEvaluation]:
+    tasks: list[asyncio.Task[IndexedItemEvaluation]] = [
+        asyncio.create_task(
+            _evaluate_one_indexed(
+                item_index=item_index,
                 item=item,
                 dataset_index=dataset_index,
                 config=config,
                 client=client,
                 semaphore=semaphore,
             )
-            for item in config.dataset.items
-        ]
+        )
+        for item_index, item in enumerate(config.dataset.items)
+    ]
+    evaluations_by_index: list[ItemEvaluation | None] = [None] * len(tasks)
+    progress = tqdm(
+        total=len(tasks),
+        desc=PROGRESS_DESCRIPTION,
+        unit=PROGRESS_UNIT,
+        disable=not config.show_progress,
+    )
+    try:
+        for completed_task in asyncio.as_completed(tasks):
+            indexed_evaluation = await completed_task
+            evaluations_by_index[indexed_evaluation.item_index] = indexed_evaluation.evaluation
+            progress.update(1)
+    except Exception:
+        for task in tasks:
+            if task.done() is False:
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+    finally:
+        progress.close()
+    return [evaluation for evaluation in evaluations_by_index if evaluation is not None]
+
+
+async def preflight_model(*, config: RunConfig, client: CompletionClient) -> None:
+    request = CompletionRequest(
+        call_id=PREFLIGHT_CALL_ID,
+        item_id=PREFLIGHT_CALL_ID,
+        vote_index=1,
+        attempt_index=1,
+        attempt_kind=AttemptKind.INITIAL,
+        model=config.model.requested_model or config.model.display_name,
+        messages=[ChatMessage(role=MessageRole.USER, content=PREFLIGHT_PROMPT)],
+        parameters=_completion_parameters(config=config),
+    )
+    completion = await client.complete(request=request)
+    if completion.call.status != CallStatus.SUCCESS:
+        raise RuntimeError(
+            "model preflight failed: "
+            f"{completion.call.error_kind}: {completion.call.error_message}"
+        )
+
+
+async def run_benchmark(*, config: RunConfig, client: CompletionClient) -> CompletedRun:
+    run_dir = config.output_root / config.run_id
+    if run_dir.exists():
+        raise FileExistsError(f"run directory already exists: {run_dir}")
+    wordnet_version()
+    started = time.monotonic()
+    semaphore = asyncio.Semaphore(config.concurrency)
+    dataset_index = build_dataset_index(bundle=config.dataset)
+    evaluations: list[ItemEvaluation] = await _evaluate_items(
+        dataset_index=dataset_index,
+        config=config,
+        client=client,
+        semaphore=semaphore,
     )
     elapsed_seconds = time.monotonic() - started
     predictions: list[PredictionRecord] = [evaluation.prediction for evaluation in evaluations]
@@ -210,7 +333,7 @@ async def run_benchmark(*, config: RunConfig, client: CompletionClient) -> Compl
             item_count=len(config.dataset.items),
         ),
         prompt=PromptReference(id=config.prompt.id, sensebench_version=__version__),
-        model=config.model,
+        model=_model_with_resolved_snapshots(model=config.model, calls=calls),
         sampling=config.sampling,
         policy=RunPolicy(
             votes_per_item=config.votes_per_item,
@@ -220,7 +343,6 @@ async def run_benchmark(*, config: RunConfig, client: CompletionClient) -> Compl
         ),
         totals=_totals(predictions=predictions, calls=calls, elapsed_seconds=elapsed_seconds),
     )
-    run_dir = config.output_root / config.run_id
     write_run_artifacts(
         run_dir=run_dir,
         metadata=metadata,
