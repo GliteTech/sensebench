@@ -100,6 +100,20 @@ def git_commit() -> str | None:
     return result.stdout.strip()
 
 
+def _progress_postfix(
+    *,
+    correct_count: int,
+    completed_count: int,
+    known_cost_usd: float,
+    has_known_cost: bool,
+) -> str:
+    accuracy_text = (
+        f"acc {correct_count / completed_count:.3f}" if completed_count > 0 else "acc n/a"
+    )
+    cost_text = f"cost ${known_cost_usd:.2f}" if has_known_cost else "cost n/a"
+    return f"{accuracy_text}, {cost_text}"
+
+
 def _llm_parameters(*, sampling: SamplingParameters) -> dict[str, object]:
     parameters: dict[str, object] = {}
     if sampling.temperature is not None:
@@ -280,10 +294,30 @@ async def _evaluate_items(
         unit=PROGRESS_UNIT,
         disable=not config.show_progress,
     )
+    correct_count = 0
+    completed_count = 0
+    known_cost_usd = 0.0
+    has_known_cost = False
     try:
         for completed_task in asyncio.as_completed(tasks):
             indexed_evaluation = await completed_task
             evaluations_by_index[indexed_evaluation.item_index] = indexed_evaluation.evaluation
+            prediction = indexed_evaluation.evaluation.prediction
+            completed_count += 1
+            if prediction.is_correct is True:
+                correct_count += 1
+            if prediction.cost.total_usd is not None:
+                known_cost_usd += prediction.cost.total_usd
+                has_known_cost = True
+            progress.set_postfix_str(
+                _progress_postfix(
+                    correct_count=correct_count,
+                    completed_count=completed_count,
+                    known_cost_usd=known_cost_usd,
+                    has_known_cost=has_known_cost,
+                ),
+                refresh=False,
+            )
             progress.update(1)
     except Exception:
         for task in tasks:

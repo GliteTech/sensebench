@@ -3,13 +3,19 @@ from __future__ import annotations
 from json import dumps
 from pathlib import Path
 
-from sensebench.leaderboard.aggregate import LeaderboardFile, emit_leaderboard
+from sensebench.leaderboard.aggregate import (
+    LeaderboardFile,
+    collect_leaderboard_entries,
+    emit_leaderboard,
+)
 from sensebench.paths import LEADERBOARD_JSON_PATH, RUN_METADATA_FILENAME, SUBMITTED_RESULTS_DIR
-from sensebench.prompts.models import SENSE_INDEX_FIELD
+from sensebench.prompts.models import SENSE_INDEX_FIELD, PromptID
 from sensebench.runner.writer import write_run_artifacts
 from sensebench.runs.models import RunID
 from tests.run_fixtures import (
     DATASET_VERSION,
+    PROMPT_ID,
+    RUNNER_GITHUB_HANDLE,
     SECOND_SENSE_KEY,
     make_metadata,
     success_call,
@@ -19,6 +25,11 @@ from tests.run_fixtures import (
 GOOD_RUN_ID: RunID = "run-good"
 FORGED_RUN_ID: RunID = "run-forged"
 CORRUPT_RUN_ID: RunID = "run-corrupt"
+ANONYMOUS_RUN_ID: RunID = "run-anonymous"
+SECOND_PROMPT_RUN_ID: RunID = "run-second-prompt"
+SECOND_PROMPT_ID: PromptID = "p002"
+PLAIN_SENSE_OUTPUT: str = "2"
+GITHUB_HANDLE_ISSUE_TEXT: str = "runner.github_handle"
 
 
 def raw_output_for_sense_index(*, sense_index: int) -> str:
@@ -31,6 +42,8 @@ def _write_run(
     run_id: RunID,
     chosen_index: int,
     raw_output: str,
+    prompt_id: PromptID = PROMPT_ID,
+    github_handle: str | None = RUNNER_GITHUB_HANDLE,
 ) -> None:
     prediction = voted_prediction(
         chosen_index=chosen_index,
@@ -43,6 +56,8 @@ def _write_run(
         accuracy=1.0,
         call_count=1,
         run_id=run_id,
+        prompt_id=prompt_id,
+        github_handle=github_handle,
     )
     write_run_artifacts(
         run_dir=run_dir,
@@ -82,3 +97,44 @@ def test_emit_leaderboard_includes_only_verified_runs(tmp_path: Path) -> None:
     assert entry.accuracy == 1.0
     assert entry.correct_count == 1
     assert entry.dataset_version == DATASET_VERSION
+
+
+def test_official_leaderboard_rejects_missing_runner_identity(tmp_path: Path) -> None:
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    _write_run(
+        run_dir=results_dir / ANONYMOUS_RUN_ID,
+        run_id=ANONYMOUS_RUN_ID,
+        chosen_index=2,
+        raw_output=raw_output_for_sense_index(sense_index=2),
+        github_handle=None,
+    )
+
+    official = collect_leaderboard_entries(results_dir=results_dir, official=True)
+    assert official.entries == []
+    assert any(GITHUB_HANDLE_ISSUE_TEXT in issue.message for issue in official.issues)
+
+    local = collect_leaderboard_entries(results_dir=results_dir, official=False)
+    assert [entry.run_id for entry in local.entries] == [ANONYMOUS_RUN_ID]
+
+
+def test_best_group_key_collapses_prompts_and_runs(tmp_path: Path) -> None:
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    _write_run(
+        run_dir=results_dir / GOOD_RUN_ID,
+        run_id=GOOD_RUN_ID,
+        chosen_index=2,
+        raw_output=raw_output_for_sense_index(sense_index=2),
+    )
+    _write_run(
+        run_dir=results_dir / SECOND_PROMPT_RUN_ID,
+        run_id=SECOND_PROMPT_RUN_ID,
+        chosen_index=2,
+        raw_output=PLAIN_SENSE_OUTPUT,
+        prompt_id=SECOND_PROMPT_ID,
+    )
+
+    collection = collect_leaderboard_entries(results_dir=results_dir, official=False)
+
+    assert len(collection.entries) == 2
+    group_keys = {entry.best_group_key for entry in collection.entries}
+    assert len(group_keys) == 1, "same model and dataset share one best-view group"

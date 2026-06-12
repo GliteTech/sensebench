@@ -6,6 +6,7 @@ PACKAGE_DIR: Path = Path(__file__).resolve().parent
 PROMPT_JSON_SUFFIX: str = ".json"
 PROMPT_JSON_GLOB: str = f"*{PROMPT_JSON_SUFFIX}"
 PROMPT_REGISTRY_DIR: Path = PACKAGE_DIR / "prompts" / "registered"
+BASELINE_PREDICTIONS_DIR: Path = PACKAGE_DIR / "leaderboard" / "baselines"
 P001_PROMPT_FILENAME: str = "p001.json"
 P001_PROMPT_PATH: Path = PROMPT_REGISTRY_DIR / P001_PROMPT_FILENAME
 # Workflow paths resolve against the current working directory.

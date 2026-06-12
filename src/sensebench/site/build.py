@@ -10,6 +10,7 @@ from enum import StrEnum
 from html import escape
 from importlib.resources import files
 from importlib.resources.abc import Traversable
+from math import floor, log10
 from pathlib import Path
 from shutil import copy2, rmtree
 from typing import NamedTuple, assert_never
@@ -31,6 +32,7 @@ from sensebench.leaderboard.aggregate import (
     LeaderboardEntry,
     collect_leaderboard_entries,
 )
+from sensebench.leaderboard.baselines import Baseline, score_baselines
 from sensebench.paths import (
     CALLS_FILENAME,
     DEFAULT_LEXEN_RELEASE_ID,
@@ -62,8 +64,8 @@ from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v2"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v3"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v3"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v4"
 RUN_ARTIFACT_ROOT: Path = Path("artifacts") / "runs"
 MAX_ERROR_EXAMPLES: int = 12
 PACKAGE_NAME: str = "sensebench.site"
@@ -75,7 +77,23 @@ MONEY_FILTER_NAME: str = "money"
 MILLION_TOKEN_PRICE_FILTER_NAME: str = "million_token_price"
 SECONDS_FILTER_NAME: str = "seconds"
 BYTES_FILTER_NAME: str = "bytes"
+SOURCE_LABEL_FILTER_NAME: str = "source_label"
+SOURCE_KIND_LABELS: dict[str, str] = {
+    "open_source": "Open weights",
+    "proprietary": "Proprietary",
+}
+UNKNOWN_SOURCE_LABEL: str = "Unknown source"
+BASELINE_KIND_LABEL_FILTER_NAME: str = "baseline_kind_label"
+BASELINE_KIND_LABELS: dict[str, str] = {
+    "computed_wordnet_mfs": "Computed at build time",
+    "published_predictions": "Published predictions",
+    "reproduced_predictions": "Reproduced predictions",
+}
+CORRECT_BIT: str = "1"
+INCORRECT_BIT: str = "0"
+MONEY_SMALL_VALUE_SIGNIFICANT_FIGURES: int = 3
 PAGE_CONTEXT_KEY: str = "page"
+FRONTIER_RUN_IDS_CONTEXT_KEY: str = "frontier_run_ids"
 RELEASE_CONTEXT_KEY: str = "release"
 PROMPT_CONTEXT_KEY: str = "prompt"
 PARAMS_JSON_CONTEXT_KEY: str = "params_json"
@@ -132,6 +150,7 @@ class SiteData(SiteModel):
     schema_version: str
     summary: SiteSummary
     entries: list[LeaderboardEntry]
+    baselines: list[Baseline]
 
 
 class SliceSummary(SiteModel):
@@ -196,6 +215,7 @@ class RunDetail(SiteModel):
     artifacts: list[RunArtifact]
     slices: list[SliceSummary]
     worst_examples: list[RunExample]
+    correctness: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,6 +294,8 @@ def _template_env() -> Environment:
     env.filters[MILLION_TOKEN_PRICE_FILTER_NAME] = _format_million_token_price
     env.filters[SECONDS_FILTER_NAME] = _format_seconds
     env.filters[BYTES_FILTER_NAME] = _format_bytes
+    env.filters[SOURCE_LABEL_FILTER_NAME] = _format_source_label
+    env.filters[BASELINE_KIND_LABEL_FILTER_NAME] = _format_baseline_kind
     return env
 
 
@@ -296,9 +318,24 @@ def _format_number(value: float | int | None) -> str:
 def _format_money(value: float | None) -> str:
     if value is None:
         return "n/a"
-    if value < 1:
-        return f"${value:.4f}"
-    return f"${value:,.2f}"
+    if value >= 100:
+        return f"${value:,.0f}"
+    if value >= 1:
+        return f"${value:,.2f}"
+    if value <= 0:
+        return "$0.00"
+    decimals = (MONEY_SMALL_VALUE_SIGNIFICANT_FIGURES - 1) - floor(log10(value))
+    return f"${value:.{decimals}f}"
+
+
+def _format_source_label(value: str | None) -> str:
+    if value is None:
+        return UNKNOWN_SOURCE_LABEL
+    return SOURCE_KIND_LABELS.get(value, UNKNOWN_SOURCE_LABEL)
+
+
+def _format_baseline_kind(value: str) -> str:
+    return BASELINE_KIND_LABELS.get(value, value)
 
 
 def _format_million_token_price(value: float | None) -> str:
@@ -402,12 +439,66 @@ def _site_summary(*, collection: LeaderboardCollection) -> SiteSummary:
     )
 
 
-def _site_data(*, collection: LeaderboardCollection) -> SiteData:
+def _site_data(*, collection: LeaderboardCollection, baselines: list[Baseline]) -> SiteData:
     return SiteData(
         schema_version=SITE_DATA_SCHEMA_VERSION,
         summary=_site_summary(collection=collection),
         entries=collection.entries,
+        baselines=baselines,
     )
+
+
+def _site_baselines(
+    *,
+    collection: LeaderboardCollection,
+    dataset_cache: dict[str, DatasetBundle],
+) -> list[Baseline]:
+    versions = sorted(
+        {
+            entry.dataset_version
+            for entry in collection.entries
+            if entry.dataset_version is not None
+        }
+    )
+    baselines: list[Baseline] = []
+    for version in versions:
+        baselines.extend(
+            score_baselines(dataset=_dataset_for_version(version=version, cache=dataset_cache))
+        )
+    return baselines
+
+
+@dataclass(frozen=True, slots=True)
+class FrontierPoint:
+    run_id: RunID
+    accuracy: float
+    cost_per_million_items: float
+
+
+def _pareto_frontier_run_ids(*, entries: list[LeaderboardEntry]) -> set[RunID]:
+    points: list[FrontierPoint] = [
+        FrontierPoint(
+            run_id=entry.run_id,
+            accuracy=entry.accuracy,
+            cost_per_million_items=entry.cost_per_million_items,
+        )
+        for entry in entries
+        if entry.accuracy is not None and entry.cost_per_million_items is not None
+    ]
+    frontier: set[RunID] = set()
+    for point in points:
+        dominated = any(
+            other.accuracy >= point.accuracy
+            and other.cost_per_million_items <= point.cost_per_million_items
+            and (
+                other.accuracy > point.accuracy
+                or other.cost_per_million_items < point.cost_per_million_items
+            )
+            for other in points
+        )
+        if not dominated:
+            frontier.add(point.run_id)
+    return frontier
 
 
 def _candidate_bucket(*, count: int) -> str:
@@ -747,6 +838,15 @@ def _worst_examples(
     return selected
 
 
+def _dataset_for_version(*, version: str, cache: dict[str, DatasetBundle]) -> DatasetBundle:
+    dataset = cache.get(version)
+    if dataset is None:
+        release = get_dataset_release(release_id=version)
+        dataset = load_registered_dataset(release=release)
+        cache[version] = dataset
+    return dataset
+
+
 def _dataset_for_entry(
     *,
     entry: LeaderboardEntry,
@@ -754,12 +854,17 @@ def _dataset_for_entry(
 ) -> DatasetBundle:
     if entry.dataset_version is None:
         raise ValueError(f"run {entry.run_id} has no dataset_version")
-    dataset = cache.get(entry.dataset_version)
-    if dataset is None:
-        release = get_dataset_release(release_id=entry.dataset_version)
-        dataset = load_registered_dataset(release=release)
-        cache[entry.dataset_version] = dataset
-    return dataset
+    return _dataset_for_version(version=entry.dataset_version, cache=cache)
+
+
+def _correctness_bits(*, loaded: LoadedRun, dataset: DatasetBundle) -> str:
+    correct_by_item: dict[ItemID, bool | None] = {
+        prediction.item_id: prediction.is_correct for prediction in loaded.predictions
+    }
+    return "".join(
+        CORRECT_BIT if correct_by_item[item.item_id] is True else INCORRECT_BIT
+        for item in dataset.items
+    )
 
 
 def _run_detail(
@@ -789,6 +894,7 @@ def _run_detail(
             prompt=prompt,
             slices=slices,
         ),
+        correctness=_correctness_bits(loaded=loaded, dataset=dataset),
     )
 
 
@@ -850,7 +956,15 @@ def _static_pages() -> list[StaticPage]:
                         "Accuracy is the fraction of dataset items whose predicted WordNet "
                         "sense key matches the gold sense key set.",
                         "Confidence intervals are bootstrap intervals over item correctness "
-                        "with a fixed seed.",
+                        "with a fixed seed, shown as a ± half-width next to accuracy.",
+                        "Rank ranges list the positions a run could plausibly occupy among "
+                        "the visible rows given overlapping 95% confidence intervals.",
+                        "The compare view tests paired per-item differences between runs on "
+                        "the same dataset version with McNemar's test, which is far more "
+                        "sensitive than comparing overlapping intervals.",
+                        "Reference baselines (MFS, BEM, ESCHER, ConSeC) are scored from "
+                        "per-item system predictions on exactly the same dataset items as "
+                        "the model runs.",
                     ),
                 ),
                 PageSection(
@@ -868,8 +982,9 @@ def _static_pages() -> list[StaticPage]:
                     paragraphs=(
                         "Runs sort by higher accuracy, then lower cost per million items "
                         "when available, then newer creation time.",
-                        "The default leaderboard view shows the best verified run per "
-                        "model, dataset version, and prompt ID.",
+                        "The default leaderboard view lists every verified run; the "
+                        "collapsed view keeps only the best verified run per model and "
+                        "dataset version, across prompts and reasoning efforts.",
                     ),
                 ),
             ),
@@ -885,14 +1000,20 @@ def _static_pages() -> list[StaticPage]:
                         "Run the benchmark locally with the registered dataset and prompt, "
                         "verify the result, then add the complete run directory under "
                         "results/<run-id>/ in a pull request.",
+                        "Submissions must identify the runner: pass --github-handle to "
+                        "sensebench run, or stamp an existing run with sensebench "
+                        "set-runner.",
                         "Pull request CI rebuilds the site and fails if any submitted "
-                        "result is invalid.",
+                        "result is invalid; a maintainer reviews every submission, and "
+                        "runs appear on the leaderboard only after the pull request is "
+                        "accepted and merged.",
                     ),
                 ),
                 PageSection(
                     title="Commands",
                     paragraphs=(
-                        "Generate a run with: sensebench run --model <model> --prompt p001",
+                        "Generate a run with: sensebench run --model <model> --prompt p001 "
+                        "--github-handle <your-handle>",
                         "Verify it with: sensebench verify runs/<run-id> --dataset "
                         "lexen-v0.1.0 --prompt p001",
                     ),
@@ -1050,9 +1171,9 @@ def _render_run_pages(
     base_url: str,
     results_dir: Path,
     entries: list[LeaderboardEntry],
+    dataset_cache: dict[str, DatasetBundle],
 ) -> list[str]:
     paths: list[str] = []
-    dataset_cache: dict[str, DatasetBundle] = {}
     for entry in entries:
         run_dir = results_dir / entry.run_id
         artifacts = _copy_run_artifacts(
@@ -1121,6 +1242,7 @@ def _render_index(
     output_dir: Path,
     base_url: str,
     site_data: SiteData,
+    frontier_run_ids: set[RunID],
 ) -> str:
     path = ""
     html_text = _render(
@@ -1133,6 +1255,7 @@ def _render_index(
         context={
             SITE_DATA_CONTEXT_KEY: site_data,
             DATASETS_CONTEXT_KEY: sorted(DATASET_RELEASES),
+            FRONTIER_RUN_IDS_CONTEXT_KEY: frontier_run_ids,
         },
     )
     _write_text(path=output_dir / INDEX_HTML_FILENAME, text=html_text)
@@ -1167,7 +1290,11 @@ def build_site(
     env = _template_env()
     _clean_output_dir(output_dir=output_dir)
     _copy_static_assets(output_dir=output_dir)
-    site_data = _site_data(collection=collection)
+    dataset_cache: dict[str, DatasetBundle] = {}
+    site_data = _site_data(
+        collection=collection,
+        baselines=_site_baselines(collection=collection, dataset_cache=dataset_cache),
+    )
     env.globals[ASSET_VERSION_GLOBAL_KEY] = (
         site_data.summary.generated_at.replace(":", "").replace("+", "")
     )
@@ -1183,6 +1310,7 @@ def build_site(
             output_dir=output_dir,
             base_url=base_url,
             site_data=site_data,
+            frontier_run_ids=_pareto_frontier_run_ids(entries=collection.entries),
         )
     )
     paths.append(
@@ -1200,6 +1328,7 @@ def build_site(
             base_url=base_url,
             results_dir=results_dir,
             entries=collection.entries,
+            dataset_cache=dataset_cache,
         )
     )
     paths.append(_render_dataset_page(env=env, output_dir=output_dir, base_url=base_url))
