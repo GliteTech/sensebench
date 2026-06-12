@@ -23,13 +23,14 @@ from sensebench.datasets.releases import (
     get_dataset_release,
     load_registered_dataset,
 )
-from sensebench.leaderboard.aggregate import emit_leaderboard
+from sensebench.leaderboard.aggregate import LeaderboardBuildError, emit_leaderboard
 from sensebench.paths import (
     DEFAULT_LEXEN_RELEASE_ID,
     LEADERBOARD_JSON_PATH,
     LOCAL_RUNS_DIR,
     PROMPT_JSON_SUFFIX,
     PROMPT_REGISTRY_DIR,
+    SITE_OUTPUT_DIR,
     SUBMITTED_RESULTS_DIR,
 )
 from sensebench.prompts.models import PromptDefinition
@@ -49,6 +50,7 @@ from sensebench.runs.models import (
     SelfHostedLlmReference,
     VoteStatus,
 )
+from sensebench.site.build import DEFAULT_SITE_BASE_URL, build_site
 from sensebench.verify.runs import RunValidationReport, verify_run_directory
 from sensebench.wordnet import SenseCandidate, get_candidate_senses, wordnet_version
 
@@ -374,8 +376,32 @@ def _cmd_verify(*, args: argparse.Namespace) -> int:
 
 
 def _cmd_leaderboard(*, args: argparse.Namespace) -> int:
-    emit_leaderboard(results_dir=Path(args.results_dir), output_path=Path(args.output))
+    try:
+        emit_leaderboard(
+            results_dir=Path(args.results_dir),
+            output_path=Path(args.output),
+            official=bool(args.official),
+            strict=bool(args.strict),
+        )
+    except LeaderboardBuildError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     print(args.output)
+    return 0
+
+
+def _cmd_site_build(*, args: argparse.Namespace) -> int:
+    try:
+        build_site(
+            results_dir=Path(args.results_dir),
+            output_dir=Path(args.output_dir),
+            base_url=str(args.base_url),
+            strict=bool(args.strict),
+        )
+    except LeaderboardBuildError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(args.output_dir)
     return 0
 
 
@@ -458,7 +484,32 @@ def _build_parser() -> argparse.ArgumentParser:
     leaderboard_parser = subparsers.add_parser("leaderboard", help="Emit leaderboard.json.")
     leaderboard_parser.add_argument("--results-dir", default=str(SUBMITTED_RESULTS_DIR))
     leaderboard_parser.add_argument("--output", default=str(LEADERBOARD_JSON_PATH))
+    leaderboard_parser.add_argument(
+        "--official",
+        action="store_true",
+        help="Verify against registered official dataset releases.",
+    )
+    leaderboard_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail instead of skipping invalid submitted results.",
+    )
     leaderboard_parser.set_defaults(func=_cmd_leaderboard)
+
+    site_parser = subparsers.add_parser("site", help="Build static website assets.")
+    site_subparsers = site_parser.add_subparsers(dest="site_command", required=True)
+    site_build_parser = site_subparsers.add_parser(
+        "build", help="Build the static GitHub Pages site."
+    )
+    site_build_parser.add_argument("--results-dir", default=str(SUBMITTED_RESULTS_DIR))
+    site_build_parser.add_argument("--output-dir", default=str(SITE_OUTPUT_DIR))
+    site_build_parser.add_argument("--base-url", default=DEFAULT_SITE_BASE_URL)
+    site_build_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail if any submitted result is invalid or ineligible.",
+    )
+    site_build_parser.set_defaults(func=_cmd_site_build)
 
     fetch_parser = subparsers.add_parser(
         "fetch-dataset", help="Download and cache a registered dataset release."

@@ -1,27 +1,45 @@
-"""Aggregate submitted results into leaderboard.json."""
+"""Aggregate submitted results into leaderboard data."""
 
 from __future__ import annotations
 
+import re
 import sys
+from collections import Counter
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from sensebench.datasets.models import DatasetID
+from sensebench.datasets.models import DatasetBundle, DatasetID
+from sensebench.datasets.releases import (
+    DatasetRelease,
+    get_dataset_release,
+    load_registered_dataset,
+)
 from sensebench.paths import PROMPT_JSON_SUFFIX, PROMPT_REGISTRY_DIR, RUN_METADATA_FILENAME
 from sensebench.prompts.models import PromptDefinition, PromptID
 from sensebench.prompts.registry import load_prompt_definition
 from sensebench.runs.loaders import LoadedRun, load_run_directory
-from sensebench.runs.models import RunID
-from sensebench.verify.runs import verify_run_directory
+from sensebench.runs.models import (
+    CLOUD_LLM_KIND,
+    SELF_HOSTED_LLM_KIND,
+    PredictionRecord,
+    PredictionStatus,
+    RunID,
+    TokenUsage,
+    VoteStatus,
+)
+from sensebench.verify.runs import RunValidationIssue, verify_run_directory
 
 DEFAULT_BOOTSTRAP_RESAMPLES: int = 2000
 DEFAULT_BOOTSTRAP_SEED: int = 12345
 CONFIDENCE_LOW_PERCENTILE: float = 2.5
 CONFIDENCE_HIGH_PERCENTILE: float = 97.5
-LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v1"
+LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v2"
+RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
 
 
 class LeaderboardModel(BaseModel):
@@ -34,22 +52,76 @@ class AccuracyInterval(LeaderboardModel):
 
 
 class LeaderboardEntry(LeaderboardModel):
+    rank: int
     run_id: RunID
+    run_url: str
+    created_at: str
+    git_commit: str | None
+    runner_github_handle: str | None
+    runner_name: str | None
     model: str
+    requested_model: str
+    resolved_model: str | None
+    model_kind: str
+    hosting_kind: str
+    source_kind: str
+    llm_vendor: str | None
+    api_provider: str | None
+    license: str | None
+    model_url: str | None
+    reasoning_effort: str | None
     prompt_id: PromptID
+    prompt_name: str | None
     dataset_id: DatasetID
     dataset_version: str | None
+    dataset_content_hash: str | None
     accuracy: float | None
     accuracy_ci: AccuracyInterval
     correct_count: int
     item_count: int
     call_count: int
+    success_count: int
+    monosemous_count: int
+    no_candidates_count: int
+    no_valid_vote_count: int
+    invalid_output_vote_count: int
+    transport_error_vote_count: int
+    input_tokens: int | None
+    cached_input_tokens: int | None
+    output_tokens: int | None
+    reasoning_output_tokens: int | None
+    total_tokens: int | None
+    tokens_per_item: float | None
     cost_usd: float | None
+    cost_per_1k_items: float | None
+    elapsed_seconds: float | None
+    latency_per_item: float | None
+    best_group_key: str
 
 
 class LeaderboardFile(LeaderboardModel):
     schema_version: str
+    generated_at: str
     entries: list[LeaderboardEntry]
+
+
+@dataclass(frozen=True, slots=True)
+class LeaderboardCollectionIssue:
+    run_dir: Path
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class LeaderboardCollection:
+    entries: list[LeaderboardEntry]
+    issues: list[LeaderboardCollectionIssue]
+
+
+class LeaderboardBuildError(RuntimeError):
+    def __init__(self, *, issues: list[LeaderboardCollectionIssue]) -> None:
+        self.issues = issues
+        joined = "\n".join(f"{issue.run_dir}: {issue.message}" for issue in issues)
+        super().__init__(f"leaderboard build failed:\n{joined}")
 
 
 def _bootstrap_accuracy_ci(*, values: list[bool]) -> AccuracyInterval:
@@ -79,61 +151,324 @@ def _registered_prompt(*, prompt_id: PromptID) -> PromptDefinition | None:
         return None
 
 
-def _entry_for_run(*, loaded: LoadedRun) -> LeaderboardEntry:
+def _divide(*, numerator: float | int | None, denominator: int) -> float | None:
+    if numerator is None or denominator <= 0:
+        return None
+    return float(numerator) / denominator
+
+
+def _token_total(*, usage: TokenUsage) -> int | None:
+    values = [usage.input_tokens, usage.output_tokens, usage.reasoning_output_tokens]
+    present = [value for value in values if value is not None]
+    if len(present) == 0:
+        return None
+    return sum(present)
+
+
+def _status_counts(*, predictions: list[PredictionRecord]) -> Counter[PredictionStatus]:
+    return Counter(prediction.status for prediction in predictions)
+
+
+def _invalid_vote_count(*, predictions: list[PredictionRecord]) -> int:
+    return sum(
+        1
+        for prediction in predictions
+        for vote in prediction.votes
+        if vote.status == VoteStatus.INVALID_OUTPUT
+    )
+
+
+def _transport_error_vote_count(*, predictions: list[PredictionRecord]) -> int:
+    return sum(
+        1
+        for prediction in predictions
+        for vote in prediction.votes
+        if vote.status == VoteStatus.TRANSPORT_ERROR
+    )
+
+
+def _hosting_kind(*, model_kind: str) -> str:
+    if model_kind == CLOUD_LLM_KIND:
+        return "cloud_api"
+    if model_kind == SELF_HOSTED_LLM_KIND:
+        return "self_hosted"
+    return "unknown"
+
+
+def _best_group_key(*, loaded: LoadedRun) -> str:
+    metadata = loaded.metadata
+    return "|".join(
+        [
+            metadata.model.display_name,
+            metadata.dataset.dataset_version or "",
+            metadata.prompt.id,
+        ]
+    )
+
+
+def _entry_for_run(
+    *,
+    loaded: LoadedRun,
+    prompt: PromptDefinition | None,
+    rank: int,
+) -> LeaderboardEntry:
+    metadata = loaded.metadata
     correctness: list[bool] = [prediction.is_correct is True for prediction in loaded.predictions]
     correct_count = sum(1 for value in correctness if value)
     item_count = len(loaded.predictions)
     accuracy = correct_count / item_count if item_count > 0 else None
+    usage = metadata.totals.usage
+    total_tokens = _token_total(usage=usage)
+    status_counts = _status_counts(predictions=loaded.predictions)
+    cost_usd = metadata.totals.cost.total_usd
+    model = metadata.model
+    model_kind = model.kind
     return LeaderboardEntry(
-        run_id=loaded.metadata.run_id,
-        model=loaded.metadata.model.display_name,
-        prompt_id=loaded.metadata.prompt.id,
-        dataset_id=loaded.metadata.dataset.dataset_id,
-        dataset_version=loaded.metadata.dataset.dataset_version,
+        rank=rank,
+        run_id=metadata.run_id,
+        run_url=f"runs/{metadata.run_id}/",
+        created_at=metadata.created_at,
+        git_commit=metadata.git_commit,
+        runner_github_handle=metadata.runner.github_handle,
+        runner_name=metadata.runner.name,
+        model=model.display_name,
+        requested_model=model.requested_model,
+        resolved_model=model.resolved_model,
+        model_kind=model_kind,
+        hosting_kind=_hosting_kind(model_kind=model_kind),
+        source_kind=model.source_kind.value,
+        llm_vendor=model.llm_vendor,
+        api_provider=getattr(model, "api_provider", None),
+        license=model.license,
+        model_url=model.model_url,
+        reasoning_effort=getattr(model, "reasoning_effort", None),
+        prompt_id=metadata.prompt.id,
+        prompt_name=prompt.name if prompt is not None else None,
+        dataset_id=metadata.dataset.dataset_id,
+        dataset_version=metadata.dataset.dataset_version,
+        dataset_content_hash=metadata.dataset.content_hash,
         accuracy=accuracy,
         accuracy_ci=_bootstrap_accuracy_ci(values=correctness),
         correct_count=correct_count,
         item_count=item_count,
         call_count=len(loaded.calls),
-        cost_usd=loaded.metadata.totals.cost.total_usd,
+        success_count=status_counts.get(PredictionStatus.SUCCESS, 0),
+        monosemous_count=status_counts.get(PredictionStatus.MONOSEMOUS, 0),
+        no_candidates_count=status_counts.get(PredictionStatus.NO_CANDIDATES, 0),
+        no_valid_vote_count=status_counts.get(PredictionStatus.NO_VALID_VOTE, 0),
+        invalid_output_vote_count=_invalid_vote_count(predictions=loaded.predictions),
+        transport_error_vote_count=_transport_error_vote_count(predictions=loaded.predictions),
+        input_tokens=usage.input_tokens,
+        cached_input_tokens=usage.cached_input_tokens,
+        output_tokens=usage.output_tokens,
+        reasoning_output_tokens=usage.reasoning_output_tokens,
+        total_tokens=total_tokens,
+        tokens_per_item=_divide(numerator=total_tokens, denominator=item_count),
+        cost_usd=cost_usd,
+        cost_per_1k_items=None
+        if cost_usd is None or item_count <= 0
+        else (cost_usd / item_count) * 1000,
+        elapsed_seconds=metadata.totals.elapsed_seconds,
+        latency_per_item=_divide(
+            numerator=metadata.totals.elapsed_seconds,
+            denominator=item_count,
+        ),
+        best_group_key=_best_group_key(loaded=loaded),
     )
 
 
-def _verified_entry_for_run(*, run_dir: Path) -> LeaderboardEntry | None:
+def _release_for_metadata(*, loaded: LoadedRun) -> DatasetRelease:
+    metadata = loaded.metadata
+    release_id = metadata.dataset.dataset_version
+    if release_id is None:
+        raise ValueError("dataset_version must name a registered release")
+    release = get_dataset_release(release_id=release_id)
+    if metadata.dataset.dataset_id != release.dataset_id:
+        raise ValueError(
+            f"dataset_id {metadata.dataset.dataset_id} does not match release "
+            f"{release.dataset_id}"
+        )
+    if metadata.dataset.item_count != release.item_count:
+        raise ValueError(
+            f"item_count {metadata.dataset.item_count} does not match release "
+            f"{release.item_count}"
+        )
+    if metadata.dataset.content_hash != release.content_hash:
+        raise ValueError(
+            f"content_hash {metadata.dataset.content_hash} does not match release "
+            f"{release.content_hash}"
+        )
+    return release
+
+
+def _official_dataset(
+    *,
+    loaded: LoadedRun,
+    cache: dict[str, DatasetBundle],
+) -> DatasetBundle:
+    release = _release_for_metadata(loaded=loaded)
+    dataset = cache.get(release.release_id)
+    if dataset is None:
+        dataset = load_registered_dataset(release=release)
+        cache[release.release_id] = dataset
+    return dataset
+
+
+def _format_verification_issues(*, issues: list[RunValidationIssue]) -> str:
+    failed_rules = sorted({issue.rule.value for issue in issues})
+    return f"failed verification ({', '.join(failed_rules)})"
+
+
+def _eligibility_issues(*, loaded: LoadedRun) -> list[str]:
+    issues: list[str] = []
+    run_id = loaded.metadata.run_id
+    if RUN_ID_PATTERN.fullmatch(run_id) is None:
+        issues.append("run_id must contain only lowercase letters, numbers, '.', '_', and '-'")
+    return issues
+
+
+def _verified_entry_for_run(
+    *,
+    run_dir: Path,
+    official: bool,
+    dataset_cache: dict[str, DatasetBundle],
+) -> tuple[LeaderboardEntry | None, list[LeaderboardCollectionIssue]]:
     try:
         loaded = load_run_directory(run_dir=run_dir)
-        prompt = _registered_prompt(prompt_id=loaded.metadata.prompt.id)
-        report = verify_run_directory(run_dir=run_dir, prompt=prompt)
     except Exception as exc:
-        print(f"skipping {run_dir}: cannot verify ({exc})", file=sys.stderr)
-        return None
-    if report.has_errors():
-        failed_rules = sorted({issue.rule.value for issue in report.issues})
-        print(
-            f"skipping {run_dir}: failed verification ({', '.join(failed_rules)})",
-            file=sys.stderr,
+        return None, [LeaderboardCollectionIssue(run_dir=run_dir, message=f"cannot load ({exc})")]
+
+    local_issues = [
+        LeaderboardCollectionIssue(run_dir=run_dir, message=message)
+        for message in _eligibility_issues(loaded=loaded)
+    ]
+    prompt = _registered_prompt(prompt_id=loaded.metadata.prompt.id)
+    if prompt is None:
+        local_issues.append(
+            LeaderboardCollectionIssue(
+                run_dir=run_dir,
+                message=f"prompt {loaded.metadata.prompt.id} is not registered",
+            )
         )
-        return None
-    return _entry_for_run(loaded=loaded)
+
+    dataset: DatasetBundle | None = None
+    if official:
+        try:
+            dataset = _official_dataset(loaded=loaded, cache=dataset_cache)
+        except Exception as exc:
+            local_issues.append(
+                LeaderboardCollectionIssue(
+                    run_dir=run_dir,
+                    message=f"not eligible for official leaderboard ({exc})",
+                )
+            )
+
+    if len(local_issues) > 0:
+        return None, local_issues
+
+    try:
+        report = verify_run_directory(run_dir=run_dir, dataset=dataset, prompt=prompt)
+    except Exception as exc:
+        return None, [
+            LeaderboardCollectionIssue(run_dir=run_dir, message=f"cannot verify ({exc})")
+        ]
+    if report.has_errors():
+        return None, [
+            LeaderboardCollectionIssue(
+                run_dir=run_dir,
+                message=_format_verification_issues(issues=report.issues),
+            )
+        ]
+    return _entry_for_run(loaded=loaded, prompt=prompt, rank=0), []
 
 
-def emit_leaderboard(*, results_dir: Path, output_path: Path) -> None:
+def _created_at_timestamp(*, value: str) -> float:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return 0.0
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.timestamp()
+
+
+def _sort_key(entry: LeaderboardEntry) -> tuple[float, float, float, str]:
+    accuracy = entry.accuracy if entry.accuracy is not None else -1.0
+    cost = entry.cost_per_1k_items if entry.cost_per_1k_items is not None else float("inf")
+    created_at = _created_at_timestamp(value=entry.created_at)
+    return (-accuracy, cost, -created_at, entry.run_id)
+
+
+def _ranked(*, entries: list[LeaderboardEntry]) -> list[LeaderboardEntry]:
+    sorted_entries = sorted(entries, key=_sort_key)
+    return [entry.model_copy(update={"rank": rank}) for rank, entry in enumerate(sorted_entries, 1)]
+
+
+def collect_leaderboard_entries(
+    *,
+    results_dir: Path,
+    official: bool = False,
+    fail_on_invalid: bool = False,
+) -> LeaderboardCollection:
     entries: list[LeaderboardEntry] = []
+    issues: list[LeaderboardCollectionIssue] = []
+    seen_run_ids: set[RunID] = set()
+    dataset_cache: dict[str, DatasetBundle] = {}
     if results_dir.exists():
         for run_dir in sorted(path for path in results_dir.iterdir() if path.is_dir()):
-            if (run_dir / RUN_METADATA_FILENAME).exists():
-                entry = _verified_entry_for_run(run_dir=run_dir)
-                if entry is not None:
-                    entries.append(entry)
-    entries.sort(
-        key=lambda entry: entry.accuracy if entry.accuracy is not None else -1.0, reverse=True
-    )
-    leaderboard = LeaderboardFile(
+            if not (run_dir / RUN_METADATA_FILENAME).exists():
+                continue
+            entry, run_issues = _verified_entry_for_run(
+                run_dir=run_dir,
+                official=official,
+                dataset_cache=dataset_cache,
+            )
+            issues.extend(run_issues)
+            if entry is None:
+                continue
+            if entry.run_id in seen_run_ids:
+                issues.append(
+                    LeaderboardCollectionIssue(
+                        run_dir=run_dir,
+                        message=f"duplicate run_id {entry.run_id}",
+                    )
+                )
+                continue
+            seen_run_ids.add(entry.run_id)
+            entries.append(entry)
+    if fail_on_invalid and len(issues) > 0:
+        raise LeaderboardBuildError(issues=issues)
+    return LeaderboardCollection(entries=_ranked(entries=entries), issues=issues)
+
+
+def _generated_at() -> str:
+    return datetime.now(tz=UTC).isoformat()
+
+
+def leaderboard_file(*, entries: list[LeaderboardEntry]) -> LeaderboardFile:
+    return LeaderboardFile(
         schema_version=LEADERBOARD_SCHEMA_VERSION,
+        generated_at=_generated_at(),
         entries=entries,
     )
+
+
+def emit_leaderboard(
+    *,
+    results_dir: Path,
+    output_path: Path,
+    official: bool = False,
+    strict: bool = False,
+) -> None:
+    collection = collect_leaderboard_entries(
+        results_dir=results_dir,
+        official=official,
+        fail_on_invalid=strict,
+    )
+    for issue in collection.issues:
+        print(f"skipping {issue.run_dir}: {issue.message}", file=sys.stderr)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
-        leaderboard.model_dump_json(indent=2) + "\n",
+        leaderboard_file(entries=collection.entries).model_dump_json(indent=2) + "\n",
         encoding="utf-8",
     )

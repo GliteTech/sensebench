@@ -1,0 +1,133 @@
+{% extends "base.html.j2" %}
+
+{% block content %}
+<section class="leaderboard-head">
+  <div>
+    <p class="eyebrow">English WSD benchmark</p>
+    <h1>SenseBench Leaderboard</h1>
+  </div>
+  <dl class="summary-grid">
+    <div>
+      <dt>Verified Runs</dt>
+      <dd>{{ site_data.summary.verified_run_count }}</dd>
+    </div>
+    <div>
+      <dt>Models</dt>
+      <dd>{{ site_data.summary.model_count }}</dd>
+    </div>
+    <div>
+      <dt>Top Accuracy</dt>
+      <dd>{{ site_data.summary.top_accuracy|pct }}</dd>
+    </div>
+    <div>
+      <dt>Dataset</dt>
+      <dd>{{ site_data.summary.dataset_versions|join(", ") }}</dd>
+    </div>
+  </dl>
+</section>
+
+<section class="toolbar" aria-label="Leaderboard controls">
+  <label>
+    Search
+    <input id="leaderboard-search" type="search" placeholder="Model, vendor, runner">
+  </label>
+  <label>
+    Dataset
+    <select id="dataset-filter">
+      <option value="">All datasets</option>
+      {% for dataset in site_data.summary.dataset_versions %}
+      <option value="{{ dataset }}">{{ dataset }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    Prompt
+    <select id="prompt-filter">
+      <option value="">All prompts</option>
+      {% for prompt_id in site_data.summary.prompt_ids %}
+      <option value="{{ prompt_id }}">{{ prompt_id }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    View
+    <select id="view-filter">
+      <option value="best">Best per model</option>
+      <option value="all">All runs</option>
+    </select>
+  </label>
+  <label>
+    Chart
+    <select id="chart-mode">
+      <option value="cost_per_1k_items">Accuracy vs cost / 1k</option>
+      <option value="latency_per_item">Accuracy vs latency</option>
+      <option value="tokens_per_item">Accuracy vs tokens</option>
+      <option value="cost_usd">Accuracy vs total cost</option>
+    </select>
+  </label>
+  <label class="checkbox-label">
+    <input id="frontier-only" type="checkbox">
+    Frontier only
+  </label>
+</section>
+
+<section class="chart-panel" aria-label="Pareto chart">
+  <div id="leaderboard-chart" class="chart"></div>
+  <p id="chart-note" class="note"></p>
+</section>
+
+<section class="table-panel" aria-label="Leaderboard table">
+  <div class="table-scroll">
+    <table id="leaderboard-table">
+      <thead>
+        <tr>
+          <th><button type="button" data-sort="rank">Rank</button></th>
+          <th>Compare</th>
+          <th><button type="button" data-sort="model">Model</button></th>
+          <th><button type="button" data-sort="accuracy">Accuracy</button></th>
+          <th><button type="button" data-sort="cost_per_1k_items">Cost / 1k</button></th>
+          <th><button type="button" data-sort="latency_per_item">Latency / item</button></th>
+          <th><button type="button" data-sort="tokens_per_item">Tokens / item</button></th>
+          <th>Prompt</th>
+          <th>Dataset</th>
+          <th>Run</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in site_data.entries %}
+        <tr>
+          <td>{{ entry.rank }}</td>
+          <td></td>
+          <td>{{ entry.model }}</td>
+          <td>{{ entry.accuracy|pct }}</td>
+          <td>{{ entry.cost_per_1k_items|money }}</td>
+          <td>{{ entry.latency_per_item|num }}s</td>
+          <td>{{ entry.tokens_per_item|num }}</td>
+          <td>{{ entry.prompt_id }}</td>
+          <td>{{ entry.dataset_version }}</td>
+          <td><a href="{{ base_path }}{{ entry.run_url }}">{{ entry.run_id }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="compare-panel" aria-label="Selected run comparison">
+  <h2>Compare Selected Runs</h2>
+  <div id="compare-chart" class="chart chart-small"></div>
+  <div id="compare-empty" class="empty-state">Select up to six runs from the table.</div>
+  <div id="compare-table" class="table-scroll"></div>
+</section>
+
+<section class="notes">
+  <h2>Method Notes</h2>
+  <p>Public rows are rebuilt from verified run artifacts in the repository. Accuracy is recomputed from predictions, and official runs are checked against the registered dataset hash and prompt ID.</p>
+  <p>Pareto frontiers use the visible rows: higher accuracy is better, and lower cost, latency, or token use is better.</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ base_path }}assets/vendor/echarts.min.js"></script>
+<script src="{{ base_path }}assets/site.js"></script>
+{% endblock %}

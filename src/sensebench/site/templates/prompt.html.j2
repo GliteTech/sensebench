@@ -1,0 +1,32 @@
+{% extends "base.html.j2" %}
+
+{% block content %}
+<section class="page-title">
+  <p class="eyebrow">Prompt</p>
+  <h1>{{ prompt.id }}: {{ prompt.name }}</h1>
+  <p>{{ prompt.description }}</p>
+</section>
+
+<section class="detail-block wide">
+  <h2>Prompt Metadata</h2>
+  <dl>
+    <dt>Schema</dt><dd>{{ prompt.schema_version }}</dd>
+    <dt>Template</dt><dd>{{ prompt.template_kind.value }}</dd>
+    <dt>Output</dt><dd>{{ prompt.output.mode.value }}</dd>
+    <dt>Supersedes</dt><dd>{{ prompt.supersedes or "n/a" }}</dd>
+  </dl>
+</section>
+
+<section class="doc-section">
+  <h2>Rendering Parameters</h2>
+  <pre><code>{{ params_json }}</code></pre>
+</section>
+
+<section class="doc-section">
+  <h2>Messages</h2>
+  {% for message in prompt.template.messages %}
+  <h3>{{ message.role.value }}</h3>
+  <pre><code>{{ message.content }}</code></pre>
+  {% endfor %}
+</section>
+{% endblock %}

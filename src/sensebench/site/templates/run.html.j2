@@ -1,0 +1,121 @@
+{% extends "base.html.j2" %}
+
+{% block content %}
+{% set entry = detail.entry %}
+<section class="run-head">
+  <div>
+    <p class="eyebrow">Verified run</p>
+    <h1>{{ entry.model }}</h1>
+    <p class="run-id">{{ entry.run_id }}</p>
+  </div>
+  <dl class="summary-grid">
+    <div>
+      <dt>Rank</dt>
+      <dd>{{ entry.rank }}</dd>
+    </div>
+    <div>
+      <dt>Accuracy</dt>
+      <dd>{{ entry.accuracy|pct }}</dd>
+    </div>
+    <div>
+      <dt>Correct</dt>
+      <dd>{{ entry.correct_count }} / {{ entry.item_count }}</dd>
+    </div>
+    <div>
+      <dt>Cost</dt>
+      <dd>{{ entry.cost_usd|money }}</dd>
+    </div>
+  </dl>
+</section>
+
+<section class="detail-grid">
+  <div class="detail-block">
+    <h2>Model</h2>
+    <dl>
+      <dt>Requested</dt><dd>{{ entry.requested_model }}</dd>
+      <dt>Resolved</dt><dd>{{ entry.resolved_model or "n/a" }}</dd>
+      <dt>Vendor</dt><dd>{{ entry.llm_vendor or "n/a" }}</dd>
+      <dt>Hosting</dt><dd>{{ entry.hosting_kind }}</dd>
+      <dt>Source</dt><dd>{{ entry.source_kind }}</dd>
+      <dt>License</dt><dd>{{ entry.license or "n/a" }}</dd>
+    </dl>
+  </div>
+  <div class="detail-block">
+    <h2>Reproducibility</h2>
+    <dl>
+      <dt>Dataset</dt><dd>{{ entry.dataset_version }}</dd>
+      <dt>Dataset hash</dt><dd class="hash">{{ entry.dataset_content_hash }}</dd>
+      <dt>Prompt</dt><dd>{{ entry.prompt_id }}</dd>
+      <dt>Commit</dt><dd class="hash">{{ entry.git_commit or "n/a" }}</dd>
+      <dt>Artifacts</dt><dd><a href="{{ artifact_url }}">{{ artifact_path }}</a></dd>
+    </dl>
+  </div>
+  <div class="detail-block">
+    <h2>Runtime</h2>
+    <dl>
+      <dt>Calls</dt><dd>{{ entry.call_count }}</dd>
+      <dt>Tokens / item</dt><dd>{{ entry.tokens_per_item|num }}</dd>
+      <dt>Cost / 1k</dt><dd>{{ entry.cost_per_1k_items|money }}</dd>
+      <dt>Latency / item</dt><dd>{{ entry.latency_per_item|num }}s</dd>
+      <dt>Invalid votes</dt><dd>{{ entry.invalid_output_vote_count }}</dd>
+      <dt>Transport errors</dt><dd>{{ entry.transport_error_vote_count }}</dd>
+    </dl>
+  </div>
+</section>
+
+<section>
+  <h2>Slice Breakdown</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Group</th>
+          <th>Bucket</th>
+          <th>Accuracy</th>
+          <th>Correct</th>
+          <th>Items</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for summary in detail.slices %}
+        <tr>
+          <td>{{ summary.group }}</td>
+          <td>{{ summary.value }}</td>
+          <td>{{ summary.accuracy|pct }}</td>
+          <td>{{ summary.correct_count }}</td>
+          <td>{{ summary.item_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Worst-Bucket Examples</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Bucket</th>
+          <th>Item</th>
+          <th>Sentence</th>
+          <th>Predicted</th>
+          <th>Gold</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for example in detail.worst_examples %}
+        <tr>
+          <td>{{ example.bucket_group }}: {{ example.bucket_value }}</td>
+          <td>{{ example.item_id }}</td>
+          <td>{{ example.sentence }}</td>
+          <td>{{ example.predicted_sense_key or "n/a" }}</td>
+          <td>{{ example.gold_sense_keys|join(", ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -10,6 +10,7 @@ PROMPT_REGISTRY_DIR: Path = PACKAGE_DIR / "prompts" / "registered"
 LOCAL_RUNS_DIR: Path = Path("runs")
 SUBMITTED_RESULTS_DIR: Path = Path("results")
 LEADERBOARD_JSON_PATH: Path = Path("leaderboard.json")
+SITE_OUTPUT_DIR: Path = Path("_site")
 RUN_METADATA_FILENAME: str = "run.json"
 PREDICTIONS_FILENAME: str = "predictions.jsonl"
 CALLS_FILENAME: str = "calls.jsonl.gz"

@@ -68,6 +68,20 @@ benchmark-relevant change requires a new prompt ID. See `docs/prompts.md`.
 `leaderboard.json`. Every run is re-verified before inclusion, and accuracy is recomputed from the
 predictions rather than trusted from metadata.
 
+## Website
+
+The public leaderboard site is generated as static GitHub Pages output:
+
+```bash
+sensebench site build --results-dir results --output-dir _site --strict
+```
+
+The generated site includes an interactive leaderboard, Pareto charts, static run-detail pages,
+dataset and prompt reference pages, submission instructions, a sitemap, and static JSON under
+`_site/data/`. Pull requests that add public results must place complete run artifacts under
+`results/<run-id>/`; CI verifies all submitted results and builds a preview artifact. Merges to
+`main` deploy the rebuilt site automatically.
+
 ## Development
 
 ```bash
@@ -76,6 +90,7 @@ uv run pytest
 uv run ruff check src tests tools
 uv run mypy src
 uv run python tools/verify_prompt.py --all
+uv run sensebench site build --results-dir results --output-dir _site --strict
 ```
 
 ## License

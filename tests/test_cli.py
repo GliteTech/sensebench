@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sensebench.cli import DEFAULT_RUN_CONCURRENCY, _build_parser
-from sensebench.paths import DEFAULT_LEXEN_RELEASE_ID
+from sensebench.paths import DEFAULT_LEXEN_RELEASE_ID, SITE_OUTPUT_DIR, SUBMITTED_RESULTS_DIR
 
 RUN_ARGS: list[str] = ["run", "--prompt", "p001", "--model", "fake", "--run-id", "run-1"]
 
@@ -65,3 +65,13 @@ def test_run_cli_rejects_unknown_source_kind() -> None:
 
     with pytest.raises(SystemExit):
         parser.parse_args([*RUN_ARGS, "--source-kind", "bogus"])
+
+
+def test_site_build_cli_defaults() -> None:
+    parser = _build_parser()
+
+    args = parser.parse_args(["site", "build"])
+
+    assert args.results_dir == str(SUBMITTED_RESULTS_DIR)
+    assert args.output_dir == str(SITE_OUTPUT_DIR)
+    assert args.strict is False

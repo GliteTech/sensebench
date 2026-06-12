@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+    <meta name="description" content="{{ description }}">
+    <link rel="canonical" href="{{ canonical_url }}">
+    <meta property="og:title" content="{{ title }}">
+    <meta property="og:description" content="{{ description }}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ canonical_url }}">
+    <meta name="twitter:card" content="summary">
+    <link rel="stylesheet" href="{{ base_path }}assets/site.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="{{ base_path }}">SenseBench</a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="{{ base_path }}">Leaderboard</a>
+        <a href="{{ base_path }}runs/">Runs</a>
+        <a href="{{ base_path }}datasets/lexen-v0.1.0/">Dataset</a>
+        <a href="{{ base_path }}methodology/">Methodology</a>
+        <a href="{{ base_path }}submit/">Submit</a>
+      </nav>
+      <button class="theme-toggle" id="theme-toggle" type="button">Theme</button>
+    </header>
+    <main id="content" class="page-shell">
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="site-footer">
+      <span>SenseBench</span>
+      <a href="{{ base_path }}about/">About</a>
+      <a href="{{ base_path }}changelog/">Changelog</a>
+      <a href="{{ base_path }}citation/">Citation</a>
+    </footer>
+    <script>
+      window.SENSEBENCH_BASE_PATH = "{{ base_path }}";
+    </script>
+    <script src="{{ base_path }}assets/theme.js"></script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

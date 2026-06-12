@@ -1,0 +1,26 @@
+{% extends "base.html.j2" %}
+
+{% block content %}
+<section class="page-title">
+  <p class="eyebrow">Dataset</p>
+  <h1>{{ release.release_id }}</h1>
+  <p>Registered lexEN release used by the official SenseBench leaderboard.</p>
+</section>
+
+<section class="detail-block wide">
+  <h2>Release</h2>
+  <dl>
+    <dt>Dataset ID</dt><dd>{{ release.dataset_id }}</dd>
+    <dt>Version</dt><dd>{{ release.release_id }}</dd>
+    <dt>Items</dt><dd>{{ release.item_count }}</dd>
+    <dt>Content hash</dt><dd class="hash">{{ release.content_hash }}</dd>
+    <dt>Source</dt><dd><a href="{{ release.url }}">{{ release.url }}</a></dd>
+  </dl>
+</section>
+
+<section class="doc-section">
+  <h2>Use In Runs</h2>
+  <p>Official submissions must use this registered release and preserve the recorded content hash in run metadata.</p>
+  <p>The site rebuild verifies submitted predictions against the release before publishing leaderboard rows.</p>
+</section>
+{% endblock %}

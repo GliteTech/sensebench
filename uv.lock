@@ -1788,6 +1788,7 @@ name = "sensebench"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "jinja2" },
     { name = "litellm" },
     { name = "nltk" },
     { name = "numpy" },
@@ -1808,6 +1809,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "litellm", specifier = ">=1.0" },
     { name = "nltk", specifier = ">=3.9" },
     { name = "numpy", specifier = ">=2.0" },

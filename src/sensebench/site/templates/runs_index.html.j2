@@ -1,0 +1,40 @@
+{% extends "base.html.j2" %}
+
+{% block content %}
+<section class="page-title">
+  <p class="eyebrow">Archive</p>
+  <h1>Verified Runs</h1>
+  <p>Every accepted leaderboard submission has a permanent static page.</p>
+</section>
+
+<section class="table-panel">
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Model</th>
+          <th>Accuracy</th>
+          <th>Prompt</th>
+          <th>Dataset</th>
+          <th>Created</th>
+          <th>Run</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        <tr>
+          <td>{{ entry.rank }}</td>
+          <td>{{ entry.model }}</td>
+          <td>{{ entry.accuracy|pct }}</td>
+          <td>{{ entry.prompt_id }}</td>
+          <td>{{ entry.dataset_version }}</td>
+          <td>{{ entry.created_at }}</td>
+          <td><a href="{{ base_path }}{{ entry.run_url }}">{{ entry.run_id }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
