@@ -172,6 +172,8 @@ def _default_run_id(
 
 
 def _warn_if_unpriced(*, model: str) -> None:
+    if model.startswith("openrouter/"):
+        return
     import litellm
 
     try:

@@ -85,6 +85,7 @@ class MonosemousPolicyKind(StrEnum):
 
 
 class CostSourceKind(StrEnum):
+    PROVIDER_REPORTED = "provider_reported"
     LITELLM_ESTIMATE = "litellm_estimate"
     NO_CALLS = "no_calls"
     UNAVAILABLE = "unavailable"

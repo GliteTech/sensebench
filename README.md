@@ -108,12 +108,42 @@ sensebench run \
   --source-kind open_source \
   --max-tokens 4096 \
   --prompt p001 \
-  --github-handle your-github-handle
+  --concurrency 100 \
+  --github-handle your-github-handle \
+  --runner-name "Your Name" \
+  --runner-contact "you@example.com"
 ```
 
-The same prefix pattern works for every other LiteLLM provider (`gemini/`, `anthropic/`,
-`mistral/`, ...). If LiteLLM has no pricing entry for a model, the runner warns you up front and
-records the run cost as unavailable.
+The same prefix pattern works for every other LiteLLM provider (`gemini/`, `anthropic/`, `mistral/`,
+...). OpenRouter responses report billed cost directly, so SenseBench records that provider-reported
+cost even when LiteLLM has no static pricing entry for the model.
+
+The runner supports high concurrency, and the default is `512`. Effective throughput still depends
+on the OpenRouter account, selected model, and upstream provider routing. If a run stalls or returns
+rate-limit errors, reduce `--concurrency` and check the OpenRouter dashboard or response errors for
+the current limit. A full `lexen-v0.1.0` run evaluates 4,917 items, so use `--limit` first for a
+cheap smoke test.
+
+For example, to run Gemma 4 26B through OpenRouter:
+
+```bash
+sensebench run \
+  --model openrouter/google/gemma-4-26b-a4b-it \
+  --vendor Google \
+  --api-provider OpenRouter \
+  --source-kind open_source \
+  --model-url https://openrouter.ai/google/gemma-4-26b-a4b-it \
+  --max-tokens 1024 \
+  --prompt p001 \
+  --concurrency 100 \
+  --github-handle your-github-handle \
+  --runner-name "Your Name" \
+  --runner-contact "you@example.com"
+```
+
+Some models return otherwise valid answers inside markdown fences or with small wrappers around the
+JSON object. SenseBench normalizes common unambiguous forms during extraction and verification, but
+older run artifacts produced before that parser behavior should be rerun before submission.
 
 ## Verify a run
 
