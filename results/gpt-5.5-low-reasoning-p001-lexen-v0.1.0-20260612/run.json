@@ -4,7 +4,7 @@
   "created_at": "2026-06-12T18:01:08.372308+00:00",
   "git_commit": null,
   "runner": {
-    "github_handle": "amro-glite",
+    "github_handle": "vassiliphilippov",
     "name": null,
     "contact": null
   },
@@ -65,9 +65,9 @@
       "input_uncached_usd": 15.093545,
       "input_cached_usd": 0.0,
       "output_usd": 9.40413,
-      "input_uncached_unit_price_usd": 5e-06,
-      "input_cached_unit_price_usd": 5e-07,
-      "output_unit_price_usd": 3e-05,
+      "input_uncached_unit_price_usd": 5e-6,
+      "input_cached_unit_price_usd": 5e-7,
+      "output_unit_price_usd": 0.00003,
       "source": "litellm_estimate"
     },
     "elapsed_seconds": 86.80333799961954

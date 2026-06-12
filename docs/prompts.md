@@ -519,7 +519,8 @@ examples, frequency-ordered candidates, and JSON `sense_index` output.
 
 `p002`
 
-Minimal context, definitions only, frequency order, JSON output.
+Minimal single-sentence context, definitions and at most one usage example per sense, frequency
+order, plain integer output. Registered.
 
 `p003`
 

@@ -41,7 +41,7 @@ DEFAULT_BOOTSTRAP_RESAMPLES: int = 2000
 DEFAULT_BOOTSTRAP_SEED: int = 12345
 CONFIDENCE_LOW_PERCENTILE: float = 2.5
 CONFIDENCE_HIGH_PERCENTILE: float = 97.5
-LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v3"
+LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v4"
 RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
 UNKNOWN_MODEL_HOSTING_KIND: str = "unknown"
 MISSING_DATASET_VERSION_GROUP_VALUE: str = "dataset_version:none"
@@ -151,7 +151,7 @@ class LeaderboardBuildError(RuntimeError):
         super().__init__(f"leaderboard build failed:\n{joined}")
 
 
-def _bootstrap_accuracy_ci(*, values: list[bool]) -> AccuracyInterval:
+def bootstrap_accuracy_ci(*, values: list[bool]) -> AccuracyInterval:
     if len(values) == 0:
         return AccuracyInterval(low=None, high=None)
     numeric: NDArray[np.float64] = np.array(
@@ -261,7 +261,6 @@ def _best_group_key(*, loaded: LoadedRun) -> str:
             metadata.dataset.dataset_version
             if metadata.dataset.dataset_version is not None
             else MISSING_DATASET_VERSION_GROUP_VALUE,
-            metadata.prompt.id,
         ]
     )
 
@@ -309,7 +308,7 @@ def _entry_for_run(
         dataset_version=metadata.dataset.dataset_version,
         dataset_content_hash=metadata.dataset.content_hash,
         accuracy=accuracy,
-        accuracy_ci=_bootstrap_accuracy_ci(values=correctness),
+        accuracy_ci=bootstrap_accuracy_ci(values=correctness),
         correct_count=correct_count,
         item_count=item_count,
         call_count=len(loaded.calls),
@@ -384,11 +383,17 @@ def _format_verification_issues(*, issues: list[RunValidationIssue]) -> str:
     return f"failed verification ({', '.join(failed_rules)})"
 
 
-def _eligibility_issues(*, loaded: LoadedRun) -> list[str]:
+def _eligibility_issues(*, loaded: LoadedRun, official: bool) -> list[str]:
     issues: list[str] = []
     run_id = loaded.metadata.run_id
     if RUN_ID_PATTERN.fullmatch(run_id) is None:
         issues.append("run_id must contain only lowercase letters, numbers, '.', '_', and '-'")
+    github_handle = loaded.metadata.runner.github_handle
+    if official and (github_handle is None or len(github_handle.strip()) == 0):
+        issues.append(
+            "official submissions require runner.github_handle in run.json "
+            "(set it with: sensebench set-runner <run-dir> --github-handle <handle>)"
+        )
     return issues
 
 
@@ -410,7 +415,7 @@ def _verified_entry_for_run(
 
     local_issues: list[LeaderboardCollectionIssue] = [
         LeaderboardCollectionIssue(run_dir=run_dir, message=message)
-        for message in _eligibility_issues(loaded=loaded)
+        for message in _eligibility_issues(loaded=loaded, official=official)
     ]
     prompt = _registered_prompt(prompt_id=loaded.metadata.prompt.id)
     if prompt is None:

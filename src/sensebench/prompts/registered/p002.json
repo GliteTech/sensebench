@@ -1,0 +1,33 @@
+{
+  "schema_version": "sensebench-prompt-v1",
+  "id": "p002",
+  "name": "Minimal Single-Sentence Prompt",
+  "description": "Minimal English WSD prompt: only the target sentence with <t>...</t> target marking, candidate senses with index, definition, and at most one usage example, and a plain integer answer. Candidate senses are ordered by WordNet frequency.",
+  "template_type": "chat_messages",
+  "template": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Which numbered sense of \"{{target_lemma}}\" (marked with <t></t>) is used in the sentence below? Return only the number of the correct sense.\n\nSentence: {{context}}\n\nSenses:\n{{candidate_senses}}"
+      }
+    ]
+  },
+  "params": {
+    "previous_sentences": 0,
+    "next_sentences": 0,
+    "target_marker": "xml_t",
+    "sense_order": "frequency",
+    "candidate_format": "compact_labeled_inline",
+    "include_wordnet_id": false,
+    "wordnet_id_kind": "none",
+    "include_definition": true,
+    "include_examples": true,
+    "examples_max_per_sense": 1,
+    "include_pos": false,
+    "include_synonyms": false,
+    "synonyms_max_per_sense": 0
+  },
+  "output": {
+    "mode": "plain_sense_index"
+  }
+}

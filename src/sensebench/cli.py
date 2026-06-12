@@ -30,6 +30,7 @@ from sensebench.paths import (
     LOCAL_RUNS_DIR,
     PROMPT_JSON_SUFFIX,
     PROMPT_REGISTRY_DIR,
+    RUN_METADATA_FILENAME,
     SITE_OUTPUT_DIR,
     SUBMITTED_RESULTS_DIR,
 )
@@ -45,6 +46,7 @@ from sensebench.runs.models import (
     ModelHostingKind,
     ModelSourceKind,
     PredictionStatus,
+    RunMetadata,
     RunnerIdentity,
     SamplingParameters,
     SelfHostedLlmReference,
@@ -60,6 +62,11 @@ DEFAULT_MAX_TOKENS: int = 512
 RUN_ID_DATE_FORMAT: str = "%Y%m%d"
 RUN_ID_COLLISION_TIME_FORMAT: str = "%H%M%S"
 RUN_ID_SLUG_KEEP_CHARACTERS: str = "._-"
+SENSEBENCH_REPO_URL: str = "https://github.com/GliteTech/sensebench"
+MISSING_HANDLE_WARNING: str = (
+    "warning: --github-handle not set; this run will not be leaderboard-eligible "
+    "(fix later with: sensebench set-runner <run-dir> --github-handle <handle>)"
+)
 
 
 def _load_local_env() -> None:
@@ -176,6 +183,88 @@ def _warn_if_unpriced(*, model: str) -> None:
         )
 
 
+def _print_run_preamble(*, config: RunConfig) -> None:
+    model = config.model
+    effort = model.reasoning_effort if isinstance(model, CloudLlmReference) else None
+    model_text = (
+        model.requested_model
+        if effort is None
+        else f"{model.requested_model} (reasoning effort: {effort})"
+    )
+    dataset = config.dataset
+    dataset_label = (
+        dataset.dataset_version if dataset.dataset_version is not None else dataset.dataset_id
+    )
+    print(f"run:     {config.run_id}", file=sys.stderr)
+    print(f"model:   {model_text}", file=sys.stderr)
+    print(f"prompt:  {config.prompt.id} — {config.prompt.name}", file=sys.stderr)
+    print(f"dataset: {dataset_label} ({len(dataset.items):,} items)", file=sys.stderr)
+    print(
+        "policy:  "
+        f"votes_per_item={config.votes_per_item} "
+        f"concurrency={config.concurrency} "
+        f"max_tokens={config.sampling.max_tokens}",
+        file=sys.stderr,
+    )
+    handle = config.runner.github_handle
+    if handle is not None and len(handle.strip()) > 0:
+        print(f"runner:  github:{handle}", file=sys.stderr)
+    else:
+        print(MISSING_HANDLE_WARNING, file=sys.stderr)
+
+
+def _submission_blockers(*, metadata: RunMetadata) -> list[str]:
+    blockers: list[str] = []
+    release = None
+    version = metadata.dataset.dataset_version
+    if version is None:
+        blockers.append("the dataset is not a registered release")
+    else:
+        try:
+            release = get_dataset_release(release_id=version)
+        except Exception:
+            blockers.append(f"dataset {version} is not a registered release")
+    if release is not None and metadata.dataset.item_count != release.item_count:
+        blockers.append(
+            f"partial run: {metadata.dataset.item_count} of {release.item_count} items evaluated"
+        )
+    prompt_path = PROMPT_REGISTRY_DIR / f"{metadata.prompt.id}{PROMPT_JSON_SUFFIX}"
+    if not prompt_path.exists():
+        blockers.append(f"prompt {metadata.prompt.id} is not a registered prompt")
+    handle = metadata.runner.github_handle
+    if handle is None or len(handle.strip()) == 0:
+        blockers.append(
+            "runner identity is missing "
+            "(run: sensebench set-runner <run-dir> --github-handle <handle>)"
+        )
+    return blockers
+
+
+def _print_submission_guidance(*, completed: CompletedRun) -> None:
+    metadata = completed.metadata
+    blockers = _submission_blockers(metadata=metadata)
+    print()
+    if len(blockers) > 0:
+        print("This run is not eligible for leaderboard submission:")
+        for blocker in blockers:
+            print(f"  - {blocker}")
+        return
+    print("Submit this run to the public leaderboard:")
+    print(
+        f"  1. Verify it: sensebench verify {completed.run_dir} "
+        f"--dataset {metadata.dataset.dataset_version} --prompt {metadata.prompt.id}"
+    )
+    print(
+        f"  2. Fork {SENSEBENCH_REPO_URL} and copy the run directory "
+        f"to results/{metadata.run_id}/"
+    )
+    print(f"  3. Open a pull request titled submit-{metadata.run_id}")
+    print(
+        "CI re-verifies every submitted run from the raw artifacts; a maintainer reviews "
+        "each submission, and the leaderboard updates when the pull request is merged."
+    )
+
+
 def _print_run_summary(*, completed: CompletedRun) -> None:
     totals = completed.metadata.totals
     status_counts: Counter[PredictionStatus] = Counter(
@@ -207,7 +296,7 @@ def _print_run_summary(*, completed: CompletedRun) -> None:
     )
     print(f"votes: invalid_output={invalid_output_votes} transport_error={transport_error_votes}")
     print(f"calls: {totals.call_count}  cost: {cost_text}  elapsed: {elapsed_text}")
-    print(completed.run_dir)
+    print(f"artifacts: {completed.run_dir}")
 
 
 def _cmd_render(*, args: argparse.Namespace) -> int:
@@ -332,7 +421,6 @@ async def _run_async(*, args: argparse.Namespace) -> int:
             dataset_label=dataset_label,
             output_root=output_root,
         )
-        print(f"run_id: {run_id}", file=sys.stderr)
     config = RunConfig(
         run_id=run_id,
         output_root=output_root,
@@ -350,6 +438,7 @@ async def _run_async(*, args: argparse.Namespace) -> int:
         concurrency=int(args.concurrency),
         show_progress=not bool(args.no_progress),
     )
+    _print_run_preamble(config=config)
     client = LiteLlmClient()
     if not bool(args.skip_preflight):
         await preflight_model(config=config, client=client)
@@ -357,11 +446,26 @@ async def _run_async(*, args: argparse.Namespace) -> int:
     _warn_if_unpriced(model=model.requested_model)
     completed = await run_benchmark(config=config, client=client)
     _print_run_summary(completed=completed)
+    _print_submission_guidance(completed=completed)
     return 0
 
 
 def _cmd_run(*, args: argparse.Namespace) -> int:
     return asyncio.run(_run_async(args=args))
+
+
+def _cmd_set_runner(*, args: argparse.Namespace) -> int:
+    metadata_path = Path(args.run_dir) / RUN_METADATA_FILENAME
+    metadata = RunMetadata.model_validate_json(metadata_path.read_text(encoding="utf-8"))
+    updated_runner = RunnerIdentity(
+        github_handle=str(args.github_handle),
+        name=args.runner_name if args.runner_name is not None else metadata.runner.name,
+        contact=args.runner_contact if args.runner_contact is not None else metadata.runner.contact,
+    )
+    updated = metadata.model_copy(update={"runner": updated_runner})
+    metadata_path.write_text(updated.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    print(f"{metadata_path}: runner github_handle={updated_runner.github_handle}")
+    return 0
 
 
 def _cmd_verify(*, args: argparse.Namespace) -> int:
@@ -480,6 +584,16 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_dataset_args(parser=verify_parser, default_release=None)
     verify_parser.add_argument("--prompt")
     verify_parser.set_defaults(func=_cmd_verify)
+
+    set_runner_parser = subparsers.add_parser(
+        "set-runner",
+        help="Stamp runner identity into an existing run.json (required for submissions).",
+    )
+    set_runner_parser.add_argument("run_dir")
+    set_runner_parser.add_argument("--github-handle", required=True)
+    set_runner_parser.add_argument("--runner-name")
+    set_runner_parser.add_argument("--runner-contact")
+    set_runner_parser.set_defaults(func=_cmd_set_runner)
 
     leaderboard_parser = subparsers.add_parser("leaderboard", help="Emit leaderboard.json.")
     leaderboard_parser.add_argument("--results-dir", default=str(SUBMITTED_RESULTS_DIR))

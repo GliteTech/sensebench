@@ -5,6 +5,13 @@
   <div>
     <p class="eyebrow">English WSD benchmark</p>
     <h1>SenseBench Leaderboard</h1>
+    <p class="intro">
+      SenseBench measures how well language models disambiguate English words: each model sees a
+      word in its sentence context together with its candidate WordNet senses and must answer with
+      the index of the correct sense. Every row is recomputed from verified, fully auditable run
+      artifacts on the <a href="{{ base_path }}datasets/lexen-v0.1.0/">lexEN</a> dataset, and
+      anyone can <a href="{{ base_path }}submit/">submit a run</a> by pull request.
+    </p>
   </div>
   <dl class="summary-grid">
     <div>
@@ -50,10 +57,22 @@
     </select>
   </label>
   <label>
+    Source
+    <select id="source-filter">
+      <option value="">All sources</option>
+      <option value="open_source">Open weights</option>
+      <option value="proprietary">Proprietary</option>
+    </select>
+  </label>
+  <label>
+    Max cost / M items ($)
+    <input id="max-cost-filter" type="number" min="0" step="any" inputmode="decimal" placeholder="No limit">
+  </label>
+  <label>
     View
     <select id="view-filter">
-      <option value="best">Best per model</option>
       <option value="all">All runs</option>
+      <option value="best">Best per model</option>
     </select>
   </label>
   <label>
@@ -74,6 +93,48 @@
   <p id="chart-note" class="note"></p>
 </section>
 
+{% if site_data.baselines %}
+<section class="baselines-panel" aria-label="Reference baselines">
+  <h2>Reference Baselines</h2>
+  <div class="table-scroll">
+    <table class="baselines-table">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Accuracy</th>
+          <th>Dataset</th>
+          <th>Provenance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for baseline in site_data.baselines %}
+        <tr>
+          <td>
+            <div class="cell-primary">
+              {% if baseline.source_url %}<a href="{{ baseline.source_url }}" rel="noopener">{{ baseline.label }}</a>{% else %}{{ baseline.label }}{% endif %}
+            </div>
+            <div class="cell-secondary">{{ baseline.kind|baseline_kind_label }}</div>
+          </td>
+          <td>
+            <div class="cell-primary">{{ baseline.accuracy|pct }}</div>
+            {% if baseline.accuracy_ci.low is not none and baseline.accuracy_ci.high is not none %}
+            <div class="cell-secondary" title="95% CI: {{ baseline.accuracy_ci.low|pct }} – {{ baseline.accuracy_ci.high|pct }}">±{{ ((baseline.accuracy_ci.high - baseline.accuracy_ci.low) / 2)|pct }}</div>
+            {% endif %}
+          </td>
+          <td>{{ baseline.dataset_version }}</td>
+          <td class="baseline-note">{{ baseline.source_note }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="note">
+    Classic WSD systems scored from per-item predictions on exactly the same dataset items as the
+    model runs, with the same correctness rule. They appear as dashed lines on the chart.
+  </p>
+</section>
+{% endif %}
+
 <section class="table-panel" aria-label="Leaderboard table">
   <div class="table-scroll">
     <table id="leaderboard-table">
@@ -88,20 +149,30 @@
           <th>Prompt</th>
           <th>Dataset</th>
           <th>Run</th>
+          <th>Frontier</th>
         </tr>
       </thead>
       <tbody>
         {% for entry in site_data.entries %}
         <tr>
-          <td>{{ entry.rank }}</td>
+          <td><div class="cell-primary">{{ entry.rank }}</div></td>
           <td></td>
-          <td>{{ entry.model }}</td>
-          <td>{{ entry.accuracy|pct }}</td>
+          <td>
+            <div class="cell-primary">{{ entry.model }}{% if entry.reasoning_effort %} ({{ entry.reasoning_effort }}){% endif %}</div>
+            <div class="cell-secondary">{% if entry.llm_vendor %}{{ entry.llm_vendor }} · {% endif %}{{ entry.source_kind|source_label }}</div>
+          </td>
+          <td>
+            <div class="cell-primary">{{ entry.accuracy|pct }}</div>
+            {% if entry.accuracy_ci.low is not none and entry.accuracy_ci.high is not none %}
+            <div class="cell-secondary" title="95% CI: {{ entry.accuracy_ci.low|pct }} – {{ entry.accuracy_ci.high|pct }}">±{{ ((entry.accuracy_ci.high - entry.accuracy_ci.low) / 2)|pct }}</div>
+            {% endif %}
+          </td>
           <td>{{ entry.cost_per_million_items|money }}</td>
           <td>{{ entry.tokens_per_item|num }}</td>
           <td>{{ entry.prompt_id }}</td>
           <td>{{ entry.dataset_version }}</td>
           <td><a href="{{ base_path }}{{ entry.run_url }}">{{ entry.run_id }}</a></td>
+          <td>{% if entry.run_id in frontier_run_ids %}<span class="badge badge-frontier" title="On the accuracy-cost Pareto frontier">★</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -113,13 +184,17 @@
   <h2>Compare Selected Runs</h2>
   <div id="compare-charts" class="compare-charts"></div>
   <div id="compare-empty" class="empty-state">Select up to six runs from the table.</div>
+  <div id="compare-pairwise" class="table-scroll"></div>
   <div id="compare-table" class="table-scroll"></div>
 </section>
 
 <section class="notes">
   <h2>Method Notes</h2>
   <p>Public rows are rebuilt from verified run artifacts in the repository. Accuracy is recomputed from predictions, and official runs are checked against the registered dataset hash and prompt ID.</p>
-  <p>Pareto frontiers use the visible rows: higher accuracy is better, and lower cost or token use is better.</p>
+  <p>The ± value under each accuracy is half the width of a fixed-seed bootstrap 95% confidence interval. The small range under each rank lists the positions a run could plausibly occupy among the visible rows given overlapping intervals.</p>
+  <p>Pareto frontiers use the visible rows: higher accuracy is better, and lower cost or token use is better. Starred rows are on the frontier for the selected chart metric.</p>
+  <p>Reference baselines are classic WSD systems scored from per-item predictions on the same dataset items; dashed chart lines show them for context.</p>
+  <p>Comparing selected runs on the same dataset uses McNemar's test on paired per-item correctness, which detects differences that overlapping confidence intervals can miss.</p>
 </section>
 {% endblock %}
 

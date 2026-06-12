@@ -11,12 +11,16 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ canonical_url }}">
     <meta name="twitter:card" content="summary">
+    <link rel="icon" type="image/svg+xml" href="{{ base_path }}assets/favicon.svg?v={{ asset_version }}">
     <link rel="stylesheet" href="{{ base_path }}assets/site.css?v={{ asset_version }}">
   </head>
   <body>
     <a class="skip-link" href="#content">Skip to content</a>
     <header class="site-header">
-      <a class="brand" href="{{ base_path }}">SenseBench</a>
+      <a class="brand" href="{{ base_path }}">
+        {% include "glite_logo.svg.j2" %}
+        <span>SenseBench</span>
+      </a>
       <nav class="site-nav" aria-label="Main navigation">
         <a href="{{ base_path }}">Leaderboard</a>
         <a href="{{ base_path }}runs/">Runs</a>
@@ -34,6 +38,7 @@
       <a href="{{ base_path }}about/">About</a>
       <a href="{{ base_path }}changelog/">Changelog</a>
       <a href="{{ base_path }}citation/">Citation</a>
+      <a href="https://glite.ai/" rel="noopener">Built by Glite</a>
     </footer>
     <script>
       window.SENSEBENCH_BASE_PATH = "{{ base_path }}";

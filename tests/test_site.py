@@ -13,6 +13,7 @@ from sensebench.datasets.loaders import load_jsonl_dataset
 from sensebench.datasets.models import DatasetBundle, DatasetID
 from sensebench.datasets.releases import DatasetRelease
 from sensebench.leaderboard.aggregate import LeaderboardBuildError
+from sensebench.leaderboard.baselines import MFS_BASELINE_LABEL, BaselineKind
 from sensebench.paths import (
     CALLS_FILENAME,
     DEFAULT_LEXEN_RELEASE_ID,
@@ -93,8 +94,8 @@ OUTPUT_PRICE_USD: float = 0.001
 LATENCY_SECONDS: float = 0.5
 EXPECTED_COST_PER_MILLION_ITEMS: float = 20_000.0
 EXPECTED_TOKENS_PER_ITEM: float = 110.0
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v2"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v3"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v3"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v4"
 TARGET_ART_TEXT: str = "art"
 TARGET_LEMMA_TEXT: str = "Target lemma: art"
 SHOW_RAW_PROMPT_TEXT: str = "Show raw prompt"
@@ -102,7 +103,14 @@ ACTUAL_RUN_COST_TEXT: str = "Actual run cost"
 DOWNLOAD_RAW_FILES_TEXT: str = "Download Raw Run Files"
 PRICE_PER_MILLION_TEXT: str = "Price / 1M tokens"
 PRICE_PER_TOKEN_TEXT: str = "Price / token"
-EXPECTED_PRICE_TEXT: str = "$100.00"
+EXPECTED_PRICE_TEXT: str = "$100"
+LEGACY_PRICE_TEXT: str = "$100.00"
+EXPECTED_CORRECTNESS_BITS: str = "0"
+REFERENCE_BASELINES_TEXT: str = "Reference Baselines"
+MAX_COST_FILTER_ID: str = "max-cost-filter"
+SOURCE_FILTER_ID: str = "source-filter"
+BUILT_BY_GLITE_TEXT: str = "Built by Glite"
+EXPECTED_BASELINE_COUNT: int = 4
 ECHARTS_VENDOR_PATH: Path = Path("vendor") / "echarts.min.js"
 BAD_CONTENT_HASH: str = "sha256:bad"
 GET_DATASET_RELEASE_ATTR: str = "get_dataset_release"
@@ -363,6 +371,18 @@ def test_build_site_emits_static_pages_and_data(
     assert entry.cost_source == CostSourceKind.LITELLM_ESTIMATE.value
     assert "latency_per_item" not in entry.model_dump()
 
+    assert len(site_data.baselines) == EXPECTED_BASELINE_COUNT
+    mfs = next(
+        baseline
+        for baseline in site_data.baselines
+        if baseline.label == MFS_BASELINE_LABEL
+    )
+    assert mfs.kind == BaselineKind.COMPUTED_WORDNET_MFS
+    assert mfs.accuracy == 0.0
+    assert all(
+        baseline.dataset_version == TEST_RELEASE_ID for baseline in site_data.baselines
+    )
+
     run_detail = site_build_module.RunDetail.model_validate_json(
         (output_dir / SITE_DATA_DIRNAME / SITE_RUNS_DIRNAME / f"{run_id}.json").read_text(
             encoding="utf-8"
@@ -371,6 +391,7 @@ def test_build_site_emits_static_pages_and_data(
     assert run_detail.schema_version == RUN_DETAIL_SCHEMA_VERSION
     assert run_detail.metadata.run_id == run_id
     assert run_detail.metadata.totals.cost.total_usd == TOTAL_COST_USD
+    assert run_detail.correctness == EXPECTED_CORRECTNESS_BITS
     assert {artifact.filename for artifact in run_detail.artifacts} == {
         RUN_METADATA_FILENAME,
         PREDICTIONS_FILENAME,
@@ -401,7 +422,25 @@ def test_build_site_emits_static_pages_and_data(
     assert PRICE_PER_MILLION_TEXT in run_html
     assert PRICE_PER_TOKEN_TEXT not in run_html
     assert EXPECTED_PRICE_TEXT in run_html
+    assert LEGACY_PRICE_TEXT not in run_html
     assert f"artifacts/runs/{TEST_RUN_ID}/{RUN_METADATA_FILENAME}" in run_html
+
+    index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
+    assert REFERENCE_BASELINES_TEXT in index_html
+    assert MAX_COST_FILTER_ID in index_html
+    assert SOURCE_FILTER_ID in index_html
+    assert BUILT_BY_GLITE_TEXT in index_html
+
+
+def test_format_money_rounds_by_magnitude() -> None:
+    assert site_build_module._format_money(None) == "n/a"
+    assert site_build_module._format_money(20_000.0) == "$20,000"
+    assert site_build_module._format_money(791.0716) == "$791"
+    assert site_build_module._format_money(100.0) == "$100"
+    assert site_build_module._format_money(7.929) == "$7.93"
+    assert site_build_module._format_money(0.5) == "$0.500"
+    assert site_build_module._format_money(0.0042) == "$0.00420"
+    assert site_build_module._format_money(0.0) == "$0.00"
 
 
 def test_build_site_strict_rejects_wrong_dataset_hash(

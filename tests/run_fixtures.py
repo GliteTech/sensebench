@@ -97,13 +97,14 @@ def make_metadata(
     content_hash: str | None = None,
     dataset_version: str = DATASET_VERSION,
     run_id: RunID = DEFAULT_RUN_ID,
+    github_handle: str | None = RUNNER_GITHUB_HANDLE,
 ) -> RunMetadata:
     return RunMetadata(
         schema_version=RUN_SCHEMA_VERSION,
         run_id=run_id,
         created_at=RUN_CREATED_AT,
         git_commit=GIT_COMMIT,
-        runner=RunnerIdentity(github_handle=RUNNER_GITHUB_HANDLE),
+        runner=RunnerIdentity(github_handle=github_handle),
         dataset=DatasetReference(
             dataset_id=DATASET_ID,
             dataset_version=dataset_version,
