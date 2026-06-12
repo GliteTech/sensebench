@@ -42,6 +42,8 @@ def _combined_cost_source(*, costs: list[CostBreakdown]) -> CostSourceKind:
     sources: set[CostSourceKind] = {cost.source for cost in costs}
     if sources == {CostSourceKind.NO_CALLS}:
         return CostSourceKind.NO_CALLS
+    if CostSourceKind.PROVIDER_REPORTED in sources:
+        return CostSourceKind.PROVIDER_REPORTED
     if CostSourceKind.LITELLM_ESTIMATE in sources:
         return CostSourceKind.LITELLM_ESTIMATE
     return CostSourceKind.UNAVAILABLE
