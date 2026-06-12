@@ -20,7 +20,15 @@ from jinja2 import Environment, PackageLoader
 from pydantic import BaseModel, ConfigDict
 
 from sensebench.datasets.context import build_context_window, build_dataset_index
-from sensebench.datasets.models import DatasetBundle, DatasetIndex, ItemID, SenseKey, WsdItem
+from sensebench.datasets.detokenize import detokenize_pieces
+from sensebench.datasets.models import (
+    DatasetBundle,
+    DatasetIndex,
+    ItemID,
+    SenseKey,
+    Sentence,
+    WsdItem,
+)
 from sensebench.datasets.releases import (
     DATASET_RELEASES,
     get_dataset_release,
@@ -618,23 +626,49 @@ def _context_sentences(
     for sentence_index in range(first_sentence_index, last_sentence_exclusive):
         sentence = document.sentences[sentence_index]
         is_target_sentence = sentence_index == target_sentence_index
-        pieces: list[str] = []
-        for token_index, token in enumerate(sentence.tokens):
-            token_text = escape(token.text)
-            if is_target_sentence and token_index == item.target_token_index:
-                pieces.append(f"<mark>{token_text}</mark>")
-                has_marked_target = True
-            else:
-                pieces.append(token_text)
+        target_token_index = (
+            item.target_token_index if is_target_sentence else None
+        )
+        sentence_html = _context_sentence_html(
+            sentence=sentence,
+            target_token_index=target_token_index,
+            detokenize=prompt.params.detokenize,
+        )
+        if target_token_index is not None:
+            has_marked_target = True
         context.append(
             ExampleContextSentence(
-                html=" ".join(pieces),
+                html=sentence_html,
                 is_target_sentence=is_target_sentence,
             )
         )
     if not has_marked_target:
         return None
     return context
+
+
+def _context_sentence_html(
+    *,
+    sentence: Sentence,
+    target_token_index: int | None,
+    detokenize: bool,
+) -> str:
+    surfaces = [token.text for token in sentence.tokens]
+    pieces = detokenize_pieces(surfaces=surfaces) if detokenize else None
+    html = ""
+    for token_index, token in enumerate(sentence.tokens):
+        rendered = pieces[token_index].text if pieces is not None else token.text
+        if token_index == target_token_index:
+            token_html = f"<mark>{escape(token.text)}</mark>"
+        else:
+            token_html = escape(rendered)
+        leading_space = (
+            pieces[token_index].leading_space if pieces is not None else token_index > 0
+        )
+        if leading_space and len(html) > 0:
+            html += " "
+        html += token_html
+    return html
 
 
 def _calls_by_id(*, calls: list[CallRecord]) -> dict[CallID, CallRecord]:

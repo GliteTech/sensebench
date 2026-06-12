@@ -108,6 +108,7 @@ class PromptParams(StrictPromptModel):
     include_pos: bool
     include_synonyms: bool
     synonyms_max_per_sense: int = Field(ge=0)
+    detokenize: bool = False
 
     @model_validator(mode="after")
     def validate_consistency(self) -> PromptParams:
