@@ -4,7 +4,7 @@ from sensebench.datasets.context import build_dataset_index
 from sensebench.datasets.models import DatasetBundle, Document, Sentence, Token, WsdItem
 from sensebench.paths import PROMPT_REGISTRY_DIR
 from sensebench.prompts.registry import load_prompt_definition
-from sensebench.prompts.render import render_task
+from sensebench.prompts.render import _render_template, render_task
 from sensebench.wordnet import SenseCandidate
 
 
@@ -70,3 +70,26 @@ def test_render_task_marks_target_and_formats_candidates() -> None:
     assert "<t>bank</t>" in user_message
     assert "sense_key=bank%1:17:00::" in user_message
     assert rendered.render_hash.startswith("sha256:")
+    assert all("{{" not in message.content for message in rendered.messages)
+
+
+def test_render_template_substitutes_every_validator_accepted_spelling() -> None:
+    variables = {"context": "HELLO"}
+
+    assert _render_template(content="{{context}}", variables=variables) == "HELLO"
+    assert _render_template(content="{{ context }}", variables=variables) == "HELLO"
+    assert _render_template(content="{{context }}", variables=variables) == "HELLO"
+    assert _render_template(content="{{ context}}", variables=variables) == "HELLO"
+    assert _render_template(content="{{  context  }}", variables=variables) == "HELLO"
+
+
+def test_render_template_leaves_dollar_text_and_unknown_variables_alone() -> None:
+    variables = {"context": "HELLO"}
+
+    rendered = _render_template(
+        content="It costs $5 or $context or ${context}, said {{context}}.",
+        variables=variables,
+    )
+
+    assert rendered == "It costs $5 or $context or ${context}, said HELLO."
+    assert _render_template(content="{{unknown}}", variables=variables) == "{{unknown}}"

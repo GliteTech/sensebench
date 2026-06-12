@@ -5,21 +5,30 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import re
 from dataclasses import dataclass
-from string import Template
+from typing import assert_never
 
 from sensebench.datasets.context import ContextWindow, build_context_window
-from sensebench.datasets.models import DatasetIndex, WsdItem
+from sensebench.datasets.models import DatasetIndex, ItemID, SenseKey, WsdItem
 from sensebench.prompts.models import (
+    TEMPLATE_VARIABLE_CANDIDATE_SENSES,
+    TEMPLATE_VARIABLE_CONTEXT,
+    TEMPLATE_VARIABLE_ITEM_ID,
+    TEMPLATE_VARIABLE_PATTERN,
+    TEMPLATE_VARIABLE_TARGET_LEMMA,
+    TEMPLATE_VARIABLE_TARGET_POS,
+    TEMPLATE_VARIABLE_TARGET_TEXT,
     CandidateFormat,
     MessageRole,
     OutputMode,
     PromptDefinition,
+    PromptID,
     SenseOrder,
     TargetMarker,
     WordNetIdKind,
 )
-from sensebench.wordnet import SenseCandidate
+from sensebench.wordnet import SenseCandidate, SynsetID
 
 RANDOM_SEED_BYTES: int = 8
 
@@ -33,14 +42,14 @@ class ChatMessage:
 @dataclass(frozen=True, slots=True)
 class CandidateChoice:
     index: int
-    sense_key: str
-    synset_id: str
+    sense_key: SenseKey
+    synset_id: SynsetID
 
 
 @dataclass(frozen=True, slots=True)
 class RenderedTask:
-    item_id: str
-    prompt_id: str
+    item_id: ItemID
+    prompt_id: PromptID
     messages: list[ChatMessage]
     candidates: list[CandidateChoice]
     output_mode: OutputMode
@@ -56,21 +65,23 @@ class OrderedCandidates:
 
 
 def _marker_text(*, marker: TargetMarker, target_text: str) -> str:
-    if marker == TargetMarker.NONE:
-        return target_text
-    if marker == TargetMarker.XML_T:
-        return f"<t>{target_text}</t>"
-    if marker == TargetMarker.XML_WSD:
-        return f"<WSD>{target_text}</WSD>"
-    if marker == TargetMarker.XML_TARGET:
-        return f"<target>{target_text}</target>"
-    if marker == TargetMarker.SQUARE_BRACKETS:
-        return f"[{target_text}]"
-    if marker == TargetMarker.DOUBLE_SQUARE_BRACKETS:
-        return f"[[{target_text}]]"
-    if marker == TargetMarker.DOUBLE_ASTERISK:
-        return f"**{target_text}**"
-    raise ValueError(f"Unsupported target marker: {marker}")
+    match marker:
+        case TargetMarker.NONE:
+            return target_text
+        case TargetMarker.XML_T:
+            return f"<t>{target_text}</t>"
+        case TargetMarker.XML_WSD:
+            return f"<WSD>{target_text}</WSD>"
+        case TargetMarker.XML_TARGET:
+            return f"<target>{target_text}</target>"
+        case TargetMarker.SQUARE_BRACKETS:
+            return f"[{target_text}]"
+        case TargetMarker.DOUBLE_SQUARE_BRACKETS:
+            return f"[[{target_text}]]"
+        case TargetMarker.DOUBLE_ASTERISK:
+            return f"**{target_text}**"
+        case _:
+            assert_never(marker)
 
 
 def _marked_context(*, context: ContextWindow, marker: TargetMarker) -> str:
@@ -82,7 +93,7 @@ def _marked_context(*, context: ContextWindow, marker: TargetMarker) -> str:
     )
 
 
-def _shuffle_seed(*, prompt_id: str, item_id: str) -> int:
+def _shuffle_seed(*, prompt_id: PromptID, item_id: ItemID) -> int:
     digest = hashlib.sha256(f"{prompt_id}|{item_id}|sense_order".encode()).digest()
     return int.from_bytes(digest[:RANDOM_SEED_BYTES], byteorder="big", signed=False)
 
@@ -94,29 +105,33 @@ def _ordered_candidates(
     candidates: list[SenseCandidate],
 ) -> OrderedCandidates:
     order = prompt.params.sense_order
-    if order in {SenseOrder.FREQUENCY, SenseOrder.DATASET}:
-        return OrderedCandidates(candidates=list(candidates), shuffle_seed=None)
-    if order == SenseOrder.LEXICOGRAPHIC:
-        return OrderedCandidates(
-            candidates=sorted(candidates, key=lambda candidate: candidate.sense_key),
-            shuffle_seed=None,
-        )
-    if order == SenseOrder.RANDOM_FIXED:
-        seed = _shuffle_seed(prompt_id=prompt.id, item_id=item.item_id)
-        items: list[SenseCandidate] = list(candidates)
-        random.Random(seed).shuffle(items)
-        return OrderedCandidates(candidates=items, shuffle_seed=seed)
-    raise ValueError(f"Unsupported sense order: {order}")
+    match order:
+        case SenseOrder.FREQUENCY | SenseOrder.DATASET:
+            return OrderedCandidates(candidates=list(candidates), shuffle_seed=None)
+        case SenseOrder.LEXICOGRAPHIC:
+            return OrderedCandidates(
+                candidates=sorted(candidates, key=lambda candidate: candidate.sense_key),
+                shuffle_seed=None,
+            )
+        case SenseOrder.RANDOM_FIXED:
+            seed = _shuffle_seed(prompt_id=prompt.id, item_id=item.item_id)
+            items: list[SenseCandidate] = list(candidates)
+            random.Random(seed).shuffle(items)
+            return OrderedCandidates(candidates=items, shuffle_seed=seed)
+        case _:
+            assert_never(order)
 
 
 def _candidate_id_text(*, candidate: SenseCandidate, kind: WordNetIdKind) -> str | None:
-    if kind == WordNetIdKind.NONE:
-        return None
-    if kind == WordNetIdKind.SENSE_KEY:
-        return f"sense_key={candidate.sense_key}"
-    if kind == WordNetIdKind.SYNSET_ID:
-        return f"synset_id={candidate.synset_id}"
-    raise ValueError(f"Unsupported WordNet id kind: {kind}")
+    match kind:
+        case WordNetIdKind.NONE:
+            return None
+        case WordNetIdKind.SENSE_KEY:
+            return f"sense_key={candidate.sense_key}"
+        case WordNetIdKind.SYNSET_ID:
+            return f"synset_id={candidate.synset_id}"
+        case _:
+            assert_never(kind)
 
 
 def _candidate_parts(
@@ -149,13 +164,16 @@ def _candidate_line(
     candidate: SenseCandidate,
 ) -> str:
     parts = _candidate_parts(prompt=prompt, candidate=candidate)
-    if prompt.params.candidate_format == CandidateFormat.COMPACT_LABELED_INLINE:
-        return f"{index}. " + " | ".join(parts)
-    if prompt.params.candidate_format == CandidateFormat.SENSEBENCH_MULTILINE:
-        lines: list[str] = [f"{index}."]
-        lines.extend(f"   {part}" for part in parts)
-        return "\n".join(lines)
-    raise ValueError(f"Unsupported candidate format: {prompt.params.candidate_format}")
+    candidate_format = prompt.params.candidate_format
+    match candidate_format:
+        case CandidateFormat.COMPACT_LABELED_INLINE:
+            return f"{index}. " + " | ".join(parts)
+        case CandidateFormat.SENSEBENCH_MULTILINE:
+            lines: list[str] = [f"{index}."]
+            lines.extend(f"   {part}" for part in parts)
+            return "\n".join(lines)
+        case _:
+            assert_never(candidate_format)
 
 
 def _candidate_block(
@@ -170,16 +188,14 @@ def _candidate_block(
 
 
 def _render_template(*, content: str, variables: dict[str, str]) -> str:
-    template_text = content
-    for variable_name in variables:
-        template_text = template_text.replace(
-            "{{" + variable_name + "}}", "${" + variable_name + "}"
-        )
-        template_text = template_text.replace(
-            "{{ " + variable_name + " }}",
-            "${" + variable_name + "}",
-        )
-    return Template(template_text).safe_substitute(variables)
+    def _substitute(match: re.Match[str]) -> str:
+        variable_name = match.group(1)
+        replacement = variables.get(variable_name)
+        if replacement is None:
+            return match.group(0)
+        return replacement
+
+    return TEMPLATE_VARIABLE_PATTERN.sub(_substitute, content)
 
 
 def _render_hash(*, messages: list[ChatMessage]) -> str:
@@ -214,12 +230,15 @@ def render_task(
     )
     candidate_block = _candidate_block(prompt=prompt, ordered_candidates=ordered.candidates)
     variables: dict[str, str] = {
-        "candidate_senses": candidate_block,
-        "context": _marked_context(context=context, marker=prompt.params.target_marker),
-        "item_id": item.item_id,
-        "target_lemma": item.lemma,
-        "target_pos": item.pos,
-        "target_text": item.target_text,
+        TEMPLATE_VARIABLE_CANDIDATE_SENSES: candidate_block,
+        TEMPLATE_VARIABLE_CONTEXT: _marked_context(
+            context=context,
+            marker=prompt.params.target_marker,
+        ),
+        TEMPLATE_VARIABLE_ITEM_ID: item.item_id,
+        TEMPLATE_VARIABLE_TARGET_LEMMA: item.lemma,
+        TEMPLATE_VARIABLE_TARGET_POS: item.pos,
+        TEMPLATE_VARIABLE_TARGET_TEXT: item.target_text,
     }
     messages: list[ChatMessage] = [
         ChatMessage(

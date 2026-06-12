@@ -90,7 +90,6 @@ Minimal example:
     "target_marker": "xml_t",
     "sense_order": "frequency",
     "candidate_format": "sensebench_multiline",
-    "sense_gloss_style": "rich",
     "include_wordnet_id": true,
     "wordnet_id_kind": "sense_key",
     "include_definition": true,
@@ -98,8 +97,7 @@ Minimal example:
     "examples_max_per_sense": 2,
     "include_pos": true,
     "include_synonyms": false,
-    "synonyms_max_per_sense": 0,
-    "exclude_target_lemma_from_synonyms": true
+    "synonyms_max_per_sense": 0
   },
   "output": {
     "mode": "json_sense_index"
@@ -252,7 +250,6 @@ Required v1 parameters:
   "target_marker": "xml_t",
   "sense_order": "frequency",
   "candidate_format": "sensebench_multiline",
-  "sense_gloss_style": "rich",
   "include_wordnet_id": true,
   "wordnet_id_kind": "sense_key",
   "include_definition": true,
@@ -260,8 +257,7 @@ Required v1 parameters:
   "examples_max_per_sense": 2,
   "include_pos": true,
   "include_synonyms": false,
-  "synonyms_max_per_sense": 0,
-  "exclude_target_lemma_from_synonyms": true
+  "synonyms_max_per_sense": 0
 }
 ```
 
@@ -350,18 +346,6 @@ compact_labeled_inline
 1. sense_key=bank%1:14:00:: | definition=... | synonyms=... | examples=...
 ```
 
-`sense_gloss_style`
-
-How much sense information is rendered. Allowed values:
-
-```text
-compact
-rich
-```
-
-`compact` includes only the selected WordNet ID field and definition. `rich` may include synonyms
-and examples when the corresponding include flags are enabled.
-
 `include_wordnet_id`
 
 Whether candidate sense entries include WordNet sense IDs.
@@ -398,16 +382,13 @@ Whether candidate sense entries include part of speech.
 
 `include_synonyms`
 
-Whether candidate sense entries include synonyms or lemma names.
+Whether candidate sense entries include synonyms or lemma names. The target lemma itself is always
+excluded from rendered synonyms.
 
 `synonyms_max_per_sense`
 
 Maximum number of synonyms or lemma names to include for each candidate sense. Must be `0` when
 `include_synonyms` is `false`.
-
-`exclude_target_lemma_from_synonyms`
-
-Whether to remove the target lemma itself from rendered synonyms.
 
 ## Candidate Sense Indexing
 

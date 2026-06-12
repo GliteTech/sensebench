@@ -22,7 +22,6 @@
     "target_marker": "xml_t",
     "sense_order": "frequency",
     "candidate_format": "compact_labeled_inline",
-    "sense_gloss_style": "rich",
     "include_wordnet_id": true,
     "wordnet_id_kind": "sense_key",
     "include_definition": true,
@@ -30,8 +29,7 @@
     "examples_max_per_sense": 2,
     "include_pos": false,
     "include_synonyms": true,
-    "synonyms_max_per_sense": 6,
-    "exclude_target_lemma_from_synonyms": true
+    "synonyms_max_per_sense": 6
   },
   "output": {
     "mode": "json_sense_index"

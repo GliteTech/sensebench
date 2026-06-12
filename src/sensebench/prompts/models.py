@@ -10,14 +10,20 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PROMPT_ID_PATTERN: str = r"^p[0-9]{3,}$"
 TEMPLATE_VARIABLE_PATTERN: re.Pattern[str] = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
+TEMPLATE_VARIABLE_CANDIDATE_SENSES: str = "candidate_senses"
+TEMPLATE_VARIABLE_CONTEXT: str = "context"
+TEMPLATE_VARIABLE_ITEM_ID: str = "item_id"
+TEMPLATE_VARIABLE_TARGET_LEMMA: str = "target_lemma"
+TEMPLATE_VARIABLE_TARGET_POS: str = "target_pos"
+TEMPLATE_VARIABLE_TARGET_TEXT: str = "target_text"
 KNOWN_TEMPLATE_VARIABLES: frozenset[str] = frozenset(
     {
-        "candidate_senses",
-        "context",
-        "item_id",
-        "target_lemma",
-        "target_pos",
-        "target_text",
+        TEMPLATE_VARIABLE_CANDIDATE_SENSES,
+        TEMPLATE_VARIABLE_CONTEXT,
+        TEMPLATE_VARIABLE_ITEM_ID,
+        TEMPLATE_VARIABLE_TARGET_LEMMA,
+        TEMPLATE_VARIABLE_TARGET_POS,
+        TEMPLATE_VARIABLE_TARGET_TEXT,
     }
 )
 SENSE_INDEX_FIELD: str = "sense_index"
@@ -58,11 +64,6 @@ class CandidateFormat(StrEnum):
     COMPACT_LABELED_INLINE = "compact_labeled_inline"
 
 
-class SenseGlossStyle(StrEnum):
-    COMPACT = "compact"
-    RICH = "rich"
-
-
 class WordNetIdKind(StrEnum):
     NONE = "none"
     SENSE_KEY = "sense_key"
@@ -96,7 +97,6 @@ class PromptParams(StrictPromptModel):
     target_marker: TargetMarker
     sense_order: SenseOrder
     candidate_format: CandidateFormat
-    sense_gloss_style: SenseGlossStyle
     include_wordnet_id: bool
     wordnet_id_kind: WordNetIdKind
     include_definition: bool
@@ -105,7 +105,6 @@ class PromptParams(StrictPromptModel):
     include_pos: bool
     include_synonyms: bool
     synonyms_max_per_sense: int = Field(ge=0)
-    exclude_target_lemma_from_synonyms: bool
 
     @model_validator(mode="after")
     def validate_consistency(self) -> PromptParams:
