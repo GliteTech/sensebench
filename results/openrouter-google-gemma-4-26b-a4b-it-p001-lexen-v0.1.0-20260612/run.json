@@ -1,0 +1,75 @@
+{
+  "schema_version": "sensebench-run-v1",
+  "run_id": "openrouter-google-gemma-4-26b-a4b-it-p001-lexen-v0.1.0-20260612",
+  "created_at": "2026-06-12T22:06:38.758070+00:00",
+  "git_commit": "1409d229a5b531b97b885dd2a10932b93230f6d6",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": "vassili@glite.ai"
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v0.1.0",
+    "dataset_revision": null,
+    "content_hash": "sha256:0222f3be1b54975692f2be67f271db0a351eb627e327e346d6b8155f9d1ba856",
+    "item_count": 4917
+  },
+  "prompt": {
+    "id": "p001",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "openrouter/google/gemma-4-26b-a4b-it",
+    "requested_model": "openrouter/google/gemma-4-26b-a4b-it",
+    "resolved_model": "google/gemma-4-26b-a4b-it-20260403",
+    "resolved_model_counts": {
+      "google/gemma-4-26b-a4b-it-20260403": 4917
+    },
+    "llm_vendor": "Google",
+    "api_provider": "OpenRouter",
+    "source_kind": "open_source",
+    "license": null,
+    "model_url": "https://openrouter.ai/google/gemma-4-26b-a4b-it",
+    "reasoning_effort": null,
+    "endpoint_base_url": null
+  },
+  "sampling": {
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": 1024,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "totals": {
+    "item_count": 4917,
+    "correct_count": 4353,
+    "accuracy": 0.8852959121415497,
+    "call_count": 4917,
+    "usage": {
+      "input_tokens": 3224407,
+      "cached_input_tokens": 153696,
+      "output_tokens": 65353,
+      "reasoning_output_tokens": 0
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 0.35603251,
+      "input_uncached_usd": 0.33140028,
+      "input_cached_usd": null,
+      "output_usd": 0.024632229999999998,
+      "input_uncached_unit_price_usd": null,
+      "input_cached_unit_price_usd": null,
+      "output_unit_price_usd": null,
+      "source": "provider_reported"
+    },
+    "elapsed_seconds": 59.160069125005975
+  }
+}
