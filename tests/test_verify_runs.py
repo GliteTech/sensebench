@@ -6,9 +6,14 @@ from pathlib import Path
 from sensebench.datasets.models import ItemID, SenseKey
 from sensebench.prompts.models import SENSE_INDEX_FIELD, PromptID
 from sensebench.runner.writer import write_run_artifacts
-from sensebench.runs.models import CallID, RunID
-from sensebench.verify.runs import RunValidationRule, verify_run_directory
+from sensebench.runs.models import AttemptKind, CallID, RunID
+from sensebench.verify.runs import (
+    CALLS_AFTER_SUCCESS_MESSAGE,
+    RunValidationRule,
+    verify_run_directory,
+)
 from tests.run_fixtures import (
+    CALL_ID,
     DEFAULT_RUN_ID,
     FIRST_SENSE_KEY,
     SECOND_SENSE_KEY,
@@ -25,6 +30,7 @@ from tests.run_fixtures import (
 RUN_DIR_NAME: RunID = DEFAULT_RUN_ID
 UNKNOWN_PROMPT_ID: PromptID = "p999"
 ORPHAN_CALL_ID: CallID = "i1__v9__a9"
+SEMANTIC_REASK_CALL_ID: CallID = "i1__v1__a2"
 UNKNOWN_ITEM_ID: ItemID = "i2"
 FORGED_GOLD_SENSE_KEY: SenseKey = "bank%1:17:00::"
 METADATA_CONTENT_HASH: str = f"sha256:{'a' * 64}"
@@ -146,6 +152,85 @@ def test_verify_detects_vote_mismatching_raw_output(tmp_path: Path) -> None:
     report = verify_run_directory(run_dir=run_dir, prompt=registered_prompt())
 
     assert RunValidationRule.VOTE_EXTRACTION in issue_rules(report=report)
+
+
+def test_verify_allows_redundant_same_vote_after_success(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    prediction = voted_prediction(
+        chosen_index=2,
+        gold_sense_keys=[SECOND_SENSE_KEY],
+        is_correct=True,
+    )
+    call_ids: list[CallID] = [CALL_ID, SEMANTIC_REASK_CALL_ID]
+    votes = [
+        prediction.votes[0].model_copy(
+            update={"call_ids": call_ids},
+        )
+    ]
+    prediction = prediction.model_copy(update={"votes": votes})
+    reask_call = success_call(
+        raw_output=raw_output_for_sense_index(sense_index=2),
+        call_id=SEMANTIC_REASK_CALL_ID,
+    ).model_copy(
+        update={
+            "attempt_index": 2,
+            "attempt_kind": AttemptKind.SEMANTIC_REASK,
+        },
+    )
+    metadata = make_metadata(item_count=1, correct_count=1, accuracy=1.0, call_count=2)
+    write_run_artifacts(
+        run_dir=run_dir,
+        metadata=metadata,
+        predictions=[prediction],
+        calls=[
+            success_call(raw_output=raw_output_for_sense_index(sense_index=2)),
+            reask_call,
+        ],
+    )
+
+    report = verify_run_directory(run_dir=run_dir, prompt=registered_prompt())
+
+    assert report.has_errors() is False
+
+
+def test_verify_rejects_changed_vote_after_success(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    prediction = voted_prediction(
+        chosen_index=1,
+        gold_sense_keys=[FIRST_SENSE_KEY],
+        is_correct=True,
+    )
+    call_ids: list[CallID] = [CALL_ID, SEMANTIC_REASK_CALL_ID]
+    votes = [
+        prediction.votes[0].model_copy(
+            update={"call_ids": call_ids},
+        )
+    ]
+    prediction = prediction.model_copy(update={"votes": votes})
+    reask_call = success_call(
+        raw_output=raw_output_for_sense_index(sense_index=2),
+        call_id=SEMANTIC_REASK_CALL_ID,
+    ).model_copy(
+        update={
+            "attempt_index": 2,
+            "attempt_kind": AttemptKind.SEMANTIC_REASK,
+        },
+    )
+    metadata = make_metadata(item_count=1, correct_count=1, accuracy=1.0, call_count=2)
+    write_run_artifacts(
+        run_dir=run_dir,
+        metadata=metadata,
+        predictions=[prediction],
+        calls=[
+            success_call(raw_output=raw_output_for_sense_index(sense_index=1)),
+            reask_call,
+        ],
+    )
+
+    report = verify_run_directory(run_dir=run_dir, prompt=registered_prompt())
+
+    assert RunValidationRule.VOTE_EXTRACTION in issue_rules(report=report)
+    assert any(issue.message == CALLS_AFTER_SUCCESS_MESSAGE for issue in report.issues)
 
 
 def test_verify_detects_content_hash_mismatch(tmp_path: Path) -> None:
