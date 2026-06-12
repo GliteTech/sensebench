@@ -7,11 +7,11 @@ from dataclasses import dataclass, field
 from typing import assert_never
 
 from sensebench.datasets.models import ItemID, SenseKey
-from sensebench.prompts.models import MessageRole, OutputMode
+from sensebench.prompts.models import SENSE_INDEX_FIELD, MessageRole, OutputMode
 from sensebench.prompts.render import ChatMessage, RenderedTask
 from sensebench.runner.client import CompletionClient
 from sensebench.runner.costs import no_call_cost, sum_costs
-from sensebench.runner.extract import extract_sense_index
+from sensebench.runner.extract import ValidSenseIndexExtraction, extract_sense_index
 from sensebench.runner.models import CompletionRequest, ItemEvaluation
 from sensebench.runs.models import (
     AttemptKind,
@@ -19,6 +19,8 @@ from sensebench.runs.models import (
     CallRecord,
     CallStatus,
     CandidateRecord,
+    InvalidOutputReason,
+    ModelID,
     PredictionRecord,
     PredictionStatus,
     TokenUsage,
@@ -29,14 +31,21 @@ from sensebench.wordnet import sense_keys_match
 
 DEFAULT_VOTES_PER_ITEM: int = 1
 DEFAULT_SEMANTIC_REASKS: int = 1
+SENSE_INDEX_EXAMPLE_JSON: str = f'{{"{SENSE_INDEX_FIELD}": 1}}'
 
 
 @dataclass(frozen=True, slots=True)
 class EvaluationConfig:
-    model: str
+    model: ModelID
     votes_per_item: int = DEFAULT_VOTES_PER_ITEM
     semantic_reasks_per_invalid_vote: int = DEFAULT_SEMANTIC_REASKS
     llm_parameters: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        assert self.votes_per_item >= 1, "votes_per_item is at least 1"
+        assert (
+            self.semantic_reasks_per_invalid_vote >= 0
+        ), "semantic_reasks_per_invalid_vote is non-negative"
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,7 +125,7 @@ def _repair_instruction(*, output_mode: OutputMode, candidate_count: int) -> str
         return (
             "Your previous answer was invalid. Choose one candidate index between "
             f"1 and {candidate_count}. Return only valid JSON exactly like "
-            '{"sense_index": 1}.'
+            f"{SENSE_INDEX_EXAMPLE_JSON}."
         )
     if output_mode == OutputMode.PLAIN_SENSE_INDEX:
         return (
@@ -178,7 +187,7 @@ async def _run_one_vote(
 ) -> VoteOutcome:
     calls: list[CallRecord] = []
     messages: list[ChatMessage] = rendered.messages
-    invalid_reason: str | None = None
+    invalid_reason: InvalidOutputReason | str | None = None
     for attempt_index in range(1, config.semantic_reasks_per_invalid_vote + 2):
         attempt_kind = AttemptKind.INITIAL if attempt_index == 1 else AttemptKind.SEMANTIC_REASK
         request = CompletionRequest(
@@ -212,7 +221,7 @@ async def _run_one_vote(
             output_mode=rendered.output_mode,
             candidate_count=len(rendered.candidates),
         )
-        if extracted.sense_index is not None:
+        if isinstance(extracted, ValidSenseIndexExtraction):
             return VoteOutcome(
                 vote=VoteRecord(
                     vote_index=vote_index,
@@ -226,9 +235,7 @@ async def _run_one_vote(
                 ),
                 calls=calls,
             )
-        invalid_reason = (
-            extracted.invalid_reason.value if extracted.invalid_reason is not None else None
-        )
+        invalid_reason = extracted.invalid_reason
         messages = _repair_messages(rendered=rendered, previous_output=completion.call.raw_output)
     return VoteOutcome(
         vote=VoteRecord(
@@ -265,6 +272,7 @@ def _monosemous_evaluation(
     rendered: RenderedTask,
     gold_sense_keys: list[SenseKey],
 ) -> ItemEvaluation:
+    assert len(rendered.candidates) == 1, "rendered task has exactly one candidate"
     candidate = rendered.candidates[0]
     prediction = PredictionRecord(
         item_id=rendered.item_id,
@@ -290,6 +298,7 @@ def _no_candidates_evaluation(
     rendered: RenderedTask,
     gold_sense_keys: list[SenseKey],
 ) -> ItemEvaluation:
+    assert len(rendered.candidates) == 0, "rendered task has no candidates"
     prediction = PredictionRecord(
         item_id=rendered.item_id,
         gold_sense_keys=gold_sense_keys,

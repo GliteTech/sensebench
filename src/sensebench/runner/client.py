@@ -19,6 +19,23 @@ from sensebench.runs.models import (
 
 DEFAULT_TRANSPORT_RETRIES: int = 2
 DEFAULT_RETRY_SLEEP_SECONDS: float = 1.0
+ROLE_FIELD: str = "role"
+CONTENT_FIELD: str = "content"
+REPR_FIELD: str = "repr"
+CHOICES_FIELD: str = "choices"
+MESSAGE_FIELD: str = "message"
+TEXT_FIELD: str = "text"
+USAGE_FIELD: str = "usage"
+PROMPT_TOKENS_FIELD: str = "prompt_tokens"
+COMPLETION_TOKENS_FIELD: str = "completion_tokens"
+PROMPT_TOKENS_DETAILS_FIELD: str = "prompt_tokens_details"
+CACHED_TOKENS_FIELD: str = "cached_tokens"
+COMPLETION_TOKENS_DETAILS_FIELD: str = "completion_tokens_details"
+REASONING_TOKENS_FIELD: str = "reasoning_tokens"
+MODEL_FIELD: str = "model"
+INPUT_COST_PER_TOKEN_FIELD: str = "input_cost_per_token"
+CACHE_READ_INPUT_TOKEN_COST_FIELD: str = "cache_read_input_token_cost"
+OUTPUT_COST_PER_TOKEN_FIELD: str = "output_cost_per_token"
 
 
 class CompletionClient(Protocol):
@@ -28,8 +45,8 @@ class CompletionClient(Protocol):
 def _messages_payload(*, request: CompletionRequest) -> list[dict[str, str]]:
     return [
         {
-            "role": message.role.value,
-            "content": message.content,
+            ROLE_FIELD: message.role.value,
+            CONTENT_FIELD: message.content,
         }
         for message in request.messages
     ]
@@ -42,43 +59,43 @@ def _response_to_dict(*, response: object) -> dict[str, object]:
             return dict(dumped)
     if isinstance(response, dict):
         return dict(response)
-    return {"repr": repr(response)}
+    return {REPR_FIELD: repr(response)}
 
 
 def _raw_output_from_response(*, payload: dict[str, object]) -> str | None:
-    choices = payload.get("choices")
+    choices = payload.get(CHOICES_FIELD)
     if not isinstance(choices, list) or len(choices) == 0:
         return None
     first = choices[0]
     if not isinstance(first, dict):
         return None
-    message = first.get("message")
+    message = first.get(MESSAGE_FIELD)
     if isinstance(message, dict):
-        content = message.get("content")
+        content = message.get(CONTENT_FIELD)
         if isinstance(content, str):
             return content
-    text = first.get("text")
+    text = first.get(TEXT_FIELD)
     if isinstance(text, str):
         return text
     return None
 
 
 def _usage_from_payload(*, payload: dict[str, object]) -> TokenUsage:
-    usage = payload.get("usage")
+    usage = payload.get(USAGE_FIELD)
     if not isinstance(usage, dict):
         return TokenUsage()
-    input_tokens = usage.get("prompt_tokens")
-    output_tokens = usage.get("completion_tokens")
+    input_tokens = usage.get(PROMPT_TOKENS_FIELD)
+    output_tokens = usage.get(COMPLETION_TOKENS_FIELD)
     cached_input_tokens: int | None = None
-    prompt_details = usage.get("prompt_tokens_details")
+    prompt_details = usage.get(PROMPT_TOKENS_DETAILS_FIELD)
     if isinstance(prompt_details, dict):
-        cached_tokens = prompt_details.get("cached_tokens")
+        cached_tokens = prompt_details.get(CACHED_TOKENS_FIELD)
         if isinstance(cached_tokens, int):
             cached_input_tokens = cached_tokens
     reasoning_output_tokens: int | None = None
-    completion_details = usage.get("completion_tokens_details")
+    completion_details = usage.get(COMPLETION_TOKENS_DETAILS_FIELD)
     if isinstance(completion_details, dict):
-        reasoning_tokens = completion_details.get("reasoning_tokens")
+        reasoning_tokens = completion_details.get(REASONING_TOKENS_FIELD)
         if isinstance(reasoning_tokens, int):
             reasoning_output_tokens = reasoning_tokens
     return TokenUsage(
@@ -90,7 +107,7 @@ def _usage_from_payload(*, payload: dict[str, object]) -> TokenUsage:
 
 
 def _model_from_payload(*, payload: dict[str, object], requested_model: str) -> str:
-    raw_model = payload.get("model")
+    raw_model = payload.get(MODEL_FIELD)
     if isinstance(raw_model, str) and len(raw_model) > 0:
         return raw_model
     return requested_model
@@ -137,12 +154,12 @@ def _cost_from_response(
     total_usd = _completion_cost(litellm_module=litellm_module, response=response)
     raw_model_info = litellm_module.model_cost.get(model)
     model_info: dict[str, object] = raw_model_info if isinstance(raw_model_info, dict) else {}
-    input_unit_price = _unit_price(model_info=model_info, key="input_cost_per_token")
+    input_unit_price = _unit_price(model_info=model_info, key=INPUT_COST_PER_TOKEN_FIELD)
     cached_input_unit_price = _unit_price(
         model_info=model_info,
-        key="cache_read_input_token_cost",
+        key=CACHE_READ_INPUT_TOKEN_COST_FIELD,
     )
-    output_unit_price = _unit_price(model_info=model_info, key="output_cost_per_token")
+    output_unit_price = _unit_price(model_info=model_info, key=OUTPUT_COST_PER_TOKEN_FIELD)
 
     cached_tokens = usage.cached_input_tokens if usage.cached_input_tokens is not None else 0
     uncached_tokens: int | None = None

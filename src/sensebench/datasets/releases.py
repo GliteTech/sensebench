@@ -2,21 +2,28 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-import sys
-import urllib.request
 from dataclasses import dataclass
+from os import environ
 from pathlib import Path
+from shutil import copyfileobj
+from sys import stderr
+from urllib.request import Request, urlopen
 
 from sensebench import __version__
 from sensebench.datasets.loaders import file_content_hash, load_jsonl_dataset
 from sensebench.datasets.models import DatasetBundle, DatasetID
+from sensebench.paths import DEFAULT_LEXEN_RELEASE_ID, LEXEN_DATASET_ID, LEXEN_ITEMS_FILENAME
 
 DATASET_CACHE_ENV_VAR: str = "SENSEBENCH_CACHE_DIR"
-DATASET_FILENAME: str = "items.jsonl"
+XDG_CACHE_HOME_ENV_VAR: str = "XDG_CACHE_HOME"
+DEFAULT_CACHE_DIRNAME: str = ".cache"
+SENSEBENCH_CACHE_DIRNAME: str = "sensebench"
+DATASETS_CACHE_DIRNAME: str = "datasets"
+DATASET_FILENAME: str = LEXEN_ITEMS_FILENAME
 DOWNLOAD_SUFFIX: str = ".download"
 DOWNLOAD_TIMEOUT_SECONDS: float = 60.0
+DATASET_USER_AGENT_HEADER: str = "User-Agent"
+DATASET_USER_AGENT: str = f"sensebench/{__version__}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,9 +36,9 @@ class DatasetRelease:
 
 
 DATASET_RELEASES: dict[str, DatasetRelease] = {
-    "lexen-v0.1.0": DatasetRelease(
-        release_id="lexen-v0.1.0",
-        dataset_id="lexen",
+    DEFAULT_LEXEN_RELEASE_ID: DatasetRelease(
+        release_id=DEFAULT_LEXEN_RELEASE_ID,
+        dataset_id=LEXEN_DATASET_ID,
         url="https://github.com/GliteTech/lexen/releases/download/lexen-v0.1.0/items.jsonl",
         content_hash="sha256:0222f3be1b54975692f2be67f271db0a351eb627e327e346d6b8155f9d1ba856",
         item_count=4917,
@@ -50,25 +57,29 @@ def get_dataset_release(*, release_id: str) -> DatasetRelease:
 
 
 def dataset_cache_dir() -> Path:
-    override = os.environ.get(DATASET_CACHE_ENV_VAR)
+    override = environ.get(DATASET_CACHE_ENV_VAR)
     if override is not None and len(override) > 0:
         return Path(override)
-    xdg_cache_home = os.environ.get("XDG_CACHE_HOME")
-    cache_root = Path(xdg_cache_home) if xdg_cache_home else Path.home() / ".cache"
-    return cache_root / "sensebench" / "datasets"
+    xdg_cache_home = environ.get(XDG_CACHE_HOME_ENV_VAR)
+    cache_root = (
+        Path(xdg_cache_home)
+        if xdg_cache_home is not None and len(xdg_cache_home) > 0
+        else Path.home() / DEFAULT_CACHE_DIRNAME
+    )
+    return cache_root / SENSEBENCH_CACHE_DIRNAME / DATASETS_CACHE_DIRNAME
 
 
 def _download_release(*, release: DatasetRelease, target: Path) -> None:
-    print(f"Downloading dataset {release.release_id} from {release.url}", file=sys.stderr)
-    request = urllib.request.Request(
-        release.url,
-        headers={"User-Agent": f"sensebench/{__version__}"},
+    print(f"Downloading dataset {release.release_id} from {release.url}", file=stderr)
+    request = Request(
+        url=release.url,
+        headers={DATASET_USER_AGENT_HEADER: DATASET_USER_AGENT},
     )
     with (
-        urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
-        target.open("wb") as handle,
+        urlopen(url=request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
+        target.open(mode="wb") as handle,
     ):
-        shutil.copyfileobj(response, handle)
+        copyfileobj(fsrc=response, fdst=handle)
 
 
 def fetch_dataset_release(*, release: DatasetRelease) -> Path:
@@ -79,15 +90,18 @@ def fetch_dataset_release(*, release: DatasetRelease) -> Path:
         target.unlink()
     target.parent.mkdir(parents=True, exist_ok=True)
     download_path = target.with_name(f"{target.name}{DOWNLOAD_SUFFIX}")
-    _download_release(release=release, target=download_path)
-    downloaded_hash = file_content_hash(path=download_path)
-    if downloaded_hash != release.content_hash:
-        download_path.unlink()
-        raise RuntimeError(
-            f"downloaded dataset {release.release_id} has content hash {downloaded_hash}, "
-            f"expected {release.content_hash}"
-        )
-    download_path.replace(target)
+    try:
+        _download_release(release=release, target=download_path)
+        downloaded_hash = file_content_hash(path=download_path)
+        if downloaded_hash != release.content_hash:
+            raise RuntimeError(
+                f"downloaded dataset {release.release_id} has content hash {downloaded_hash}, "
+                f"expected {release.content_hash}"
+            )
+        download_path.replace(target)
+    finally:
+        if download_path.exists():
+            download_path.unlink()
     return target
 
 

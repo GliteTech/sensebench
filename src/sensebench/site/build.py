@@ -2,23 +2,24 @@
 
 from __future__ import annotations
 
-import html
-import json
-import shutil
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
+from html import escape
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
+from shutil import copy2, rmtree
+from typing import NamedTuple, assert_never
 from urllib.parse import urljoin, urlparse
 
 from jinja2 import Environment, PackageLoader
 from pydantic import BaseModel, ConfigDict
 
 from sensebench.datasets.context import build_context_window, build_dataset_index
-from sensebench.datasets.models import DatasetBundle, DatasetIndex, ItemID, WsdItem
+from sensebench.datasets.models import DatasetBundle, DatasetIndex, ItemID, SenseKey, WsdItem
 from sensebench.datasets.releases import (
     DATASET_RELEASES,
     get_dataset_release,
@@ -33,10 +34,17 @@ from sensebench.leaderboard.aggregate import (
 from sensebench.paths import (
     CALLS_FILENAME,
     DEFAULT_LEXEN_RELEASE_ID,
+    INDEX_HTML_FILENAME,
+    LEADERBOARD_JSON_PATH,
+    P001_PROMPT_PATH,
     PREDICTIONS_FILENAME,
     PROMPT_JSON_SUFFIX,
     PROMPT_REGISTRY_DIR,
     RUN_METADATA_FILENAME,
+    SITE_ASSETS_DIRNAME,
+    SITE_DATA_DIRNAME,
+    SITE_RUNS_DIRNAME,
+    SUBMITTED_RESULTS_DIR,
 )
 from sensebench.prompts.models import MessageRole, PromptDefinition
 from sensebench.prompts.registry import load_prompt_definition, registered_prompt_paths
@@ -46,20 +54,47 @@ from sensebench.runs.models import (
     CallRecord,
     CallStatus,
     PredictionRecord,
+    RunID,
     RunMetadata,
     VoteStatus,
 )
-from sensebench.wordnet import get_candidate_senses
+from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
 SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v2"
 RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v3"
-RUN_ARTIFACT_ROOT: str = "artifacts/runs"
-SLICE_POS: str = "POS"
-SLICE_CANDIDATE_COUNT: str = "Candidate Count"
-SLICE_SOURCE_DATASET: str = "Source Dataset"
+RUN_ARTIFACT_ROOT: Path = Path("artifacts") / "runs"
 MAX_ERROR_EXAMPLES: int = 12
+PACKAGE_NAME: str = "sensebench.site"
+TEMPLATE_PACKAGE_PATH: str = "templates"
+STATIC_PACKAGE_PATH: str = "static"
+PCT_FILTER_NAME: str = "pct"
+NUM_FILTER_NAME: str = "num"
+MONEY_FILTER_NAME: str = "money"
+MILLION_TOKEN_PRICE_FILTER_NAME: str = "million_token_price"
+SECONDS_FILTER_NAME: str = "seconds"
+BYTES_FILTER_NAME: str = "bytes"
+PAGE_CONTEXT_KEY: str = "page"
+RELEASE_CONTEXT_KEY: str = "release"
+PROMPT_CONTEXT_KEY: str = "prompt"
+PARAMS_JSON_CONTEXT_KEY: str = "params_json"
+DETAIL_CONTEXT_KEY: str = "detail"
+REPOSITORY_ARTIFACT_URL_CONTEXT_KEY: str = "repository_artifact_url"
+ENTRIES_CONTEXT_KEY: str = "entries"
+SITE_DATA_CONTEXT_KEY: str = "site_data"
+DATASETS_CONTEXT_KEY: str = "datasets"
+ASSET_VERSION_GLOBAL_KEY: str = "asset_version"
+SOURCE_DATASET_METADATA_KEY: str = "source_dataset"
+ERROR_BUCKET_GROUP: str = "Error"
+ANY_BUCKET_VALUE: str = "Any"
+RUNS_ROUTE: str = "runs/"
+DATASETS_ROUTE_PREFIX: str = "datasets"
+PROMPTS_ROUTE_PREFIX: str = "prompts"
+RUNS_ROUTE_PREFIX: str = "runs"
+SITEMAP_FILENAME: str = "sitemap.xml"
+ROBOTS_FILENAME: str = "robots.txt"
+NOT_FOUND_FILENAME: str = "404.html"
 STATIC_PAGE_SLUGS: tuple[str, ...] = (
     "about",
     "methodology",
@@ -67,6 +102,17 @@ STATIC_PAGE_SLUGS: tuple[str, ...] = (
     "changelog",
     "citation",
 )
+
+
+class SliceGroup(StrEnum):
+    POS = "POS"
+    CANDIDATE_COUNT = "Candidate Count"
+    SOURCE_DATASET = "Source Dataset"
+
+
+class SliceKey(NamedTuple):
+    group: SliceGroup
+    value: str | None
 
 
 class SiteModel(BaseModel):
@@ -89,8 +135,8 @@ class SiteData(SiteModel):
 
 
 class SliceSummary(SiteModel):
-    group: str
-    value: str
+    group: SliceGroup
+    value: str | None
     correct_count: int
     item_count: int
     accuracy: float | None
@@ -104,7 +150,7 @@ class ExampleContextSentence(SiteModel):
 class ExampleCandidate(SiteModel):
     index: int
     sense_key: str
-    synset_id: str
+    synset_id: SynsetID
     definition: str | None
     synonyms: list[str]
     examples: list[str]
@@ -118,13 +164,13 @@ class ExamplePromptMessage(SiteModel):
 
 
 class RunExample(SiteModel):
-    bucket_group: str
-    bucket_value: str
+    bucket_group: SliceGroup | str
+    bucket_value: str | None
     item_id: ItemID
     lemma: str
     target_text: str
     pos: str
-    source_dataset: str
+    source_dataset: str | None
     candidate_count: int
     is_correct: bool | None
     predicted_sense_index: int | None
@@ -211,20 +257,23 @@ def _base_path(*, base_url: str) -> str:
 
 
 def _absolute_url(*, base_url: str, path: str) -> str:
-    return urljoin(_base_url(base_url=base_url), path)
+    return urljoin(base=_base_url(base_url=base_url), url=path)
 
 
 def _template_env() -> Environment:
     env = Environment(
-        loader=PackageLoader("sensebench.site", "templates"),
+        loader=PackageLoader(
+            package_name=PACKAGE_NAME,
+            package_path=TEMPLATE_PACKAGE_PATH,
+        ),
         autoescape=True,
     )
-    env.filters["pct"] = _format_percent
-    env.filters["num"] = _format_number
-    env.filters["money"] = _format_money
-    env.filters["million_token_price"] = _format_million_token_price
-    env.filters["seconds"] = _format_seconds
-    env.filters["bytes"] = _format_bytes
+    env.filters[PCT_FILTER_NAME] = _format_percent
+    env.filters[NUM_FILTER_NAME] = _format_number
+    env.filters[MONEY_FILTER_NAME] = _format_money
+    env.filters[MILLION_TOKEN_PRICE_FILTER_NAME] = _format_million_token_price
+    env.filters[SECONDS_FILTER_NAME] = _format_seconds
+    env.filters[BYTES_FILTER_NAME] = _format_bytes
     return env
 
 
@@ -279,16 +328,21 @@ def _format_bytes(value: int | None) -> str:
 
 def _write_text(*, path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(data=text, encoding="utf-8")
 
 
-def _write_json(*, path: Path, value: BaseModel | dict[str, object]) -> None:
+def _write_json(*, path: Path, value: BaseModel) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if isinstance(value, BaseModel):
-        serialized = value.model_dump_json(indent=2)
-    else:
-        serialized = json.dumps(value, indent=2, ensure_ascii=False)
-    path.write_text(f"{serialized}\n", encoding="utf-8")
+    serialized = value.model_dump_json(indent=2)
+    path.write_text(data=f"{serialized}\n", encoding="utf-8")
+
+
+def _page_file_path(*, output_dir: Path, route: str) -> Path:
+    return output_dir / Path(route) / INDEX_HTML_FILENAME
+
+
+def _run_artifact_route(*, run_id: RunID, filename: str) -> str:
+    return (RUN_ARTIFACT_ROOT / run_id / filename).as_posix()
 
 
 def _copy_tree(*, source: Traversable, target: Path) -> None:
@@ -302,15 +356,15 @@ def _copy_tree(*, source: Traversable, target: Path) -> None:
 
 
 def _copy_static_assets(*, output_dir: Path) -> None:
-    static_root = files("sensebench.site").joinpath("static")
-    _copy_tree(source=static_root, target=output_dir / "assets")
+    static_root = files(PACKAGE_NAME).joinpath(STATIC_PACKAGE_PATH)
+    _copy_tree(source=static_root, target=output_dir / SITE_ASSETS_DIRNAME)
 
 
 def _copy_run_artifacts(
     *,
     output_dir: Path,
     run_dir: Path,
-    run_id: str,
+    run_id: RunID,
 ) -> list[RunArtifact]:
     copied: list[RunArtifact] = []
     target_dir = output_dir / RUN_ARTIFACT_ROOT / run_id
@@ -320,12 +374,12 @@ def _copy_run_artifacts(
         if not source.exists():
             continue
         target = target_dir / spec.filename
-        shutil.copy2(src=source, dst=target)
+        copy2(src=source, dst=target)
         copied.append(
             RunArtifact(
                 label=spec.label,
                 filename=spec.filename,
-                path=f"{RUN_ARTIFACT_ROOT}/{run_id}/{spec.filename}",
+                path=_run_artifact_route(run_id=run_id, filename=spec.filename),
                 size_bytes=source.stat().st_size,
                 description=spec.description,
             )
@@ -334,7 +388,7 @@ def _copy_run_artifacts(
 
 
 def _site_summary(*, collection: LeaderboardCollection) -> SiteSummary:
-    entries = collection.entries
+    entries: list[LeaderboardEntry] = collection.entries
     top_accuracy = entries[0].accuracy if len(entries) > 0 else None
     return SiteSummary(
         verified_run_count=len(entries),
@@ -377,8 +431,8 @@ def _accuracy(*, predictions: list[PredictionRecord]) -> float | None:
 
 def _slice_summary(
     *,
-    group: str,
-    value: str,
+    group: SliceGroup,
+    value: str | None,
     predictions: list[PredictionRecord],
 ) -> SliceSummary:
     correct_count = sum(1 for prediction in predictions if prediction.is_correct is True)
@@ -391,39 +445,57 @@ def _slice_summary(
     )
 
 
-def _source_dataset(*, item: WsdItem) -> str:
-    value = item.metadata.get("source_dataset")
+def _source_dataset(*, item: WsdItem) -> str | None:
+    value = item.metadata.get(SOURCE_DATASET_METADATA_KEY)
     if value is None or len(value) == 0:
-        return "unknown"
+        return None
     return value
 
 
-def _slice_value(*, group: str, prediction: PredictionRecord, item: WsdItem) -> str:
-    if group == SLICE_POS:
-        return item.pos
-    if group == SLICE_CANDIDATE_COUNT:
-        return _candidate_bucket(count=len(prediction.candidates))
-    if group == SLICE_SOURCE_DATASET:
-        return _source_dataset(item=item)
-    raise ValueError(f"unknown slice group: {group}")
+def _slice_value(
+    *,
+    group: SliceGroup,
+    prediction: PredictionRecord,
+    item: WsdItem,
+) -> str | None:
+    match group:
+        case SliceGroup.POS:
+            return item.pos
+        case SliceGroup.CANDIDATE_COUNT:
+            return _candidate_bucket(count=len(prediction.candidates))
+        case SliceGroup.SOURCE_DATASET:
+            return _source_dataset(item=item)
+        case _:
+            assert_never(group)
 
 
 def _slice_summaries(*, loaded: LoadedRun, dataset: DatasetBundle) -> list[SliceSummary]:
-    items_by_id = {item.item_id: item for item in dataset.items}
-    groups: dict[tuple[str, str], list[PredictionRecord]] = defaultdict(list)
+    items_by_id: dict[ItemID, WsdItem] = {item.item_id: item for item in dataset.items}
+    groups: dict[SliceKey, list[PredictionRecord]] = defaultdict(list)
     for prediction in loaded.predictions:
         item = items_by_id.get(prediction.item_id)
         if item is None:
             continue
-        for group in (SLICE_POS, SLICE_CANDIDATE_COUNT, SLICE_SOURCE_DATASET):
-            groups[(group, _slice_value(group=group, prediction=prediction, item=item))].append(
-                prediction
+        for group in SliceGroup:
+            groups[
+                SliceKey(
+                    group=group,
+                    value=_slice_value(group=group, prediction=prediction, item=item),
+                )
+            ].append(
+                prediction,
             )
-    summaries = [
-        _slice_summary(group=group, value=value, predictions=predictions)
-        for (group, value), predictions in groups.items()
+    summaries: list[SliceSummary] = [
+        _slice_summary(group=key.group, value=key.value, predictions=predictions)
+        for key, predictions in groups.items()
     ]
-    return sorted(summaries, key=lambda summary: (summary.group, summary.value))
+    return sorted(
+        summaries,
+        key=lambda summary: (
+            summary.group.value,
+            summary.value if summary.value is not None else "",
+        ),
+    )
 
 
 def _context_sentences(
@@ -457,7 +529,7 @@ def _context_sentences(
         is_target_sentence = sentence_index == target_sentence_index
         pieces: list[str] = []
         for token_index, token in enumerate(sentence.tokens):
-            token_text = html.escape(token.text)
+            token_text = escape(token.text)
             if is_target_sentence and token_index == item.target_token_index:
                 pieces.append(f"<mark>{token_text}</mark>")
                 has_marked_target = True
@@ -535,7 +607,7 @@ def _example_candidates(
     prediction: PredictionRecord,
     item: WsdItem,
 ) -> list[ExampleCandidate]:
-    wordnet_by_key = {
+    wordnet_by_key: dict[SenseKey, SenseCandidate] = {
         candidate.sense_key: candidate
         for candidate in get_candidate_senses(lemma=item.lemma, pos=item.pos)
     }
@@ -559,8 +631,8 @@ def _example_candidates(
 
 def _example(
     *,
-    bucket_group: str,
-    bucket_value: str,
+    bucket_group: SliceGroup | str,
+    bucket_value: str | None,
     prediction: PredictionRecord,
     item: WsdItem,
     index: DatasetIndex,
@@ -606,24 +678,29 @@ def _worst_examples(
     slices: list[SliceSummary],
 ) -> list[RunExample]:
     index = build_dataset_index(bundle=dataset)
-    items_by_id = {item.item_id: item for item in dataset.items}
-    calls_by_id = _calls_by_id(calls=loaded.calls)
-    calls_by_item = _calls_by_item(calls=loaded.calls)
-    errors = [
+    items_by_id: dict[ItemID, WsdItem] = {item.item_id: item for item in dataset.items}
+    calls_by_id: dict[CallID, CallRecord] = _calls_by_id(calls=loaded.calls)
+    calls_by_item: dict[ItemID, list[CallRecord]] = _calls_by_item(calls=loaded.calls)
+    errors: list[PredictionRecord] = [
         prediction
         for prediction in sorted(loaded.predictions, key=lambda candidate: candidate.item_id)
         if prediction.is_correct is False and prediction.item_id in items_by_id
     ]
     selected: list[RunExample] = []
     selected_items: set[ItemID] = set()
-    ranked_slices = sorted(
+    ranked_slices: list[SliceSummary] = sorted(
         [
             summary
             for summary in slices
-            if summary.group in (SLICE_POS, SLICE_CANDIDATE_COUNT)
+            if summary.group in (SliceGroup.POS, SliceGroup.CANDIDATE_COUNT)
             and summary.accuracy is not None
         ],
-        key=lambda summary: (summary.accuracy, -summary.item_count, summary.group, summary.value),
+        key=lambda summary: (
+            summary.accuracy,
+            -summary.item_count,
+            summary.group.value,
+            summary.value if summary.value is not None else "",
+        ),
     )
     for summary in ranked_slices:
         for prediction in errors:
@@ -653,8 +730,8 @@ def _worst_examples(
             continue
         item = items_by_id[prediction.item_id]
         example = _example(
-            bucket_group="Error",
-            bucket_value="Any",
+            bucket_group=ERROR_BUCKET_GROUP,
+            bucket_value=ANY_BUCKET_VALUE,
             prediction=prediction,
             item=item,
             index=index,
@@ -695,7 +772,9 @@ def _run_detail(
     loaded = load_run_directory(run_dir=results_dir / entry.run_id)
     dataset = _dataset_for_entry(entry=entry, cache=dataset_cache)
     prompt = load_prompt_definition(
-        path=PROMPT_REGISTRY_DIR / f"{entry.prompt_id}{PROMPT_JSON_SUFFIX}",
+        path=P001_PROMPT_PATH
+        if entry.prompt_id == P001_PROMPT_PATH.stem
+        else PROMPT_REGISTRY_DIR / f"{entry.prompt_id}{PROMPT_JSON_SUFFIX}",
     )
     slices = _slice_summaries(loaded=loaded, dataset=dataset)
     return RunDetail(
@@ -869,9 +948,9 @@ def _render_static_pages(
             title=page.title,
             description=page.description,
             path=path,
-            context={"page": page},
+            context={PAGE_CONTEXT_KEY: page},
         )
-        _write_text(path=output_dir / page.slug / "index.html", text=html_text)
+        _write_text(path=_page_file_path(output_dir=output_dir, route=path), text=html_text)
         paths.append(path)
     return paths
 
@@ -883,7 +962,7 @@ def _render_dataset_page(
     base_url: str,
 ) -> str:
     release = get_dataset_release(release_id=DEFAULT_LEXEN_RELEASE_ID)
-    path = f"datasets/{release.release_id}/"
+    path = f"{DATASETS_ROUTE_PREFIX}/{release.release_id}/"
     html_text = _render(
         env=env,
         template_name="dataset.html.j2",
@@ -891,9 +970,9 @@ def _render_dataset_page(
         title=f"{release.release_id} Dataset",
         description="Registered lexEN dataset release used by the SenseBench leaderboard.",
         path=path,
-        context={"release": release},
+        context={RELEASE_CONTEXT_KEY: release},
     )
-    _write_text(path=output_dir / path / "index.html", text=html_text)
+    _write_text(path=_page_file_path(output_dir=output_dir, route=path), text=html_text)
     return path
 
 
@@ -906,7 +985,7 @@ def _render_prompt_pages(
     paths: list[str] = []
     for prompt_path in registered_prompt_paths():
         prompt = load_prompt_definition(path=prompt_path)
-        path = f"prompts/{prompt.id}/"
+        path = f"{PROMPTS_ROUTE_PREFIX}/{prompt.id}/"
         html_text = _render(
             env=env,
             template_name="prompt.html.j2",
@@ -915,11 +994,11 @@ def _render_prompt_pages(
             description=prompt.description,
             path=path,
             context={
-                "prompt": prompt,
-                "params_json": json.dumps(prompt.params.model_dump(mode="json"), indent=2),
+                PROMPT_CONTEXT_KEY: prompt,
+                PARAMS_JSON_CONTEXT_KEY: prompt.params.model_dump_json(indent=2),
             },
         )
-        _write_text(path=output_dir / path / "index.html", text=html_text)
+        _write_text(path=_page_file_path(output_dir=output_dir, route=path), text=html_text)
         paths.append(path)
     return paths
 
@@ -927,7 +1006,7 @@ def _render_prompt_pages(
 def _sitemap(*, base_url: str, paths: list[str]) -> str:
     urls = "\n".join(
         "  <url><loc>"
-        f"{html.escape(_absolute_url(base_url=base_url, path=path))}"
+        f"{escape(_absolute_url(base_url=base_url, path=path))}"
         "</loc></url>"
         for path in paths
     )
@@ -946,9 +1025,9 @@ def _render_404(*, env: Environment, output_dir: Path, base_url: str) -> None:
         base_url=base_url,
         title="Not Found",
         description="The requested SenseBench page was not found.",
-        path="404.html",
+        path=NOT_FOUND_FILENAME,
         context={
-            "page": StaticPage(
+            PAGE_CONTEXT_KEY: StaticPage(
                 slug="404",
                 title="Not Found",
                 description="The requested page was not found.",
@@ -961,7 +1040,7 @@ def _render_404(*, env: Environment, output_dir: Path, base_url: str) -> None:
             )
         },
     )
-    _write_text(path=output_dir / "404.html", text=html_text)
+    _write_text(path=output_dir / NOT_FOUND_FILENAME, text=html_text)
 
 
 def _render_run_pages(
@@ -987,9 +1066,14 @@ def _render_run_pages(
             dataset_cache=dataset_cache,
             artifacts=artifacts,
         )
-        data_path = output_dir / "data" / "runs" / f"{entry.run_id}.json"
+        data_path = (
+            output_dir
+            / SITE_DATA_DIRNAME
+            / SITE_RUNS_DIRNAME
+            / f"{entry.run_id}.json"
+        )
         _write_json(path=data_path, value=detail)
-        path = f"runs/{entry.run_id}/"
+        path = f"{RUNS_ROUTE_PREFIX}/{entry.run_id}/"
         html_text = _render(
             env=env,
             template_name="run.html.j2",
@@ -998,13 +1082,14 @@ def _render_run_pages(
             description=f"Verified SenseBench run {entry.run_id}.",
             path=path,
             context={
-                "detail": detail,
-                "repository_artifact_url": (
-                    f"{DEFAULT_REPOSITORY_TREE_URL}/results/{entry.run_id}/"
+                DETAIL_CONTEXT_KEY: detail,
+                REPOSITORY_ARTIFACT_URL_CONTEXT_KEY: (
+                    f"{DEFAULT_REPOSITORY_TREE_URL}/"
+                    f"{SUBMITTED_RESULTS_DIR.as_posix()}/{entry.run_id}/"
                 ),
             },
         )
-        _write_text(path=output_dir / path / "index.html", text=html_text)
+        _write_text(path=_page_file_path(output_dir=output_dir, route=path), text=html_text)
         paths.append(path)
     return paths
 
@@ -1016,7 +1101,7 @@ def _render_runs_index(
     base_url: str,
     entries: list[LeaderboardEntry],
 ) -> str:
-    path = "runs/"
+    path = RUNS_ROUTE
     html_text = _render(
         env=env,
         template_name="runs_index.html.j2",
@@ -1024,9 +1109,9 @@ def _render_runs_index(
         title="Run Archive",
         description="All verified SenseBench leaderboard submissions.",
         path=path,
-        context={"entries": entries},
+        context={ENTRIES_CONTEXT_KEY: entries},
     )
-    _write_text(path=output_dir / path / "index.html", text=html_text)
+    _write_text(path=_page_file_path(output_dir=output_dir, route=path), text=html_text)
     return path
 
 
@@ -1046,17 +1131,17 @@ def _render_index(
         description="Verified leaderboard for English word sense disambiguation with LLMs.",
         path=path,
         context={
-            "site_data": site_data,
-            "datasets": sorted(DATASET_RELEASES),
+            SITE_DATA_CONTEXT_KEY: site_data,
+            DATASETS_CONTEXT_KEY: sorted(DATASET_RELEASES),
         },
     )
-    _write_text(path=output_dir / "index.html", text=html_text)
+    _write_text(path=output_dir / INDEX_HTML_FILENAME, text=html_text)
     return path
 
 
 def _clean_output_dir(*, output_dir: Path) -> None:
     if output_dir.exists():
-        shutil.rmtree(output_dir)
+        rmtree(output_dir)
     output_dir.mkdir(parents=True)
 
 
@@ -1083,10 +1168,13 @@ def build_site(
     _clean_output_dir(output_dir=output_dir)
     _copy_static_assets(output_dir=output_dir)
     site_data = _site_data(collection=collection)
-    env.globals["asset_version"] = (
+    env.globals[ASSET_VERSION_GLOBAL_KEY] = (
         site_data.summary.generated_at.replace(":", "").replace("+", "")
     )
-    _write_json(path=output_dir / "data" / "leaderboard.json", value=site_data)
+    _write_json(
+        path=output_dir / SITE_DATA_DIRNAME / LEADERBOARD_JSON_PATH,
+        value=site_data,
+    )
 
     paths: list[str] = []
     paths.append(
@@ -1118,13 +1206,16 @@ def build_site(
     paths.extend(_render_prompt_pages(env=env, output_dir=output_dir, base_url=base_url))
     paths.extend(_render_static_pages(env=env, output_dir=output_dir, base_url=base_url))
     _render_404(env=env, output_dir=output_dir, base_url=base_url)
-    _write_text(path=output_dir / "sitemap.xml", text=_sitemap(base_url=base_url, paths=paths))
     _write_text(
-        path=output_dir / "robots.txt",
+        path=output_dir / SITEMAP_FILENAME,
+        text=_sitemap(base_url=base_url, paths=paths),
+    )
+    _write_text(
+        path=output_dir / ROBOTS_FILENAME,
         text=(
             "User-agent: *\n"
             "Allow: /\n"
-            f"Sitemap: {_absolute_url(base_url=base_url, path='sitemap.xml')}\n"
+            f"Sitemap: {_absolute_url(base_url=base_url, path=SITEMAP_FILENAME)}\n"
         ),
     )
     return output_dir

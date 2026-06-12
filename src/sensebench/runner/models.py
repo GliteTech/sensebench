@@ -1,12 +1,10 @@
-"""Internal runner dataclasses."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from sensebench.datasets.models import ItemID
 from sensebench.prompts.render import ChatMessage, RenderedTask
-from sensebench.runs.models import AttemptKind, CallID, CallRecord, PredictionRecord
+from sensebench.runs.models import AttemptKind, CallID, CallRecord, ModelID, PredictionRecord
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,7 +14,7 @@ class CompletionRequest:
     vote_index: int
     attempt_index: int
     attempt_kind: AttemptKind
-    model: str
+    model: ModelID
     messages: list[ChatMessage]
     parameters: dict[str, object] = field(default_factory=dict)
 

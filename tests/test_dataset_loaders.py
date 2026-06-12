@@ -1,28 +1,18 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from sensebench.datasets.context import build_context_window, build_dataset_index
 from sensebench.datasets.loaders import (
     ORIGINAL_DOCUMENT_ID_METADATA_KEY,
     ORIGINAL_SENTENCE_ID_METADATA_KEY,
+    JsonDatasetRecord,
     load_jsonl_dataset,
 )
 from sensebench.datasets.models import DatasetID, DocumentID, ItemID, SenseKey, SentenceID
 
 DATASET_ID_FIXTURE: DatasetID = "fixture"
-ITEM_ID_FIELD: str = "item_id"
-DOCUMENT_ID_FIELD: str = "document_id"
-SENTENCE_ID_FIELD: str = "sentence_id"
-SENTENCE_INDEX_FIELD: str = "sentence_index"
-TARGET_TOKEN_INDEX_FIELD: str = "target_token_index"
-TARGET_TEXT_FIELD: str = "target_text"
-LEMMA_FIELD: str = "lemma"
-POS_FIELD: str = "pos"
-GOLD_SENSE_KEYS_FIELD: str = "gold_sense_keys"
-SENTENCES_FIELD: str = "sentences"
-METADATA_FIELD: str = "metadata"
+ITEMS_JSONL_FILENAME: str = "items.jsonl"
 DOCUMENT_ID: DocumentID = "d1"
 FIRST_ITEM_ID: ItemID = "i1"
 SECOND_ITEM_ID: ItemID = "i2"
@@ -35,10 +25,10 @@ FIRST_SENSE_KEY: SenseKey = "alpha%1:00:00::"
 SECOND_SENSE_KEY: SenseKey = "beta%1:00:00::"
 
 
-def _write_jsonl(*, path: Path, rows: list[dict[str, object]]) -> None:
-    with path.open("w", encoding="utf-8") as handle:
+def _write_jsonl(*, path: Path, rows: list[JsonDatasetRecord]) -> None:
+    with path.open(mode="w", encoding="utf-8") as handle:
         for row in rows:
-            handle.write(json.dumps(row) + "\n")
+            handle.write(row.model_dump_json() + "\n")
 
 
 def _dataset_row(
@@ -47,24 +37,23 @@ def _dataset_row(
     sentence_id: SentenceID,
     word: str,
     sense_key: SenseKey,
-) -> dict[str, object]:
-    return {
-        ITEM_ID_FIELD: item_id,
-        DOCUMENT_ID_FIELD: DOCUMENT_ID,
-        SENTENCE_ID_FIELD: sentence_id,
-        SENTENCE_INDEX_FIELD: 0,
-        TARGET_TOKEN_INDEX_FIELD: 0,
-        TARGET_TEXT_FIELD: word,
-        LEMMA_FIELD: word,
-        POS_FIELD: NOUN_POS,
-        GOLD_SENSE_KEYS_FIELD: [sense_key],
-        SENTENCES_FIELD: [[word]],
-        METADATA_FIELD: {},
-    }
+) -> JsonDatasetRecord:
+    return JsonDatasetRecord(
+        item_id=item_id,
+        document_id=DOCUMENT_ID,
+        sentence_id=sentence_id,
+        sentence_index=0,
+        target_token_index=0,
+        target_text=word,
+        lemma=word,
+        pos=NOUN_POS,
+        gold_sense_keys=[sense_key],
+        sentences=[[word]],
+    )
 
 
 def test_jsonl_loader_keeps_repeated_original_document_ids_separate(tmp_path: Path) -> None:
-    dataset_path = tmp_path / "items.jsonl"
+    dataset_path = tmp_path / ITEMS_JSONL_FILENAME
     _write_jsonl(
         path=dataset_path,
         rows=[

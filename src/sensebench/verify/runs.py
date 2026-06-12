@@ -16,13 +16,14 @@ from sensebench.prompts.models import OutputMode, PromptDefinition, PromptID
 from sensebench.prompts.registry import registered_prompt_paths
 from sensebench.prompts.render import ChatMessage, RenderedTask, render_task
 from sensebench.runner.evaluate import choose_prediction, prediction_is_correct
-from sensebench.runner.extract import extract_sense_index
+from sensebench.runner.extract import ValidSenseIndexExtraction, extract_sense_index
 from sensebench.runs.loaders import load_run_directory
 from sensebench.runs.models import (
     AttemptKind,
     CallID,
     CallRecord,
     CallStatus,
+    InvalidOutputReason,
     MessageRecord,
     PredictionRecord,
     PredictionStatus,
@@ -32,11 +33,12 @@ from sensebench.runs.models import (
     VoteRecord,
     VoteStatus,
 )
-from sensebench.wordnet import SenseCandidate, get_candidate_senses, wordnet_version
+from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses, wordnet_version
 
 ACCURACY_TOLERANCE: float = 1e-12
 MESSAGE_ROLE_FIELD: str = "role"
 MESSAGE_CONTENT_FIELD: str = "content"
+DATASET_ITEM_DIFF_SAMPLE_LIMIT: int = 10
 
 
 class RunValidationRule(StrEnum):
@@ -247,7 +249,10 @@ def _dataset_issues(
         RunValidationIssue(
             rule=RunValidationRule.DATASET_ITEMS,
             location=PREDICTIONS_FILENAME,
-            message=f"missing={missing[:10]} extra={extra[:10]}",
+            message=(
+                f"missing={missing[:DATASET_ITEM_DIFF_SAMPLE_LIMIT]} "
+                f"extra={extra[:DATASET_ITEM_DIFF_SAMPLE_LIMIT]}"
+            ),
         )
     ]
 
@@ -334,8 +339,8 @@ def _decision_issues(
     if prediction.status in (PredictionStatus.MONOSEMOUS, PredictionStatus.NO_CANDIDATES):
         return []
     messages: list[str] = []
-    expected_vote_indexes = list(range(1, policy.votes_per_item + 1))
-    observed_vote_indexes = [vote.vote_index for vote in prediction.votes]
+    expected_vote_indexes: list[int] = list(range(1, policy.votes_per_item + 1))
+    observed_vote_indexes: list[int] = [vote.vote_index for vote in prediction.votes]
     if observed_vote_indexes != expected_vote_indexes:
         messages.append(
             f"vote indexes {observed_vote_indexes} do not match "
@@ -362,7 +367,20 @@ class _ReplayedVote:
     status: VoteStatus
     chosen_sense_index: int | None
     chosen_sense_key: SenseKey | None
-    invalid_reason: str | None
+    invalid_reason: InvalidOutputReason | str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _VoteReplayResult:
+    replayed_vote: _ReplayedVote | None
+    issues: list[RunValidationIssue]
+
+
+@dataclass(frozen=True, slots=True)
+class _CandidateFingerprint:
+    index: int
+    sense_key: SenseKey
+    synset_id: SynsetID
 
 
 def _stored_vote_fields(*, vote: VoteRecord) -> _ReplayedVote:
@@ -382,7 +400,7 @@ def _replay_vote(
     sense_keys_by_index: dict[int, SenseKey],
     max_attempts: int,
     location: str,
-) -> tuple[_ReplayedVote | None, list[RunValidationIssue]]:
+) -> _VoteReplayResult:
     issues: list[RunValidationIssue] = []
 
     def _issue(message: str) -> RunValidationIssue:
@@ -392,20 +410,20 @@ def _replay_vote(
             message=message,
         )
 
-    invalid_reason: str | None = None
+    invalid_reason: InvalidOutputReason | str | None = None
     for call_position, call in enumerate(calls):
         is_last_call = call_position == len(calls) - 1
         if call.status == CallStatus.TRANSPORT_ERROR:
             if not is_last_call:
                 issues.append(_issue("calls recorded after a transport error"))
-            return (
-                _ReplayedVote(
+            return _VoteReplayResult(
+                replayed_vote=_ReplayedVote(
                     status=VoteStatus.TRANSPORT_ERROR,
                     chosen_sense_index=None,
                     chosen_sense_key=None,
                     invalid_reason=call.error_kind,
                 ),
-                issues,
+                issues=issues,
             )
         try:
             extracted = extract_sense_index(
@@ -415,34 +433,32 @@ def _replay_vote(
             )
         except Exception as exc:
             issues.append(_issue(f"extraction replay raised {type(exc).__name__}: {exc}"))
-            return None, issues
-        if extracted.sense_index is not None:
+            return _VoteReplayResult(replayed_vote=None, issues=issues)
+        if isinstance(extracted, ValidSenseIndexExtraction):
             if not is_last_call:
                 issues.append(_issue("calls recorded after a successful extraction"))
-            return (
-                _ReplayedVote(
+            return _VoteReplayResult(
+                replayed_vote=_ReplayedVote(
                     status=VoteStatus.SUCCESS,
                     chosen_sense_index=extracted.sense_index,
                     chosen_sense_key=sense_keys_by_index.get(extracted.sense_index),
                     invalid_reason=None,
                 ),
-                issues,
+                issues=issues,
             )
-        invalid_reason = (
-            extracted.invalid_reason.value if extracted.invalid_reason is not None else None
-        )
+        invalid_reason = extracted.invalid_reason
     if len(calls) != max_attempts:
         issues.append(
             _issue(f"invalid-output vote must record {max_attempts} attempt(s), found {len(calls)}")
         )
-    return (
-        _ReplayedVote(
+    return _VoteReplayResult(
+        replayed_vote=_ReplayedVote(
             status=VoteStatus.INVALID_OUTPUT,
             chosen_sense_index=None,
             chosen_sense_key=None,
             invalid_reason=invalid_reason,
         ),
-        issues,
+        issues=issues,
     )
 
 
@@ -525,7 +541,7 @@ def _vote_extraction_issues(
                 )
             )
         issues.extend(_call_structure_issues(prediction=prediction, vote=vote, calls=calls))
-        replayed, replay_issues = _replay_vote(
+        replay_result = _replay_vote(
             calls=calls,
             output_mode=output_mode,
             candidate_count=len(prediction.candidates),
@@ -533,9 +549,10 @@ def _vote_extraction_issues(
             max_attempts=max_attempts,
             location=location,
         )
-        issues.extend(replay_issues)
-        if replayed is None:
+        issues.extend(replay_result.issues)
+        if replay_result.replayed_vote is None:
             continue
+        replayed = replay_result.replayed_vote
         stored = _stored_vote_fields(vote=vote)
         if stored != replayed:
             issues.append(
@@ -708,12 +725,20 @@ def _candidate_set_issues(
         rendered = render_cache.rendered(item_id=prediction.item_id)
         if rendered is None:
             continue  # items missing from the dataset are reported by the dataset_items rule
-        expected = [
-            (candidate.index, candidate.sense_key, candidate.synset_id)
+        expected: list[_CandidateFingerprint] = [
+            _CandidateFingerprint(
+                index=candidate.index,
+                sense_key=candidate.sense_key,
+                synset_id=candidate.synset_id,
+            )
             for candidate in rendered.candidates
         ]
-        observed = [
-            (candidate.index, candidate.sense_key, candidate.synset_id)
+        observed: list[_CandidateFingerprint] = [
+            _CandidateFingerprint(
+                index=candidate.index,
+                sense_key=candidate.sense_key,
+                synset_id=candidate.synset_id,
+            )
             for candidate in prediction.candidates
         ]
         if observed != expected:

@@ -2,21 +2,40 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from sensebench.datasets.models import DatasetID, ItemID, SenseKey
 from sensebench.prompts.models import MessageRole, PromptID
 from sensebench.wordnet import SynsetID
 
-RUN_SCHEMA_VERSION: Literal["sensebench-run-v1"] = "sensebench-run-v1"
-CLOUD_LLM_KIND: Literal["cloud_llm"] = "cloud_llm"
-SELF_HOSTED_LLM_KIND: Literal["self_hosted_llm"] = "self_hosted_llm"
+type RunSchemaVersion = Literal["sensebench-run-v1"]
+type CloudLlmKind = Literal["cloud_llm"]
+type SelfHostedLlmKind = Literal["self_hosted_llm"]
+
+RUN_SCHEMA_VERSION: RunSchemaVersion = "sensebench-run-v1"
+CLOUD_LLM_KIND: CloudLlmKind = "cloud_llm"
+SELF_HOSTED_LLM_KIND: SelfHostedLlmKind = "self_hosted_llm"
+MODEL_REFERENCE_KIND_FIELD: str = "kind"
+USD_CURRENCY_CODE: Literal["USD"] = "USD"
+MIN_HTTP_STATUS_CODE: int = 100
+MAX_HTTP_STATUS_CODE: int = 599
 
 type RunID = str
 type CallID = str
+type ModelID = str
+
+type NonNegativeInt = Annotated[int, Field(ge=0)]
+type PositiveInt = Annotated[int, Field(ge=1)]
+type NonNegativeFloat = Annotated[float, Field(ge=0.0)]
+type Probability = Annotated[float, Field(ge=0.0, le=1.0)]
+type HttpStatusCode = Annotated[
+    int,
+    Field(ge=MIN_HTTP_STATUS_CODE, le=MAX_HTTP_STATUS_CODE),
+]
 
 
 class StrictRunModel(BaseModel):
@@ -71,12 +90,22 @@ class CostSourceKind(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
+class InvalidOutputReason(StrEnum):
+    EMPTY_OUTPUT = "empty_output"
+    INVALID_JSON = "invalid_json"
+    JSON_NOT_OBJECT = "json_not_object"
+    JSON_WRONG_KEYS = "json_wrong_keys"
+    SENSE_INDEX_NOT_INT = "sense_index_not_int"
+    PLAIN_NOT_INTEGER = "plain_not_integer"
+    INDEX_OUT_OF_RANGE = "index_out_of_range"
+
+
 class DatasetReference(StrictRunModel):
     dataset_id: DatasetID
     dataset_version: str | None = None
     dataset_revision: str | None = None
     content_hash: str | None = None
-    item_count: int = Field(ge=0)
+    item_count: NonNegativeInt
 
 
 class PromptReference(StrictRunModel):
@@ -85,11 +114,11 @@ class PromptReference(StrictRunModel):
 
 
 class CloudLlmReference(StrictRunModel):
-    kind: Literal["cloud_llm"]
+    kind: CloudLlmKind
     display_name: str
-    requested_model: str
-    resolved_model: str | None = None
-    resolved_model_counts: dict[str, int] = Field(default_factory=dict)
+    requested_model: ModelID
+    resolved_model: ModelID | None = None
+    resolved_model_counts: dict[ModelID, NonNegativeInt] = Field(default_factory=dict)
     llm_vendor: str | None = None
     api_provider: str | None = None
     source_kind: ModelSourceKind
@@ -100,11 +129,11 @@ class CloudLlmReference(StrictRunModel):
 
 
 class SelfHostedLlmReference(StrictRunModel):
-    kind: Literal["self_hosted_llm"]
+    kind: SelfHostedLlmKind
     display_name: str
-    requested_model: str
-    resolved_model: str | None = None
-    resolved_model_counts: dict[str, int] = Field(default_factory=dict)
+    requested_model: ModelID
+    resolved_model: ModelID | None = None
+    resolved_model_counts: dict[ModelID, NonNegativeInt] = Field(default_factory=dict)
     llm_vendor: str | None = None
     source_kind: ModelSourceKind
     license: str | None = None
@@ -120,52 +149,52 @@ class SelfHostedLlmReference(StrictRunModel):
 
 type ModelReference = Annotated[
     CloudLlmReference | SelfHostedLlmReference,
-    Field(discriminator="kind"),
+    Field(discriminator=MODEL_REFERENCE_KIND_FIELD),
 ]
 
 
 class SamplingParameters(StrictRunModel):
     temperature: float | None = None
     top_p: float | None = None
-    max_tokens: int | None = None
-    seed: int | None = None
+    max_tokens: PositiveInt | None = None
+    seed: NonNegativeInt | None = None
     extra: dict[str, str] = Field(default_factory=dict)
 
 
 class RunPolicy(StrictRunModel):
-    votes_per_item: int = Field(ge=1)
-    semantic_reasks_per_invalid_vote: int = Field(ge=0)
+    votes_per_item: PositiveInt
+    semantic_reasks_per_invalid_vote: NonNegativeInt
     tie_break: TieBreakKind
     monosemous_policy: MonosemousPolicyKind
 
 
 class TokenUsage(StrictRunModel):
-    input_tokens: int | None = None
-    cached_input_tokens: int | None = None
-    output_tokens: int | None = None
-    reasoning_output_tokens: int | None = None
+    input_tokens: NonNegativeInt | None = None
+    cached_input_tokens: NonNegativeInt | None = None
+    output_tokens: NonNegativeInt | None = None
+    reasoning_output_tokens: NonNegativeInt | None = None
 
 
 class CostBreakdown(StrictRunModel):
-    currency: Literal["USD"] = "USD"
-    total_usd: float | None = None
-    input_uncached_usd: float | None = None
-    input_cached_usd: float | None = None
-    output_usd: float | None = None
-    input_uncached_unit_price_usd: float | None = None
-    input_cached_unit_price_usd: float | None = None
-    output_unit_price_usd: float | None = None
+    currency: Literal["USD"] = USD_CURRENCY_CODE
+    total_usd: NonNegativeFloat | None = None
+    input_uncached_usd: NonNegativeFloat | None = None
+    input_cached_usd: NonNegativeFloat | None = None
+    output_usd: NonNegativeFloat | None = None
+    input_uncached_unit_price_usd: NonNegativeFloat | None = None
+    input_cached_unit_price_usd: NonNegativeFloat | None = None
+    output_unit_price_usd: NonNegativeFloat | None = None
     source: CostSourceKind
 
 
 class RunTotals(StrictRunModel):
-    item_count: int = Field(ge=0)
-    correct_count: int = Field(ge=0)
-    accuracy: float | None = None
-    call_count: int = Field(ge=0)
+    item_count: NonNegativeInt
+    correct_count: NonNegativeInt
+    accuracy: Probability | None = None
+    call_count: NonNegativeInt
     usage: TokenUsage
     cost: CostBreakdown
-    elapsed_seconds: float | None = None
+    elapsed_seconds: NonNegativeFloat | None = None
 
 
 class RunnerIdentity(StrictRunModel):
@@ -175,9 +204,9 @@ class RunnerIdentity(StrictRunModel):
 
 
 class RunMetadata(StrictRunModel):
-    schema_version: Literal["sensebench-run-v1"]
+    schema_version: RunSchemaVersion
     run_id: RunID
-    created_at: str
+    created_at: datetime
     git_commit: str | None
     runner: RunnerIdentity
     dataset: DatasetReference
@@ -187,20 +216,24 @@ class RunMetadata(StrictRunModel):
     policy: RunPolicy
     totals: RunTotals
 
+    @field_serializer("created_at")
+    def serialize_created_at(self, value: datetime) -> str:
+        return value.isoformat()
+
 
 class CandidateRecord(StrictRunModel):
-    index: int = Field(ge=1)
+    index: PositiveInt
     sense_key: SenseKey
     synset_id: SynsetID
 
 
 class VoteRecord(StrictRunModel):
-    vote_index: int = Field(ge=1)
+    vote_index: PositiveInt
     status: VoteStatus
-    chosen_sense_index: int | None = None
+    chosen_sense_index: PositiveInt | None = None
     chosen_sense_key: SenseKey | None = None
     call_ids: list[CallID] = Field(default_factory=list)
-    invalid_reason: str | None = None
+    invalid_reason: InvalidOutputReason | str | None = None
 
 
 class PredictionRecord(StrictRunModel):
@@ -208,14 +241,14 @@ class PredictionRecord(StrictRunModel):
     gold_sense_keys: list[SenseKey]
     candidates: list[CandidateRecord]
     votes: list[VoteRecord]
-    predicted_sense_index: int | None = None
+    predicted_sense_index: PositiveInt | None = None
     predicted_sense_key: SenseKey | None = None
     is_correct: bool | None = None
     status: PredictionStatus
     was_monosemous: bool
     usage: TokenUsage
     cost: CostBreakdown
-    latency_seconds: float | None = None
+    latency_seconds: NonNegativeFloat | None = None
 
 
 class MessageRecord(StrictRunModel):
@@ -226,19 +259,19 @@ class MessageRecord(StrictRunModel):
 class CallRecord(StrictRunModel):
     call_id: CallID
     item_id: ItemID
-    vote_index: int = Field(ge=1)
-    attempt_index: int = Field(ge=1)
+    vote_index: PositiveInt
+    attempt_index: PositiveInt
     attempt_kind: AttemptKind
-    transport_retry_count: int = Field(ge=0)
+    transport_retry_count: NonNegativeInt
     status: CallStatus
-    model: str
+    model: ModelID
     messages: list[MessageRecord]
     raw_output: str | None = None
     raw_response: dict[str, object] | None = None
     usage: TokenUsage
     cost: CostBreakdown
-    latency_seconds: float | None = None
-    http_status: int | None = None
+    latency_seconds: NonNegativeFloat | None = None
+    http_status: HttpStatusCode | None = None
     provider_request_id: str | None = None
     error_kind: str | None = None
     error_message: str | None = None

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import random
-import re
 from dataclasses import dataclass
+from hashlib import sha256
+from json import dumps
+from random import Random
+from re import Match
 from typing import assert_never
 
 from sensebench.datasets.context import ContextWindow, build_context_window
@@ -31,6 +31,10 @@ from sensebench.prompts.models import (
 from sensebench.wordnet import SenseCandidate, SynsetID
 
 RANDOM_SEED_BYTES: int = 8
+SHUFFLE_SEED_CONTEXT: str = "sense_order"
+RENDER_HASH_PREFIX: str = "sha256:"
+RENDER_HASH_ROLE_FIELD: str = "role"
+RENDER_HASH_CONTENT_FIELD: str = "content"
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,8 +98,8 @@ def _marked_context(*, context: ContextWindow, marker: TargetMarker) -> str:
 
 
 def _shuffle_seed(*, prompt_id: PromptID, item_id: ItemID) -> int:
-    digest = hashlib.sha256(f"{prompt_id}|{item_id}|sense_order".encode()).digest()
-    return int.from_bytes(digest[:RANDOM_SEED_BYTES], byteorder="big", signed=False)
+    digest = sha256(f"{prompt_id}|{item_id}|{SHUFFLE_SEED_CONTEXT}".encode()).digest()
+    return int.from_bytes(bytes=digest[:RANDOM_SEED_BYTES], byteorder="big", signed=False)
 
 
 def _ordered_candidates(
@@ -116,7 +120,7 @@ def _ordered_candidates(
         case SenseOrder.RANDOM_FIXED:
             seed = _shuffle_seed(prompt_id=prompt.id, item_id=item.item_id)
             items: list[SenseCandidate] = list(candidates)
-            random.Random(seed).shuffle(items)
+            Random(seed).shuffle(items)
             return OrderedCandidates(candidates=items, shuffle_seed=seed)
         case _:
             assert_never(order)
@@ -145,7 +149,7 @@ def _candidate_parts(
         if id_text is not None:
             parts.append(id_text)
     if prompt.params.include_pos:
-        parts.append(f"pos={candidate.pos}")
+        parts.append(f"pos={candidate.pos.value}")
     if prompt.params.include_definition:
         parts.append(f"definition={candidate.definition}")
     if prompt.params.include_synonyms and len(candidate.synonyms) > 0:
@@ -188,26 +192,26 @@ def _candidate_block(
 
 
 def _render_template(*, content: str, variables: dict[str, str]) -> str:
-    def _substitute(match: re.Match[str]) -> str:
+    def _substitute(match: Match[str]) -> str:
         variable_name = match.group(1)
         replacement = variables.get(variable_name)
         if replacement is None:
             return match.group(0)
         return replacement
 
-    return TEMPLATE_VARIABLE_PATTERN.sub(_substitute, content)
+    return TEMPLATE_VARIABLE_PATTERN.sub(repl=_substitute, string=content)
 
 
 def _render_hash(*, messages: list[ChatMessage]) -> str:
     payload: list[dict[str, str]] = [
         {
-            "role": message.role.value,
-            "content": message.content,
+            RENDER_HASH_ROLE_FIELD: message.role.value,
+            RENDER_HASH_CONTENT_FIELD: message.content,
         }
         for message in messages
     ]
-    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return "sha256:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    raw = dumps(obj=payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return RENDER_HASH_PREFIX + sha256(raw.encode("utf-8")).hexdigest()
 
 
 def render_task(

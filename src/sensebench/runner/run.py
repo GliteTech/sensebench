@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from subprocess import run
 
 from tqdm import tqdm
 
@@ -29,6 +29,7 @@ from sensebench.runs.models import (
     CallRecord,
     CallStatus,
     DatasetReference,
+    ModelID,
     ModelReference,
     MonosemousPolicyKind,
     PredictionRecord,
@@ -49,6 +50,12 @@ PROGRESS_DESCRIPTION: str = "Evaluating items"
 PROGRESS_UNIT: str = "item"
 PREFLIGHT_CALL_ID: str = "preflight"
 PREFLIGHT_PROMPT: str = "Reply with the number 1."
+LLM_TEMPERATURE_PARAMETER: str = "temperature"
+LLM_TOP_P_PARAMETER: str = "top_p"
+LLM_MAX_TOKENS_PARAMETER: str = "max_tokens"
+LLM_SEED_PARAMETER: str = "seed"
+LLM_API_BASE_PARAMETER: str = "api_base"
+LLM_REASONING_EFFORT_PARAMETER: str = "reasoning_effort"
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,8 +89,8 @@ class IndexedItemEvaluation:
 
 def git_commit() -> str | None:
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+        result = run(
+            args=["git", "rev-parse", "HEAD"],
             capture_output=True,
             check=True,
             text=True,
@@ -96,13 +103,13 @@ def git_commit() -> str | None:
 def _llm_parameters(*, sampling: SamplingParameters) -> dict[str, object]:
     parameters: dict[str, object] = {}
     if sampling.temperature is not None:
-        parameters["temperature"] = sampling.temperature
+        parameters[LLM_TEMPERATURE_PARAMETER] = sampling.temperature
     if sampling.top_p is not None:
-        parameters["top_p"] = sampling.top_p
+        parameters[LLM_TOP_P_PARAMETER] = sampling.top_p
     if sampling.max_tokens is not None:
-        parameters["max_tokens"] = sampling.max_tokens
+        parameters[LLM_MAX_TOKENS_PARAMETER] = sampling.max_tokens
     if sampling.seed is not None:
-        parameters["seed"] = sampling.seed
+        parameters[LLM_SEED_PARAMETER] = sampling.seed
     for key, value in sampling.extra.items():
         parameters[key] = value
     return parameters
@@ -111,10 +118,16 @@ def _llm_parameters(*, sampling: SamplingParameters) -> dict[str, object]:
 def _completion_parameters(*, config: RunConfig) -> dict[str, object]:
     parameters: dict[str, object] = _llm_parameters(sampling=config.sampling)
     if config.model.endpoint_base_url is not None:
-        parameters["api_base"] = config.model.endpoint_base_url
+        parameters[LLM_API_BASE_PARAMETER] = config.model.endpoint_base_url
     if config.model.kind == CLOUD_LLM_KIND and config.model.reasoning_effort is not None:
-        parameters["reasoning_effort"] = config.model.reasoning_effort
+        parameters[LLM_REASONING_EFFORT_PARAMETER] = config.model.reasoning_effort
     return parameters
+
+
+def _requested_model_id(*, model: ModelReference) -> ModelID:
+    if len(model.requested_model) > 0:
+        return model.requested_model
+    return model.display_name
 
 
 def _sum_optional_ints(*, values: list[int | None]) -> int | None:
@@ -207,7 +220,7 @@ async def _evaluate_one(
         candidates=candidates,
     )
     evaluation_config = EvaluationConfig(
-        model=config.model.requested_model or config.model.display_name,
+        model=_requested_model_id(model=config.model),
         votes_per_item=config.votes_per_item,
         semantic_reasks_per_invalid_vote=config.semantic_reasks_per_invalid_vote,
         llm_parameters=_completion_parameters(config=config),
@@ -280,7 +293,11 @@ async def _evaluate_items(
         raise
     finally:
         progress.close()
-    return [evaluation for evaluation in evaluations_by_index if evaluation is not None]
+    evaluations: list[ItemEvaluation] = []
+    for evaluation in evaluations_by_index:
+        assert evaluation is not None, "all item evaluations completed"
+        evaluations.append(evaluation)
+    return evaluations
 
 
 async def preflight_model(*, config: RunConfig, client: CompletionClient) -> None:
@@ -290,7 +307,7 @@ async def preflight_model(*, config: RunConfig, client: CompletionClient) -> Non
         vote_index=1,
         attempt_index=1,
         attempt_kind=AttemptKind.INITIAL,
-        model=config.model.requested_model or config.model.display_name,
+        model=_requested_model_id(model=config.model),
         messages=[ChatMessage(role=MessageRole.USER, content=PREFLIGHT_PROMPT)],
         parameters=_completion_parameters(config=config),
     )
@@ -322,7 +339,7 @@ async def run_benchmark(*, config: RunConfig, client: CompletionClient) -> Compl
     metadata = RunMetadata(
         schema_version=RUN_SCHEMA_VERSION,
         run_id=config.run_id,
-        created_at=datetime.now(tz=UTC).isoformat(),
+        created_at=datetime.now(tz=UTC),
         git_commit=git_commit(),
         runner=config.runner,
         dataset=DatasetReference(
