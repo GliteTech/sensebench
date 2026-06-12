@@ -12,7 +12,7 @@ from sensebench.datasets.models import DatasetBundle, ItemID, SenseKey, WsdItem
 from sensebench.leaderboard.aggregate import AccuracyInterval, bootstrap_accuracy_ci
 from sensebench.paths import BASELINE_PREDICTIONS_DIR
 from sensebench.runner.evaluate import prediction_is_correct
-from sensebench.wordnet import get_candidate_senses
+from sensebench.wordnet import get_candidate_senses, wordnet_version
 
 KEY_FILE_FIELD_COUNT: int = 2
 MFS_BASELINE_LABEL: str = "MFS (WordNet first sense)"
@@ -206,6 +206,7 @@ def score_baselines(*, dataset: DatasetBundle) -> list[Baseline]:
     """
     if len(dataset.items) == 0:
         return []
+    wordnet_version()
     baselines: list[Baseline] = [_mfs_baseline(dataset=dataset)]
     for spec in BASELINE_PREDICTION_SPECS:
         predictions = _load_key_file(path=BASELINE_PREDICTIONS_DIR / spec.filename)
