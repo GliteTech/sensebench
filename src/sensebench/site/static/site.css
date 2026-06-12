@@ -252,6 +252,20 @@ dd {
   min-height: 280px;
 }
 
+.compare-charts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.compare-chart-block h3 {
+  margin-top: 0;
+}
+
+.compare-metric-chart {
+  min-height: 260px;
+}
+
 .note,
 .empty-state {
   margin: 8px 0 0;
@@ -363,6 +377,10 @@ pre {
 
   .toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .compare-charts {
+    grid-template-columns: 1fr;
   }
 }
 

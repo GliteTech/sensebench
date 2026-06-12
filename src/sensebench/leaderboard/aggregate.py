@@ -38,7 +38,7 @@ DEFAULT_BOOTSTRAP_RESAMPLES: int = 2000
 DEFAULT_BOOTSTRAP_SEED: int = 12345
 CONFIDENCE_LOW_PERCENTILE: float = 2.5
 CONFIDENCE_HIGH_PERCENTILE: float = 97.5
-LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v2"
+LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v3"
 RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
 
 
@@ -93,9 +93,8 @@ class LeaderboardEntry(LeaderboardModel):
     total_tokens: int | None
     tokens_per_item: float | None
     cost_usd: float | None
-    cost_per_1k_items: float | None
+    cost_per_million_items: float | None
     elapsed_seconds: float | None
-    latency_per_item: float | None
     best_group_key: str
 
 
@@ -265,14 +264,10 @@ def _entry_for_run(
         total_tokens=total_tokens,
         tokens_per_item=_divide(numerator=total_tokens, denominator=item_count),
         cost_usd=cost_usd,
-        cost_per_1k_items=None
+        cost_per_million_items=None
         if cost_usd is None or item_count <= 0
-        else (cost_usd / item_count) * 1000,
+        else (cost_usd / item_count) * 1_000_000,
         elapsed_seconds=metadata.totals.elapsed_seconds,
-        latency_per_item=_divide(
-            numerator=metadata.totals.elapsed_seconds,
-            denominator=item_count,
-        ),
         best_group_key=_best_group_key(loaded=loaded),
     )
 
@@ -394,7 +389,11 @@ def _created_at_timestamp(*, value: str) -> float:
 
 def _sort_key(entry: LeaderboardEntry) -> tuple[float, float, float, str]:
     accuracy = entry.accuracy if entry.accuracy is not None else -1.0
-    cost = entry.cost_per_1k_items if entry.cost_per_1k_items is not None else float("inf")
+    cost = (
+        entry.cost_per_million_items
+        if entry.cost_per_million_items is not None
+        else float("inf")
+    )
     created_at = _created_at_timestamp(value=entry.created_at)
     return (-accuracy, cost, -created_at, entry.run_id)
 

@@ -9,9 +9,10 @@
   const frontierOnly = document.getElementById("frontier-only");
   const chartElement = document.getElementById("leaderboard-chart");
   const chartNote = document.getElementById("chart-note");
-  const compareElement = document.getElementById("compare-chart");
+  const compareCharts = document.getElementById("compare-charts");
   const compareEmpty = document.getElementById("compare-empty");
   const compareTable = document.getElementById("compare-table");
+  const dataVersion = window.SENSEBENCH_DATA_VERSION || "";
 
   if (!table) {
     return;
@@ -25,11 +26,30 @@
   };
 
   const metricLabels = {
-    cost_per_1k_items: "Cost per 1,000 items",
-    latency_per_item: "Latency per item, seconds",
-    tokens_per_item: "Tokens per item",
-    cost_usd: "Total cost, USD"
+    cost_per_million_items: "Cost per million items, USD",
+    tokens_per_item: "Tokens per item"
   };
+
+  const compareMetrics = [
+    {
+      key: "accuracy",
+      title: "Accuracy %",
+      value: (entry) => (entry.accuracy == null ? null : entry.accuracy * 100),
+      format: (value) => `${formatNumber(value, 2)}%`
+    },
+    {
+      key: "cost_per_million_items",
+      title: "Cost / M items",
+      value: (entry) => entry.cost_per_million_items,
+      format: formatMoney
+    },
+    {
+      key: "tokens_per_item",
+      title: "Tokens / item",
+      value: (entry) => entry.tokens_per_item,
+      format: (value) => formatNumber(value, 1)
+    }
+  ];
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -148,8 +168,7 @@
           <td><input class="compare-checkbox" type="checkbox" data-run-id="${escapeHtml(entry.run_id)}"${checked}${disabled}></td>
           <td>${escapeHtml(entry.model)}</td>
           <td>${formatPercent(entry.accuracy)}</td>
-          <td>${formatMoney(entry.cost_per_1k_items)}</td>
-          <td>${formatNumber(entry.latency_per_item, 4)}s</td>
+          <td>${formatMoney(entry.cost_per_million_items)}</td>
           <td>${formatNumber(entry.tokens_per_item, 1)}</td>
           <td>${escapeHtml(entry.prompt_id)}</td>
           <td>${escapeHtml(entry.dataset_version)}</td>
@@ -199,7 +218,7 @@
     if (!chartElement || !window.echarts) {
       return;
     }
-    const metric = chartMode?.value || "cost_per_1k_items";
+    const metric = chartMode?.value || "cost_per_million_items";
     const points = chartPoints(entries, metric);
     const frontier = paretoFrontier(points).sort((a, b) => a.x - b.x);
     const visible = frontierOnly?.checked ? frontier : points;
@@ -215,7 +234,7 @@
             `<strong>${escapeHtml(entry.model)}</strong>`,
             escapeHtml(entry.run_id),
             `Accuracy: ${formatPercent(entry.accuracy)}`,
-            `${metricLabels[metric]}: ${formatNumber(entry[metric], 4)}`
+            `${metricLabels[metric]}: ${formatMetric(metric, entry[metric])}`
           ].join("<br>");
         }
       },
@@ -260,40 +279,73 @@
     window.addEventListener("resize", () => chart.resize(), { once: true });
   }
 
-  function renderCompareChart() {
-    if (!compareElement || !window.echarts) {
+  function formatMetric(metric, value) {
+    if (metric === "cost_per_million_items") {
+      return formatMoney(value);
+    }
+    return formatNumber(value, 2);
+  }
+
+  function renderCompareCharts() {
+    if (!compareCharts || !window.echarts) {
       return;
     }
     const selectedEntries = state.entries.filter((entry) => state.selected.has(entry.run_id));
     if (compareEmpty) {
       compareEmpty.style.display = selectedEntries.length === 0 ? "block" : "none";
     }
-    const chart = window.echarts.init(compareElement);
     if (selectedEntries.length === 0) {
-      chart.clear();
+      compareCharts.innerHTML = "";
       renderCompareTable(selectedEntries);
       return;
     }
-    chart.setOption({
-      animation: false,
-      tooltip: { trigger: "axis" },
-      legend: { type: "scroll" },
-      grid: { left: 58, right: 24, top: 48, bottom: 44 },
-      xAxis: {
-        type: "category",
-        data: ["Accuracy %", "Cost / 1k", "Latency", "Tokens / item"]
-      },
-      yAxis: { type: "value" },
-      series: selectedEntries.map((entry) => ({
-        name: entry.model,
-        type: "bar",
-        data: [
-          entry.accuracy == null ? null : entry.accuracy * 100,
-          entry.cost_per_1k_items,
-          entry.latency_per_item,
-          entry.tokens_per_item
+    compareCharts.innerHTML = compareMetrics
+      .map(
+        (metric) => `<div class="compare-chart-block">
+          <h3>${escapeHtml(metric.title)}</h3>
+          <div class="chart compare-metric-chart" data-metric="${escapeHtml(metric.key)}"></div>
+        </div>`
+      )
+      .join("");
+    compareCharts.querySelectorAll(".compare-metric-chart").forEach((element) => {
+      const metric = compareMetrics.find((candidate) => candidate.key === element.dataset.metric);
+      if (!metric) {
+        return;
+      }
+      const chart = window.echarts.init(element);
+      chart.setOption({
+        animation: false,
+        grid: { left: 58, right: 16, top: 12, bottom: 72 },
+        tooltip: {
+          trigger: "axis",
+          formatter: (params) => {
+            const point = params[0];
+            const entry = selectedEntries[point.dataIndex];
+            return [
+              `<strong>${escapeHtml(entry.model)}</strong>`,
+              escapeHtml(entry.run_id),
+              `${escapeHtml(metric.title)}: ${metric.format(point.value)}`
+            ].join("<br>");
+          }
+        },
+        xAxis: {
+          type: "category",
+          data: selectedEntries.map((entry) => entry.model),
+          axisLabel: { interval: 0, rotate: 20 }
+        },
+        yAxis: {
+          name: metric.title,
+          type: "value",
+          nameGap: 42
+        },
+        series: [
+          {
+            name: metric.title,
+            type: "bar",
+            data: selectedEntries.map((entry) => metric.value(entry))
+          }
         ]
-      }))
+      });
     });
     renderCompareTable(selectedEntries);
   }
@@ -311,8 +363,7 @@
         <tr>
           <th>Model</th>
           <th>Accuracy</th>
-          <th>Cost / 1k</th>
-          <th>Latency / item</th>
+          <th>Cost / M items</th>
           <th>Tokens / item</th>
           <th>Run</th>
         </tr>
@@ -323,8 +374,7 @@
             (entry) => `<tr>
               <td>${escapeHtml(entry.model)}</td>
               <td>${formatPercent(entry.accuracy)}</td>
-              <td>${formatMoney(entry.cost_per_1k_items)}</td>
-              <td>${formatNumber(entry.latency_per_item, 4)}s</td>
+              <td>${formatMoney(entry.cost_per_million_items)}</td>
               <td>${formatNumber(entry.tokens_per_item, 1)}</td>
               <td><a href="${basePath}${escapeHtml(entry.run_url)}">${escapeHtml(entry.run_id)}</a></td>
             </tr>`
@@ -338,7 +388,7 @@
     const entries = filteredEntries();
     renderTable(entries);
     renderMainChart(entries);
-    renderCompareChart();
+    renderCompareCharts();
   }
 
   function attachControls() {
@@ -365,7 +415,7 @@
     });
   }
 
-  fetch(`${basePath}data/leaderboard.json`)
+  fetch(`${basePath}data/leaderboard.json?v=${encodeURIComponent(dataVersion)}`)
     .then((response) => response.json())
     .then((data) => {
       state.entries = data.entries || [];
