@@ -120,7 +120,16 @@ def _write_verified_run(
         )
     call_id = f"{item.item_id}__v1__a1"
     usage = TokenUsage(input_tokens=100, cached_input_tokens=0, output_tokens=10)
-    cost = CostBreakdown(total_usd=0.02, source=CostSourceKind.LITELLM_ESTIMATE)
+    cost = CostBreakdown(
+        total_usd=0.02,
+        input_uncached_usd=0.01,
+        input_cached_usd=0.0,
+        output_usd=0.01,
+        input_uncached_unit_price_usd=0.0001,
+        input_cached_unit_price_usd=0.00001,
+        output_unit_price_usd=0.001,
+        source=CostSourceKind.LITELLM_ESTIMATE,
+    )
     is_correct = prediction_is_correct(
         predicted_sense_key=chosen.sense_key,
         gold_sense_keys=item.gold_sense_keys,
@@ -254,6 +263,16 @@ def test_build_site_emits_static_pages_and_data(
     assert entry["accuracy"] == 0.0
     assert entry["cost_per_million_items"] == 20_000.0
     assert entry["tokens_per_item"] == 110.0
+    assert entry["input_uncached_tokens"] == 100
+    assert entry["cached_input_tokens"] == 0
+    assert entry["output_tokens"] == 10
+    assert entry["input_uncached_usd"] == 0.01
+    assert entry["input_cached_usd"] == 0.0
+    assert entry["output_usd"] == 0.01
+    assert entry["input_uncached_unit_price_usd"] == 0.0001
+    assert entry["input_cached_unit_price_usd"] == 0.00001
+    assert entry["output_unit_price_usd"] == 0.001
+    assert entry["cost_source"] == "litellm_estimate"
     assert "latency_per_item" not in entry
 
     run_detail = json.loads((output_dir / "data" / "runs" / f"{run_id}.json").read_text())

@@ -181,6 +181,7 @@ h3 {
 .chart-panel,
 .table-panel,
 .compare-panel,
+.cost-panel,
 .notes,
 .doc-section {
   border: 1px solid var(--line);
@@ -236,6 +237,7 @@ dd {
 
 .chart-panel,
 .compare-panel,
+.cost-panel,
 .notes,
 .doc-section,
 .detail-block {
