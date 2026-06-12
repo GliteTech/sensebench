@@ -7,7 +7,6 @@
   const sourceFilter = document.getElementById("source-filter");
   const maxCostFilter = document.getElementById("max-cost-filter");
   const viewFilter = document.getElementById("view-filter");
-  const chartMode = document.getElementById("chart-mode");
   const frontierOnly = document.getElementById("frontier-only");
   const chartElement = document.getElementById("leaderboard-chart");
   const chartNote = document.getElementById("chart-note");
@@ -37,10 +36,8 @@
   const EXACT_MCNEMAR_MAX_DISCORDANT = 25;
   const Z_95 = 1.959963984540054;
 
-  const metricLabels = {
-    cost_per_million_items: "Cost per million items, USD",
-    tokens_per_item: "Tokens per item"
-  };
+  const COST_METRIC = "cost_per_million_items";
+  const COST_AXIS_LABEL = "Cost per million items, USD";
 
   const sourceLabels = {
     open_source: "Open weights",
@@ -367,11 +364,11 @@
     });
   }
 
-  function chartPoints(entries, metric) {
+  function chartPoints(entries) {
     return entries
-      .filter((entry) => entry.accuracy != null && entry[metric] != null)
+      .filter((entry) => entry.accuracy != null && entry[COST_METRIC] != null)
       .map((entry) => ({
-        x: entry[metric],
+        x: entry[COST_METRIC],
         y: entry.accuracy * 100,
         entry
       }));
@@ -389,11 +386,11 @@
     return baseline.label.split(" (")[0];
   }
 
-  function renderMainChart(entries, frontierPoints, metric) {
+  function renderMainChart(entries, frontierPoints) {
     if (!chartElement || !window.echarts) {
       return;
     }
-    const points = chartPoints(entries, metric);
+    const points = chartPoints(entries);
     const frontier = [...frontierPoints].sort((a, b) => a.x - b.x);
     const visible = frontierOnly?.checked ? frontier : points;
     const baselines = visibleBaselines();
@@ -425,12 +422,12 @@
               `<strong>${escapeHtml(modelLabel(entry))}</strong>`,
               escapeHtml(entry.run_id),
               accuracyText,
-              `${metricLabels[metric]}: ${formatMetric(metric, entry[metric])}`
+              `${COST_AXIS_LABEL}: ${formatMoney(entry[COST_METRIC])}`
             ].join("<br>");
           }
         },
         xAxis: {
-          name: metricLabels[metric],
+          name: COST_AXIS_LABEL,
           nameLocation: "middle",
           nameGap: 42,
           type: "value"
@@ -497,13 +494,6 @@
           : "";
       chartNote.textContent = `${points.length} rows plotted. ${missing} rows have unavailable values for this chart.${baselineNote}`;
     }
-  }
-
-  function formatMetric(metric, value) {
-    if (metric === "cost_per_million_items") {
-      return formatMoney(value);
-    }
-    return formatNumber(value, 2);
   }
 
   function disposeCompareCharts() {
@@ -860,13 +850,12 @@
 
   function render() {
     const entries = filteredEntries();
-    const metric = chartMode?.value || "cost_per_million_items";
-    const points = chartPoints(entries, metric);
+    const points = chartPoints(entries);
     const frontierPoints = paretoFrontier(points);
     const frontierIds = new Set(frontierPoints.map((point) => point.entry.run_id));
     const rows = sortRows(decorateRows(entries, frontierIds));
     renderTable(rows);
-    renderMainChart(entries, frontierPoints, metric);
+    renderMainChart(entries, frontierPoints);
     renderCompareCharts();
     renderPairwise();
   }
@@ -879,7 +868,6 @@
       sourceFilter,
       maxCostFilter,
       viewFilter,
-      chartMode,
       frontierOnly
     ].forEach((control) => {
       if (control) {
