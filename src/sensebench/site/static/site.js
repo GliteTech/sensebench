@@ -335,7 +335,6 @@
           </td>
           <td><div class="cell-primary">${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
           <td>${formatMoney(entry.cost_per_million_items)}</td>
-          <td>${formatNumber(entry.tokens_per_item, 1)}</td>
           <td>${escapeHtml(entry.prompt_id)}</td>
           <td>${escapeHtml(entry.dataset_version)}</td>
           <td><a href="${basePath}${escapeHtml(entry.run_url)}">${escapeHtml(entry.run_id)}</a></td>

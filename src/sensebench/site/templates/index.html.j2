@@ -138,7 +138,6 @@
           <th><button type="button" data-sort="model">Model</button></th>
           <th><button type="button" data-sort="accuracy">Accuracy</button></th>
           <th><button type="button" data-sort="cost_per_million_items">Cost / M items</button></th>
-          <th><button type="button" data-sort="tokens_per_item">Tokens / item</button></th>
           <th>Prompt</th>
           <th>Dataset</th>
           <th>Run</th>
@@ -161,7 +160,6 @@
             {% endif %}
           </td>
           <td>{{ entry.cost_per_million_items|money }}</td>
-          <td>{{ entry.tokens_per_item|num }}</td>
           <td>{{ entry.prompt_id }}</td>
           <td>{{ entry.dataset_version }}</td>
           <td><a href="{{ base_path }}{{ entry.run_url }}">{{ entry.run_id }}</a></td>
