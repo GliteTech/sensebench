@@ -34,3 +34,15 @@ def test_sum_costs_preserves_shared_unit_prices() -> None:
     assert cost.input_uncached_unit_price_usd == 0.001, "shared uncached input price is preserved"
     assert cost.output_unit_price_usd == 0.002, "shared output price is preserved"
     assert cost.source == CostSourceKind.LITELLM_ESTIMATE, "shared cost source is preserved"
+
+
+def test_sum_costs_preserves_provider_reported_source() -> None:
+    cost = sum_costs(
+        costs=[
+            CostBreakdown(total_usd=0.10, source=CostSourceKind.PROVIDER_REPORTED),
+            CostBreakdown(total_usd=0.00, source=CostSourceKind.NO_CALLS),
+        ],
+    )
+
+    assert cost.total_usd == approx(0.10), "total cost includes provider-reported calls"
+    assert cost.source == CostSourceKind.PROVIDER_REPORTED, "provider source is preserved"

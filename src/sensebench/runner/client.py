@@ -36,6 +36,10 @@ MODEL_FIELD: str = "model"
 INPUT_COST_PER_TOKEN_FIELD: str = "input_cost_per_token"
 CACHE_READ_INPUT_TOKEN_COST_FIELD: str = "cache_read_input_token_cost"
 OUTPUT_COST_PER_TOKEN_FIELD: str = "output_cost_per_token"
+OPENROUTER_USAGE_COST_FIELD: str = "cost"
+OPENROUTER_COST_DETAILS_FIELD: str = "cost_details"
+OPENROUTER_PROMPT_COST_FIELD: str = "upstream_inference_prompt_cost"
+OPENROUTER_COMPLETIONS_COST_FIELD: str = "upstream_inference_completions_cost"
 
 
 class CompletionClient(Protocol):
@@ -144,13 +148,47 @@ def _completion_cost(
     return None
 
 
+def _numeric_cost_field(*, payload: dict[str, object], key: str) -> float | None:
+    value = payload.get(key)
+    if isinstance(value, int | float) and value >= 0:
+        return float(value)
+    return None
+
+
+def _provider_reported_cost(*, payload: dict[str, object]) -> CostBreakdown | None:
+    usage = payload.get(USAGE_FIELD)
+    if not isinstance(usage, dict):
+        return None
+    total_usd = _numeric_cost_field(payload=usage, key=OPENROUTER_USAGE_COST_FIELD)
+    if total_usd is None:
+        return None
+    cost_details = usage.get(OPENROUTER_COST_DETAILS_FIELD)
+    detail_payload = cost_details if isinstance(cost_details, dict) else {}
+    return CostBreakdown(
+        total_usd=total_usd,
+        input_uncached_usd=_numeric_cost_field(
+            payload=detail_payload,
+            key=OPENROUTER_PROMPT_COST_FIELD,
+        ),
+        output_usd=_numeric_cost_field(
+            payload=detail_payload,
+            key=OPENROUTER_COMPLETIONS_COST_FIELD,
+        ),
+        source=CostSourceKind.PROVIDER_REPORTED,
+    )
+
+
 def _cost_from_response(
     *,
     litellm_module: Any,
+    payload: dict[str, object],
     response: object,
     model: str,
     usage: TokenUsage,
 ) -> CostBreakdown:
+    provider_cost = _provider_reported_cost(payload=payload)
+    if provider_cost is not None:
+        return provider_cost
     total_usd = _completion_cost(litellm_module=litellm_module, response=response)
     raw_model_info = litellm_module.model_cost.get(model)
     model_info: dict[str, object] = raw_model_info if isinstance(raw_model_info, dict) else {}
@@ -206,6 +244,7 @@ class LiteLlmClient:
     async def complete(self, *, request: CompletionRequest) -> CompletionResult:
         import litellm
 
+        litellm.suppress_debug_info = True
         started = time.monotonic()
         retry_count = 0
         last_error: Exception | None = None
@@ -238,6 +277,7 @@ class LiteLlmClient:
                         usage=usage,
                         cost=_cost_from_response(
                             litellm_module=litellm,
+                            payload=payload,
                             response=response,
                             model=model,
                             usage=usage,
