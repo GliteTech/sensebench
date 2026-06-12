@@ -39,6 +39,7 @@ ACCURACY_TOLERANCE: float = 1e-12
 MESSAGE_ROLE_FIELD: str = "role"
 MESSAGE_CONTENT_FIELD: str = "content"
 DATASET_ITEM_DIFF_SAMPLE_LIMIT: int = 10
+CALLS_AFTER_SUCCESS_MESSAGE: str = "calls recorded after a successful extraction"
 
 
 class RunValidationRule(StrEnum):
@@ -410,10 +411,14 @@ def _replay_vote(
             message=message,
         )
 
+    successful_vote: _ReplayedVote | None = None
     invalid_reason: InvalidOutputReason | str | None = None
     for call_position, call in enumerate(calls):
         is_last_call = call_position == len(calls) - 1
         if call.status == CallStatus.TRANSPORT_ERROR:
+            if successful_vote is not None:
+                issues.append(_issue(CALLS_AFTER_SUCCESS_MESSAGE))
+                return _VoteReplayResult(replayed_vote=successful_vote, issues=issues)
             if not is_last_call:
                 issues.append(_issue("calls recorded after a transport error"))
             return _VoteReplayResult(
@@ -435,18 +440,25 @@ def _replay_vote(
             issues.append(_issue(f"extraction replay raised {type(exc).__name__}: {exc}"))
             return _VoteReplayResult(replayed_vote=None, issues=issues)
         if isinstance(extracted, ValidSenseIndexExtraction):
-            if not is_last_call:
-                issues.append(_issue("calls recorded after a successful extraction"))
-            return _VoteReplayResult(
-                replayed_vote=_ReplayedVote(
-                    status=VoteStatus.SUCCESS,
-                    chosen_sense_index=extracted.sense_index,
-                    chosen_sense_key=sense_keys_by_index.get(extracted.sense_index),
-                    invalid_reason=None,
-                ),
-                issues=issues,
+            replayed_success = _ReplayedVote(
+                status=VoteStatus.SUCCESS,
+                chosen_sense_index=extracted.sense_index,
+                chosen_sense_key=sense_keys_by_index.get(extracted.sense_index),
+                invalid_reason=None,
             )
+            if successful_vote is None:
+                successful_vote = replayed_success
+                continue
+            if replayed_success != successful_vote:
+                issues.append(_issue(CALLS_AFTER_SUCCESS_MESSAGE))
+                return _VoteReplayResult(replayed_vote=successful_vote, issues=issues)
+            continue
+        if successful_vote is not None:
+            issues.append(_issue(CALLS_AFTER_SUCCESS_MESSAGE))
+            return _VoteReplayResult(replayed_vote=successful_vote, issues=issues)
         invalid_reason = extracted.invalid_reason
+    if successful_vote is not None:
+        return _VoteReplayResult(replayed_vote=successful_vote, issues=issues)
     if len(calls) != max_attempts:
         issues.append(
             _issue(f"invalid-output vote must record {max_attempts} attempt(s), found {len(calls)}")
