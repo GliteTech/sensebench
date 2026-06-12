@@ -164,6 +164,8 @@ def _template_env() -> Environment:
     env.filters["pct"] = _format_percent
     env.filters["num"] = _format_number
     env.filters["money"] = _format_money
+    env.filters["token_price"] = _format_token_price
+    env.filters["million_token_price"] = _format_million_token_price
     return env
 
 
@@ -189,6 +191,18 @@ def _format_money(value: float | None) -> str:
     if value < 1:
         return f"${value:.4f}"
     return f"${value:,.2f}"
+
+
+def _format_token_price(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    return f"${value:.8f}"
+
+
+def _format_million_token_price(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    return _format_money(value * 1_000_000)
 
 
 def _write_text(*, path: Path, text: str) -> None:

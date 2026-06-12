@@ -54,12 +54,63 @@
     <h2>Runtime</h2>
     <dl>
       <dt>Calls</dt><dd>{{ entry.call_count }}</dd>
+      <dt>Total tokens</dt><dd>{{ entry.total_tokens|num }}</dd>
       <dt>Tokens / item</dt><dd>{{ entry.tokens_per_item|num }}</dd>
+      <dt>Total cost</dt><dd>{{ entry.cost_usd|money }}</dd>
       <dt>Cost / M items</dt><dd>{{ entry.cost_per_million_items|money }}</dd>
+      <dt>Cost source</dt><dd>{{ entry.cost_source }}</dd>
       <dt>Invalid votes</dt><dd>{{ entry.invalid_output_vote_count }}</dd>
       <dt>Transport errors</dt><dd>{{ entry.transport_error_vote_count }}</dd>
     </dl>
   </div>
+</section>
+
+<section class="cost-panel">
+  <h2>Cost And Token Breakdown</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Token Type</th>
+          <th>Tokens</th>
+          <th>Cost</th>
+          <th>Price / token</th>
+          <th>Price / M tokens</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Input uncached</td>
+          <td>{{ entry.input_uncached_tokens|num }}</td>
+          <td>{{ entry.input_uncached_usd|money }}</td>
+          <td>{{ entry.input_uncached_unit_price_usd|token_price }}</td>
+          <td>{{ entry.input_uncached_unit_price_usd|million_token_price }}</td>
+        </tr>
+        <tr>
+          <td>Input cached</td>
+          <td>{{ entry.cached_input_tokens|num }}</td>
+          <td>{{ entry.input_cached_usd|money }}</td>
+          <td>{{ entry.input_cached_unit_price_usd|token_price }}</td>
+          <td>{{ entry.input_cached_unit_price_usd|million_token_price }}</td>
+        </tr>
+        <tr>
+          <td>Output</td>
+          <td>{{ entry.output_tokens|num }}</td>
+          <td>{{ entry.output_usd|money }}</td>
+          <td>{{ entry.output_unit_price_usd|token_price }}</td>
+          <td>{{ entry.output_unit_price_usd|million_token_price }}</td>
+        </tr>
+        <tr>
+          <td>Reasoning output</td>
+          <td>{{ entry.reasoning_output_tokens|num }}</td>
+          <td>included in output cost</td>
+          <td>n/a</td>
+          <td>n/a</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Reasoning output tokens are shown separately when the provider reports them; recorded cost is stored in the output cost bucket.</p>
 </section>
 
 <section>

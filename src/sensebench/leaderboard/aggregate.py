@@ -87,12 +87,20 @@ class LeaderboardEntry(LeaderboardModel):
     invalid_output_vote_count: int
     transport_error_vote_count: int
     input_tokens: int | None
+    input_uncached_tokens: int | None
     cached_input_tokens: int | None
     output_tokens: int | None
     reasoning_output_tokens: int | None
     total_tokens: int | None
     tokens_per_item: float | None
+    cost_source: str
     cost_usd: float | None
+    input_uncached_usd: float | None
+    input_cached_usd: float | None
+    output_usd: float | None
+    input_uncached_unit_price_usd: float | None
+    input_cached_unit_price_usd: float | None
+    output_unit_price_usd: float | None
     cost_per_million_items: float | None
     elapsed_seconds: float | None
     best_group_key: str
@@ -164,6 +172,14 @@ def _token_total(*, usage: TokenUsage) -> int | None:
     return sum(present)
 
 
+def _input_uncached_tokens(*, usage: TokenUsage) -> int | None:
+    if usage.input_tokens is None:
+        return None
+    if usage.cached_input_tokens is None:
+        return usage.input_tokens
+    return max(usage.input_tokens - usage.cached_input_tokens, 0)
+
+
 def _status_counts(*, predictions: list[PredictionRecord]) -> Counter[PredictionStatus]:
     return Counter(prediction.status for prediction in predictions)
 
@@ -219,7 +235,8 @@ def _entry_for_run(
     usage = metadata.totals.usage
     total_tokens = _token_total(usage=usage)
     status_counts = _status_counts(predictions=loaded.predictions)
-    cost_usd = metadata.totals.cost.total_usd
+    cost = metadata.totals.cost
+    cost_usd = cost.total_usd
     model = metadata.model
     model_kind = model.kind
     return LeaderboardEntry(
@@ -258,12 +275,20 @@ def _entry_for_run(
         invalid_output_vote_count=_invalid_vote_count(predictions=loaded.predictions),
         transport_error_vote_count=_transport_error_vote_count(predictions=loaded.predictions),
         input_tokens=usage.input_tokens,
+        input_uncached_tokens=_input_uncached_tokens(usage=usage),
         cached_input_tokens=usage.cached_input_tokens,
         output_tokens=usage.output_tokens,
         reasoning_output_tokens=usage.reasoning_output_tokens,
         total_tokens=total_tokens,
         tokens_per_item=_divide(numerator=total_tokens, denominator=item_count),
+        cost_source=cost.source.value,
         cost_usd=cost_usd,
+        input_uncached_usd=cost.input_uncached_usd,
+        input_cached_usd=cost.input_cached_usd,
+        output_usd=cost.output_usd,
+        input_uncached_unit_price_usd=cost.input_uncached_unit_price_usd,
+        input_cached_unit_price_usd=cost.input_cached_unit_price_usd,
+        output_unit_price_usd=cost.output_unit_price_usd,
         cost_per_million_items=None
         if cost_usd is None or item_count <= 0
         else (cost_usd / item_count) * 1_000_000,
