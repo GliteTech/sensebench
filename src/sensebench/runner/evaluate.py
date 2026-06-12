@@ -4,14 +4,18 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
+from typing import assert_never
 
+from sensebench.datasets.models import ItemID, SenseKey
 from sensebench.prompts.models import MessageRole, OutputMode
 from sensebench.prompts.render import ChatMessage, RenderedTask
 from sensebench.runner.client import CompletionClient
+from sensebench.runner.costs import no_call_cost, sum_costs
 from sensebench.runner.extract import extract_sense_index
 from sensebench.runner.models import CompletionRequest, ItemEvaluation
 from sensebench.runs.models import (
     AttemptKind,
+    CallID,
     CallRecord,
     CallStatus,
     CandidateRecord,
@@ -52,7 +56,7 @@ def _candidate_records(*, rendered: RenderedTask) -> list[CandidateRecord]:
     ]
 
 
-def _zero_usage() -> TokenUsage:
+def _no_call_usage() -> TokenUsage:
     return TokenUsage(input_tokens=None, cached_input_tokens=None, output_tokens=None)
 
 
@@ -74,14 +78,10 @@ def _sum_usage(*, calls: list[CallRecord]) -> TokenUsage:
         output_tokens=_sum_optional_ints(
             values=[call.usage.output_tokens for call in calls],
         ),
+        reasoning_output_tokens=_sum_optional_ints(
+            values=[call.usage.reasoning_output_tokens for call in calls],
+        ),
     )
-
-
-def _sum_cost(*, calls: list[CallRecord]) -> float | None:
-    values: list[float] = [call.cost_usd for call in calls if call.cost_usd is not None]
-    if len(values) == 0:
-        return None
-    return sum(values)
 
 
 def _sum_latency(*, calls: list[CallRecord]) -> float | None:
@@ -93,7 +93,11 @@ def _sum_latency(*, calls: list[CallRecord]) -> float | None:
     return sum(values)
 
 
-def _is_correct(*, predicted_sense_key: str | None, gold_sense_keys: list[str]) -> bool | None:
+def prediction_is_correct(
+    *,
+    predicted_sense_key: SenseKey | None,
+    gold_sense_keys: list[SenseKey],
+) -> bool | None:
     if predicted_sense_key is None:
         return None
     if predicted_sense_key in gold_sense_keys:
@@ -119,11 +123,11 @@ def _repair_instruction(*, output_mode: OutputMode, candidate_count: int) -> str
             "Your previous answer was invalid. Choose one candidate index between "
             f"1 and {candidate_count}. Return only the integer."
         )
-    raise ValueError(f"Unsupported output mode: {output_mode}")
+    assert_never(output_mode)
 
 
 def _repair_messages(*, rendered: RenderedTask, previous_output: str | None) -> list[ChatMessage]:
-    messages = list(rendered.messages)
+    messages: list[ChatMessage] = list(rendered.messages)
     if previous_output is not None:
         messages.append(
             ChatMessage(
@@ -145,14 +149,18 @@ def _repair_messages(*, rendered: RenderedTask, previous_output: str | None) -> 
 
 def _call_id(
     *,
-    item_id: str,
+    item_id: ItemID,
     vote_index: int,
     attempt_index: int,
-) -> str:
+) -> CallID:
     return f"{item_id}__v{vote_index}__a{attempt_index}"
 
 
-def _sense_key_for_index(*, rendered: RenderedTask, sense_index: int | None) -> str | None:
+def _sense_key_for_index(
+    *,
+    rendered: RenderedTask,
+    sense_index: int | None,
+) -> SenseKey | None:
     if sense_index is None:
         return None
     for candidate in rendered.candidates:
@@ -233,7 +241,7 @@ async def _run_one_vote(
     )
 
 
-def _choose_prediction(*, votes: list[VoteRecord]) -> int | None:
+def choose_prediction(*, votes: list[VoteRecord]) -> int | None:
     valid_indexes: list[int] = [
         vote.chosen_sense_index
         for vote in votes
@@ -241,7 +249,7 @@ def _choose_prediction(*, votes: list[VoteRecord]) -> int | None:
     ]
     if len(valid_indexes) == 0:
         return None
-    counts = Counter(valid_indexes)
+    counts: Counter[int] = Counter(valid_indexes)
     highest_count = max(counts.values())
     tied: set[int] = {
         sense_index for sense_index, count in counts.items() if count == highest_count
@@ -252,7 +260,11 @@ def _choose_prediction(*, votes: list[VoteRecord]) -> int | None:
     return None
 
 
-def _monosemous_evaluation(*, rendered: RenderedTask, gold_sense_keys: list[str]) -> ItemEvaluation:
+def _monosemous_evaluation(
+    *,
+    rendered: RenderedTask,
+    gold_sense_keys: list[SenseKey],
+) -> ItemEvaluation:
     candidate = rendered.candidates[0]
     prediction = PredictionRecord(
         item_id=rendered.item_id,
@@ -261,19 +273,22 @@ def _monosemous_evaluation(*, rendered: RenderedTask, gold_sense_keys: list[str]
         votes=[],
         predicted_sense_index=candidate.index,
         predicted_sense_key=candidate.sense_key,
-        is_correct=_is_correct(
+        is_correct=prediction_is_correct(
             predicted_sense_key=candidate.sense_key,
             gold_sense_keys=gold_sense_keys,
         ),
         status=PredictionStatus.MONOSEMOUS,
         was_monosemous=True,
-        usage=_zero_usage(),
+        usage=_no_call_usage(),
+        cost=no_call_cost(),
     )
     return ItemEvaluation(prediction=prediction, calls=[], rendered=rendered)
 
 
 def _no_candidates_evaluation(
-    *, rendered: RenderedTask, gold_sense_keys: list[str]
+    *,
+    rendered: RenderedTask,
+    gold_sense_keys: list[SenseKey],
 ) -> ItemEvaluation:
     prediction = PredictionRecord(
         item_id=rendered.item_id,
@@ -283,7 +298,8 @@ def _no_candidates_evaluation(
         is_correct=None,
         status=PredictionStatus.NO_CANDIDATES,
         was_monosemous=False,
-        usage=_zero_usage(),
+        usage=_no_call_usage(),
+        cost=no_call_cost(),
     )
     return ItemEvaluation(prediction=prediction, calls=[], rendered=rendered)
 
@@ -291,7 +307,7 @@ def _no_candidates_evaluation(
 async def evaluate_item(
     *,
     rendered: RenderedTask,
-    gold_sense_keys: list[str],
+    gold_sense_keys: list[SenseKey],
     client: CompletionClient,
     config: EvaluationConfig,
 ) -> ItemEvaluation:
@@ -312,7 +328,7 @@ async def evaluate_item(
         )
     votes: list[VoteRecord] = [outcome.vote for outcome in outcomes]
     calls: list[CallRecord] = [call for outcome in outcomes for call in outcome.calls]
-    chosen_index = _choose_prediction(votes=votes)
+    chosen_index = choose_prediction(votes=votes)
     chosen_key = _sense_key_for_index(rendered=rendered, sense_index=chosen_index)
     status = PredictionStatus.SUCCESS if chosen_key is not None else PredictionStatus.NO_VALID_VOTE
     prediction = PredictionRecord(
@@ -322,11 +338,14 @@ async def evaluate_item(
         votes=votes,
         predicted_sense_index=chosen_index,
         predicted_sense_key=chosen_key,
-        is_correct=_is_correct(predicted_sense_key=chosen_key, gold_sense_keys=gold_sense_keys),
+        is_correct=prediction_is_correct(
+            predicted_sense_key=chosen_key,
+            gold_sense_keys=gold_sense_keys,
+        ),
         status=status,
         was_monosemous=False,
         usage=_sum_usage(calls=calls),
-        cost_usd=_sum_cost(calls=calls),
+        cost=sum_costs(costs=[call.cost for call in calls]),
         latency_seconds=_sum_latency(calls=calls),
     )
     return ItemEvaluation(prediction=prediction, calls=calls, rendered=rendered)

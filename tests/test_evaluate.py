@@ -8,7 +8,15 @@ from sensebench.prompts.render import CandidateChoice, ChatMessage, RenderedTask
 from sensebench.runner.client import CompletionClient
 from sensebench.runner.evaluate import EvaluationConfig, evaluate_item
 from sensebench.runner.models import CompletionRequest, CompletionResult
-from sensebench.runs.models import AttemptKind, CallRecord, CallStatus, MessageRecord, TokenUsage
+from sensebench.runs.models import (
+    AttemptKind,
+    CallRecord,
+    CallStatus,
+    CostBreakdown,
+    CostSourceKind,
+    MessageRecord,
+    TokenUsage,
+)
 
 
 class FakeClient(CompletionClient):
@@ -33,7 +41,7 @@ class FakeClient(CompletionClient):
                 ],
                 raw_output=output,
                 usage=TokenUsage(input_tokens=1, cached_input_tokens=None, output_tokens=1),
-                cost_usd=0.01,
+                cost=CostBreakdown(total_usd=0.01, source=CostSourceKind.LITELLM_ESTIMATE),
                 latency_seconds=0.1,
             )
         )

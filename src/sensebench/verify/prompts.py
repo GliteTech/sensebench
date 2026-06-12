@@ -8,12 +8,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import cast
 
 from pydantic import ValidationError
 
 from sensebench.paths import PROMPT_JSON_SUFFIX, PROMPT_REGISTRY_DIR
-from sensebench.prompts.models import PromptDefinition
+from sensebench.prompts.models import PromptDefinition, PromptID
 from sensebench.prompts.registry import load_prompt_definition, registered_prompt_paths
 
 
@@ -127,7 +126,7 @@ def validate_prompt_registry() -> list[ValidationReport]:
         validate_prompt_file(path=prompt_path) for prompt_path in prompt_paths
     ]
 
-    prompt_ids: dict[str, Path] = {}
+    prompt_ids: dict[PromptID, Path] = {}
     for prompt_path in prompt_paths:
         try:
             prompt: PromptDefinition = load_prompt_definition(path=prompt_path)
@@ -163,6 +162,12 @@ def _print_report(*, report: ValidationReport) -> None:
     print(f"{report.path}: OK")
 
 
+def _namespace_prompt_paths(*, namespace: argparse.Namespace) -> list[str]:
+    raw_prompt_paths: object = namespace.prompt_paths
+    assert isinstance(raw_prompt_paths, list), "namespace prompt_paths is a list"
+    return [str(raw_path) for raw_path in raw_prompt_paths]
+
+
 def _parse_args(*, argv: Sequence[str] | None) -> CliArgs:
     parser = argparse.ArgumentParser(description="Validate SenseBench prompt JSON files.")
     parser.add_argument(
@@ -179,7 +184,7 @@ def _parse_args(*, argv: Sequence[str] | None) -> CliArgs:
     namespace = parser.parse_args(argv)
     all_prompts = bool(namespace.all_prompts)
     prompt_paths: list[Path] = [
-        Path(raw_path) for raw_path in cast(list[str], namespace.prompt_paths)
+        Path(raw_path) for raw_path in _namespace_prompt_paths(namespace=namespace)
     ]
     if not all_prompts and len(prompt_paths) == 0:
         parser.error("pass one or more prompt files, or use --all")
