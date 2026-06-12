@@ -17,8 +17,8 @@ from urllib.parse import urljoin, urlparse
 from jinja2 import Environment, PackageLoader, select_autoescape
 from pydantic import BaseModel, ConfigDict
 
-from sensebench.datasets.context import build_dataset_index
-from sensebench.datasets.models import DatasetBundle, ItemID, WsdItem
+from sensebench.datasets.context import build_context_window, build_dataset_index
+from sensebench.datasets.models import DatasetBundle, DatasetIndex, ItemID, WsdItem
 from sensebench.datasets.releases import (
     DATASET_RELEASES,
     get_dataset_release,
@@ -30,16 +30,21 @@ from sensebench.leaderboard.aggregate import (
     LeaderboardEntry,
     collect_leaderboard_entries,
 )
-from sensebench.paths import DEFAULT_LEXEN_RELEASE_ID
+from sensebench.paths import (
+    DEFAULT_LEXEN_RELEASE_ID,
+    PROMPT_JSON_SUFFIX,
+    PROMPT_REGISTRY_DIR,
+)
+from sensebench.prompts.models import MessageRole, PromptDefinition
 from sensebench.prompts.registry import load_prompt_definition, registered_prompt_paths
 from sensebench.runs.loaders import LoadedRun, load_run_directory
-from sensebench.runs.models import PredictionRecord
+from sensebench.runs.models import CallID, CallRecord, CallStatus, PredictionRecord, VoteStatus
 from sensebench.wordnet import get_candidate_senses
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
 SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v2"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v1"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v2"
 SLICE_POS: str = "POS"
 SLICE_CANDIDATE_COUNT: str = "Candidate Count"
 SLICE_SOURCE_DATASET: str = "Source Dataset"
@@ -96,6 +101,11 @@ class ExampleCandidate(SiteModel):
     is_selected: bool
 
 
+class ExamplePromptMessage(SiteModel):
+    role: MessageRole
+    content: str
+
+
 class RunExample(SiteModel):
     bucket_group: str
     bucket_value: str
@@ -111,6 +121,7 @@ class RunExample(SiteModel):
     gold_sense_keys: list[str]
     context_sentences: list[ExampleContextSentence]
     candidates: list[ExampleCandidate]
+    prompt_messages: list[ExamplePromptMessage]
 
 
 class RunDetail(SiteModel):
@@ -327,35 +338,108 @@ def _slice_summaries(*, loaded: LoadedRun, dataset: DatasetBundle) -> list[Slice
     return sorted(summaries, key=lambda summary: (summary.group, summary.value))
 
 
-def _context_sentences(*, item: WsdItem, dataset: DatasetBundle) -> list[ExampleContextSentence]:
-    index = build_dataset_index(bundle=dataset)
-    document = index.documents_by_id.get(item.document_id)
-    sentence_indexes = index.document_sentence_indexes.get(item.document_id)
-    if document is None or sentence_indexes is None:
-        return [
-            ExampleContextSentence(
-                html=f"<mark>{html.escape(item.target_text)}</mark>",
-                is_target_sentence=True,
-            )
-        ]
-    target_sentence_index = sentence_indexes.get(item.sentence_id)
+def _context_sentences(
+    *,
+    index: DatasetIndex,
+    item: WsdItem,
+    prompt: PromptDefinition,
+) -> list[ExampleContextSentence] | None:
+    try:
+        build_context_window(
+            index=index,
+            item=item,
+            previous_sentences=prompt.params.previous_sentences,
+            next_sentences=prompt.params.next_sentences,
+        )
+    except (KeyError, ValueError):
+        return None
+
+    document = index.documents_by_id[item.document_id]
+    sentence_indexes = index.document_sentence_indexes[item.document_id]
+    target_sentence_index = sentence_indexes[item.sentence_id]
+    first_sentence_index = max(0, target_sentence_index - prompt.params.previous_sentences)
+    last_sentence_exclusive = min(
+        len(document.sentences),
+        target_sentence_index + prompt.params.next_sentences + 1,
+    )
     context: list[ExampleContextSentence] = []
-    for sentence_index, sentence in enumerate(document.sentences):
+    has_marked_target = False
+    for sentence_index in range(first_sentence_index, last_sentence_exclusive):
+        sentence = document.sentences[sentence_index]
         is_target_sentence = sentence_index == target_sentence_index
         pieces: list[str] = []
         for token_index, token in enumerate(sentence.tokens):
             token_text = html.escape(token.text)
-            is_target_token = token.item_id == item.item_id or (
-                is_target_sentence and token_index == item.target_token_index
-            )
-            pieces.append(f"<mark>{token_text}</mark>" if is_target_token else token_text)
+            if is_target_sentence and token_index == item.target_token_index:
+                pieces.append(f"<mark>{token_text}</mark>")
+                has_marked_target = True
+            else:
+                pieces.append(token_text)
         context.append(
             ExampleContextSentence(
                 html=" ".join(pieces),
                 is_target_sentence=is_target_sentence,
             )
         )
+    if not has_marked_target:
+        return None
     return context
+
+
+def _calls_by_id(*, calls: list[CallRecord]) -> dict[CallID, CallRecord]:
+    return {call.call_id: call for call in calls}
+
+
+def _calls_by_item(*, calls: list[CallRecord]) -> dict[ItemID, list[CallRecord]]:
+    grouped: dict[ItemID, list[CallRecord]] = defaultdict(list)
+    for call in calls:
+        grouped[call.item_id].append(call)
+    return grouped
+
+
+def _call_for_prediction(
+    *,
+    prediction: PredictionRecord,
+    calls_by_id: dict[CallID, CallRecord],
+    calls_by_item: dict[ItemID, list[CallRecord]],
+) -> CallRecord | None:
+    for vote in prediction.votes:
+        if vote.status != VoteStatus.SUCCESS:
+            continue
+        for call_id in vote.call_ids:
+            call = calls_by_id.get(call_id)
+            if call is not None and call.status == CallStatus.SUCCESS:
+                return call
+
+    item_calls = calls_by_item.get(prediction.item_id, [])
+    for call in item_calls:
+        if call.status == CallStatus.SUCCESS:
+            return call
+    if len(item_calls) > 0:
+        return item_calls[0]
+    return None
+
+
+def _prompt_messages_for_prediction(
+    *,
+    prediction: PredictionRecord,
+    calls_by_id: dict[CallID, CallRecord],
+    calls_by_item: dict[ItemID, list[CallRecord]],
+) -> list[ExamplePromptMessage]:
+    call = _call_for_prediction(
+        prediction=prediction,
+        calls_by_id=calls_by_id,
+        calls_by_item=calls_by_item,
+    )
+    if call is None:
+        return []
+    return [
+        ExamplePromptMessage(
+            role=message.role,
+            content=message.content,
+        )
+        for message in call.messages
+    ]
 
 
 def _example_candidates(
@@ -391,8 +475,18 @@ def _example(
     bucket_value: str,
     prediction: PredictionRecord,
     item: WsdItem,
-    dataset: DatasetBundle,
-) -> RunExample:
+    index: DatasetIndex,
+    prompt: PromptDefinition,
+    calls_by_id: dict[CallID, CallRecord],
+    calls_by_item: dict[ItemID, list[CallRecord]],
+) -> RunExample | None:
+    context_sentences = _context_sentences(
+        index=index,
+        item=item,
+        prompt=prompt,
+    )
+    if context_sentences is None:
+        return None
     return RunExample(
         bucket_group=bucket_group,
         bucket_value=bucket_value,
@@ -406,8 +500,13 @@ def _example(
         predicted_sense_index=prediction.predicted_sense_index,
         predicted_sense_key=prediction.predicted_sense_key,
         gold_sense_keys=list(prediction.gold_sense_keys),
-        context_sentences=_context_sentences(item=item, dataset=dataset),
+        context_sentences=context_sentences,
         candidates=_example_candidates(prediction=prediction, item=item),
+        prompt_messages=_prompt_messages_for_prediction(
+            prediction=prediction,
+            calls_by_id=calls_by_id,
+            calls_by_item=calls_by_item,
+        ),
     )
 
 
@@ -415,9 +514,13 @@ def _worst_examples(
     *,
     loaded: LoadedRun,
     dataset: DatasetBundle,
+    prompt: PromptDefinition,
     slices: list[SliceSummary],
 ) -> list[RunExample]:
+    index = build_dataset_index(bundle=dataset)
     items_by_id = {item.item_id: item for item in dataset.items}
+    calls_by_id = _calls_by_id(calls=loaded.calls)
+    calls_by_item = _calls_by_item(calls=loaded.calls)
     errors = [
         prediction
         for prediction in sorted(loaded.predictions, key=lambda candidate: candidate.item_id)
@@ -441,15 +544,19 @@ def _worst_examples(
             item = items_by_id[prediction.item_id]
             if _slice_value(group=summary.group, prediction=prediction, item=item) != summary.value:
                 continue
-            selected.append(
-                _example(
-                    bucket_group=summary.group,
-                    bucket_value=summary.value,
-                    prediction=prediction,
-                    item=item,
-                    dataset=dataset,
-                )
+            example = _example(
+                bucket_group=summary.group,
+                bucket_value=summary.value,
+                prediction=prediction,
+                item=item,
+                index=index,
+                prompt=prompt,
+                calls_by_id=calls_by_id,
+                calls_by_item=calls_by_item,
             )
+            if example is None:
+                continue
+            selected.append(example)
             selected_items.add(prediction.item_id)
             if len(selected) >= MAX_ERROR_EXAMPLES:
                 return selected
@@ -457,15 +564,19 @@ def _worst_examples(
         if prediction.item_id in selected_items:
             continue
         item = items_by_id[prediction.item_id]
-        selected.append(
-            _example(
-                bucket_group="Error",
-                bucket_value="Any",
-                prediction=prediction,
-                item=item,
-                dataset=dataset,
-            )
+        example = _example(
+            bucket_group="Error",
+            bucket_value="Any",
+            prediction=prediction,
+            item=item,
+            index=index,
+            prompt=prompt,
+            calls_by_id=calls_by_id,
+            calls_by_item=calls_by_item,
         )
+        if example is None:
+            continue
+        selected.append(example)
         if len(selected) >= MAX_ERROR_EXAMPLES:
             break
     return selected
@@ -494,12 +605,20 @@ def _run_detail(
 ) -> RunDetail:
     loaded = load_run_directory(run_dir=results_dir / entry.run_id)
     dataset = _dataset_for_entry(entry=entry, cache=dataset_cache)
+    prompt = load_prompt_definition(
+        path=PROMPT_REGISTRY_DIR / f"{entry.prompt_id}{PROMPT_JSON_SUFFIX}",
+    )
     slices = _slice_summaries(loaded=loaded, dataset=dataset)
     return RunDetail(
         schema_version=RUN_DETAIL_SCHEMA_VERSION,
         entry=entry,
         slices=slices,
-        worst_examples=_worst_examples(loaded=loaded, dataset=dataset, slices=slices),
+        worst_examples=_worst_examples(
+            loaded=loaded,
+            dataset=dataset,
+            prompt=prompt,
+            slices=slices,
+        ),
     )
 
 

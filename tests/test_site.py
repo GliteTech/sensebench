@@ -276,11 +276,19 @@ def test_build_site_emits_static_pages_and_data(
     assert "latency_per_item" not in entry
 
     run_detail = json.loads((output_dir / "data" / "runs" / f"{run_id}.json").read_text())
+    assert run_detail["schema_version"] == "sensebench-run-detail-v2"
     example = run_detail["worst_examples"][0]
-    assert example["context_sentences"]
+    assert len(example["context_sentences"]) == 2
+    assert any("<mark>art</mark>" in sentence["html"] for sentence in example["context_sentences"])
     assert example["candidates"]
     assert any(candidate["is_gold"] for candidate in example["candidates"])
     assert any(candidate["is_selected"] for candidate in example["candidates"])
+    assert example["prompt_messages"][0]["role"] == "system"
+    assert "Target lemma: art" in example["prompt_messages"][1]["content"]
+
+    run_html = (output_dir / "runs" / run_id / "index.html").read_text(encoding="utf-8")
+    assert "Show raw prompt" in run_html
+    assert "Target lemma: art" in run_html
 
 
 def test_build_site_strict_rejects_wrong_dataset_hash(

@@ -408,6 +408,45 @@ pre {
   font-weight: 600;
 }
 
+.raw-prompt {
+  margin: 0 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.raw-prompt summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+.prompt-message-list {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
+.prompt-message {
+  display: grid;
+  gap: 6px;
+}
+
+.prompt-role {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.prompt-content {
+  max-height: 420px;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 mark {
   border-radius: 4px;
   background: color-mix(in srgb, var(--accent) 22%, transparent);
