@@ -116,6 +116,13 @@
     return sourceLabels[entry.source_kind] || "Unknown source";
   }
 
+  function promptLabel(entry) {
+    if (entry.prompt_name) {
+      return `${entry.prompt_id} — ${entry.prompt_name}`;
+    }
+    return entry.prompt_id;
+  }
+
   function ciHalfWidth(entry) {
     const ci = entry.accuracy_ci;
     if (!ci || ci.low == null || ci.high == null) {
@@ -420,7 +427,7 @@
                 : `Accuracy: ${formatPercent(entry.accuracy)} ±${formatPercent(half)}`;
             return [
               `<strong>${escapeHtml(modelLabel(entry))}</strong>`,
-              escapeHtml(entry.run_id),
+              `Prompt: ${escapeHtml(promptLabel(entry))}`,
               accuracyText,
               `${COST_AXIS_LABEL}: ${formatMoney(entry[COST_METRIC])}`
             ].join("<br>");
@@ -604,7 +611,7 @@
             const entry = selectedEntries[point.dataIndex];
             return [
               `<strong>${escapeHtml(modelLabel(entry))}</strong>`,
-              escapeHtml(entry.run_id),
+              `Prompt: ${escapeHtml(promptLabel(entry))}`,
               `${escapeHtml(metric.title)}: ${metric.format(point.value)}`
             ].join("<br>");
           }
