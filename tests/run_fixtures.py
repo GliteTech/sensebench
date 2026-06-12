@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
-from sensebench.datasets.models import DatasetBundle, Document, SenseKey, Sentence, Token, WsdItem
-from sensebench.paths import PROMPT_JSON_SUFFIX, PROMPT_REGISTRY_DIR
-from sensebench.prompts.models import MessageRole, PromptDefinition
+from datetime import UTC, datetime
+
+from sensebench.datasets.models import (
+    DatasetBundle,
+    DatasetID,
+    Document,
+    DocumentID,
+    ItemID,
+    SenseKey,
+    Sentence,
+    SentenceID,
+    Token,
+    WsdItem,
+)
+from sensebench.paths import P001_PROMPT_PATH
+from sensebench.prompts.models import MessageRole, PromptDefinition, PromptID
 from sensebench.prompts.registry import load_prompt_definition
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
@@ -19,11 +32,13 @@ from sensebench.runs.models import (
     CostSourceKind,
     DatasetReference,
     MessageRecord,
+    ModelID,
     ModelSourceKind,
     MonosemousPolicyKind,
     PredictionRecord,
     PredictionStatus,
     PromptReference,
+    RunID,
     RunMetadata,
     RunnerIdentity,
     RunPolicy,
@@ -35,16 +50,41 @@ from sensebench.runs.models import (
     VoteStatus,
 )
 from sensebench.verify.runs import RunValidationReport, RunValidationRule
+from sensebench.wordnet import SynsetID
 
-ITEM_ID: str = "i1"
-CALL_ID: str = "i1__v1__a1"
-PROMPT_ID: str = "p001"
+ITEM_ID: ItemID = "i1"
+CALL_ID: CallID = "i1__v1__a1"
+PROMPT_ID: PromptID = "p001"
+DEFAULT_RUN_ID: RunID = "run-1"
+DATASET_ID: DatasetID = "fixture"
+DATASET_VERSION: str = "1"
+MODEL_NAME: ModelID = "fake"
+DOCUMENT_ID: DocumentID = "d1"
+SENTENCE_ID: SentenceID = "s1"
+TARGET_TEXT: str = "bank"
+TARGET_LEMMA: str = "bank"
+TARGET_POS: str = "NOUN"
+RUN_CREATED_AT: datetime = datetime(2026, 6, 12, tzinfo=UTC)
+GIT_COMMIT: str = "abc"
+RUNNER_GITHUB_HANDLE: str = "tester"
+SENSEBENCH_VERSION: str = "0.1.0"
 FIRST_SENSE_KEY: SenseKey = "sense-1"
 SECOND_SENSE_KEY: SenseKey = "sense-2"
+FIRST_SYNSET_ID: SynsetID = "syn-1"
+SECOND_SYNSET_ID: SynsetID = "syn-2"
+USER_MESSAGE_CONTENT: str = "x"
+VOTES_PER_ITEM: int = 1
+SEMANTIC_REASKS_PER_INVALID_VOTE: int = 1
+SUCCESS_CALL_COST_USD: float = 0.01
+NO_CALL_COST_USD: float = 0.0
+SENSE_KEYS_BY_INDEX: dict[int, SenseKey] = {
+    1: FIRST_SENSE_KEY,
+    2: SECOND_SENSE_KEY,
+}
 
 
 def registered_prompt() -> PromptDefinition:
-    return load_prompt_definition(path=PROMPT_REGISTRY_DIR / f"{PROMPT_ID}{PROMPT_JSON_SUFFIX}")
+    return load_prompt_definition(path=P001_PROMPT_PATH)
 
 
 def make_metadata(
@@ -53,34 +93,34 @@ def make_metadata(
     correct_count: int,
     accuracy: float | None,
     call_count: int,
-    prompt_id: str = PROMPT_ID,
+    prompt_id: PromptID = PROMPT_ID,
     content_hash: str | None = None,
-    dataset_version: str = "1",
-    run_id: str = "run-1",
+    dataset_version: str = DATASET_VERSION,
+    run_id: RunID = DEFAULT_RUN_ID,
 ) -> RunMetadata:
     return RunMetadata(
         schema_version=RUN_SCHEMA_VERSION,
         run_id=run_id,
-        created_at="2026-06-12T00:00:00+00:00",
-        git_commit="abc",
-        runner=RunnerIdentity(github_handle="tester"),
+        created_at=RUN_CREATED_AT,
+        git_commit=GIT_COMMIT,
+        runner=RunnerIdentity(github_handle=RUNNER_GITHUB_HANDLE),
         dataset=DatasetReference(
-            dataset_id="fixture",
+            dataset_id=DATASET_ID,
             dataset_version=dataset_version,
             content_hash=content_hash,
             item_count=item_count,
         ),
-        prompt=PromptReference(id=prompt_id, sensebench_version="0.1.0"),
+        prompt=PromptReference(id=prompt_id, sensebench_version=SENSEBENCH_VERSION),
         model=CloudLlmReference(
             kind=CLOUD_LLM_KIND,
-            display_name="fake",
-            requested_model="fake",
+            display_name=MODEL_NAME,
+            requested_model=MODEL_NAME,
             source_kind=ModelSourceKind.UNKNOWN,
         ),
         sampling=SamplingParameters(),
         policy=RunPolicy(
-            votes_per_item=1,
-            semantic_reasks_per_invalid_vote=1,
+            votes_per_item=VOTES_PER_ITEM,
+            semantic_reasks_per_invalid_vote=SEMANTIC_REASKS_PER_INVALID_VOTE,
             tie_break=TieBreakKind.EARLIEST_VOTE,
             monosemous_policy=MonosemousPolicyKind.SHORT_CIRCUIT,
         ),
@@ -90,15 +130,15 @@ def make_metadata(
             accuracy=accuracy,
             call_count=call_count,
             usage=TokenUsage(),
-            cost=CostBreakdown(total_usd=0.0, source=CostSourceKind.NO_CALLS),
+            cost=CostBreakdown(total_usd=NO_CALL_COST_USD, source=CostSourceKind.NO_CALLS),
         ),
     )
 
 
 def two_candidates() -> list[CandidateRecord]:
     return [
-        CandidateRecord(index=1, sense_key=FIRST_SENSE_KEY, synset_id="syn-1"),
-        CandidateRecord(index=2, sense_key=SECOND_SENSE_KEY, synset_id="syn-2"),
+        CandidateRecord(index=1, sense_key=FIRST_SENSE_KEY, synset_id=FIRST_SYNSET_ID),
+        CandidateRecord(index=2, sense_key=SECOND_SENSE_KEY, synset_id=SECOND_SYNSET_ID),
     ]
 
 
@@ -108,7 +148,8 @@ def voted_prediction(
     gold_sense_keys: list[SenseKey],
     is_correct: bool,
 ) -> PredictionRecord:
-    chosen_key = f"sense-{chosen_index}"
+    assert chosen_index in SENSE_KEYS_BY_INDEX, "chosen index has a fixture sense key"
+    chosen_key: SenseKey = SENSE_KEYS_BY_INDEX[chosen_index]
     return PredictionRecord(
         item_id=ITEM_ID,
         gold_sense_keys=gold_sense_keys,
@@ -128,7 +169,7 @@ def voted_prediction(
         status=PredictionStatus.SUCCESS,
         was_monosemous=False,
         usage=TokenUsage(),
-        cost=CostBreakdown(total_usd=0.01, source=CostSourceKind.LITELLM_ESTIMATE),
+        cost=CostBreakdown(total_usd=SUCCESS_CALL_COST_USD, source=CostSourceKind.LITELLM_ESTIMATE),
     )
 
 
@@ -136,7 +177,7 @@ def monosemous_prediction() -> PredictionRecord:
     return PredictionRecord(
         item_id=ITEM_ID,
         gold_sense_keys=[FIRST_SENSE_KEY],
-        candidates=[CandidateRecord(index=1, sense_key=FIRST_SENSE_KEY, synset_id="syn-1")],
+        candidates=[CandidateRecord(index=1, sense_key=FIRST_SENSE_KEY, synset_id=FIRST_SYNSET_ID)],
         votes=[],
         predicted_sense_index=1,
         predicted_sense_key=FIRST_SENSE_KEY,
@@ -144,7 +185,7 @@ def monosemous_prediction() -> PredictionRecord:
         status=PredictionStatus.MONOSEMOUS,
         was_monosemous=True,
         usage=TokenUsage(),
-        cost=CostBreakdown(total_usd=0.0, source=CostSourceKind.NO_CALLS),
+        cost=CostBreakdown(total_usd=NO_CALL_COST_USD, source=CostSourceKind.NO_CALLS),
     )
 
 
@@ -157,11 +198,11 @@ def success_call(*, raw_output: str, call_id: CallID = CALL_ID) -> CallRecord:
         attempt_kind=AttemptKind.INITIAL,
         transport_retry_count=0,
         status=CallStatus.SUCCESS,
-        model="fake",
-        messages=[MessageRecord(role=MessageRole.USER, content="x")],
+        model=MODEL_NAME,
+        messages=[MessageRecord(role=MessageRole.USER, content=USER_MESSAGE_CONTENT)],
         raw_output=raw_output,
         usage=TokenUsage(),
-        cost=CostBreakdown(total_usd=0.01, source=CostSourceKind.LITELLM_ESTIMATE),
+        cost=CostBreakdown(total_usd=SUCCESS_CALL_COST_USD, source=CostSourceKind.LITELLM_ESTIMATE),
     )
 
 
@@ -169,23 +210,23 @@ def fixture_dataset(
     *,
     gold_sense_keys: list[SenseKey],
     content_hash: str | None = None,
-    item_id: str = ITEM_ID,
+    item_id: ItemID = ITEM_ID,
 ) -> DatasetBundle:
     return DatasetBundle(
-        dataset_id="fixture",
-        dataset_version="1",
+        dataset_id=DATASET_ID,
+        dataset_version=DATASET_VERSION,
         dataset_revision=None,
         content_hash=content_hash,
         documents=[],
         items=[
             WsdItem(
                 item_id=item_id,
-                document_id="d1",
-                sentence_id="s1",
+                document_id=DOCUMENT_ID,
+                sentence_id=SENTENCE_ID,
                 target_token_index=0,
-                target_text="bank",
-                lemma="bank",
-                pos="NOUN",
+                target_text=TARGET_TEXT,
+                lemma=TARGET_LEMMA,
+                pos=TARGET_POS,
                 gold_sense_keys=gold_sense_keys,
             )
         ],
@@ -194,19 +235,19 @@ def fixture_dataset(
 
 def renderable_dataset(*, gold_sense_keys: list[SenseKey]) -> DatasetBundle:
     return DatasetBundle(
-        dataset_id="fixture",
-        dataset_version="1",
+        dataset_id=DATASET_ID,
+        dataset_version=DATASET_VERSION,
         dataset_revision=None,
         content_hash=None,
         documents=[
             Document(
-                document_id="d1",
+                document_id=DOCUMENT_ID,
                 sentences=[
                     Sentence(
-                        sentence_id="s1",
+                        sentence_id=SENTENCE_ID,
                         tokens=[
                             Token(text="The"),
-                            Token(text="bank", item_id=ITEM_ID),
+                            Token(text=TARGET_TEXT, item_id=ITEM_ID),
                             Token(text="was"),
                             Token(text="steep"),
                         ],
@@ -217,12 +258,12 @@ def renderable_dataset(*, gold_sense_keys: list[SenseKey]) -> DatasetBundle:
         items=[
             WsdItem(
                 item_id=ITEM_ID,
-                document_id="d1",
-                sentence_id="s1",
+                document_id=DOCUMENT_ID,
+                sentence_id=SENTENCE_ID,
                 target_token_index=1,
-                target_text="bank",
-                lemma="bank",
-                pos="NOUN",
+                target_text=TARGET_TEXT,
+                lemma=TARGET_LEMMA,
+                pos=TARGET_POS,
                 gold_sense_keys=gold_sense_keys,
             )
         ],

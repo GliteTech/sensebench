@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pytest
+from pytest import approx
 
 from sensebench.runner.costs import sum_costs
 from sensebench.runs.models import CostBreakdown, CostSourceKind
@@ -28,9 +28,9 @@ def test_sum_costs_preserves_shared_unit_prices() -> None:
         ],
     )
 
-    assert cost.total_usd == pytest.approx(0.30)
-    assert cost.input_uncached_usd == pytest.approx(0.09)
-    assert cost.output_usd == pytest.approx(0.21)
-    assert cost.input_uncached_unit_price_usd == 0.001
-    assert cost.output_unit_price_usd == 0.002
-    assert cost.source == CostSourceKind.LITELLM_ESTIMATE
+    assert cost.total_usd == approx(0.30), "total cost matches summed input totals"
+    assert cost.input_uncached_usd == approx(0.09), "uncached input cost matches summed inputs"
+    assert cost.output_usd == approx(0.21), "output cost matches summed outputs"
+    assert cost.input_uncached_unit_price_usd == 0.001, "shared uncached input price is preserved"
+    assert cost.output_unit_price_usd == 0.002, "shared output price is preserved"
+    assert cost.source == CostSourceKind.LITELLM_ESTIMATE, "shared cost source is preserved"

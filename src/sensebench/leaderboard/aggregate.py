@@ -26,6 +26,9 @@ from sensebench.runs.loaders import LoadedRun, load_run_directory
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
     SELF_HOSTED_LLM_KIND,
+    CloudLlmReference,
+    ModelHostingKind,
+    ModelReference,
     PredictionRecord,
     PredictionStatus,
     RunID,
@@ -40,6 +43,9 @@ CONFIDENCE_LOW_PERCENTILE: float = 2.5
 CONFIDENCE_HIGH_PERCENTILE: float = 97.5
 LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v3"
 RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
+UNKNOWN_MODEL_HOSTING_KIND: str = "unknown"
+MISSING_DATASET_VERSION_GROUP_VALUE: str = "dataset_version:none"
+RANK_FIELD: str = "rank"
 
 
 class LeaderboardModel(BaseModel):
@@ -63,7 +69,7 @@ class LeaderboardEntry(LeaderboardModel):
     requested_model: str
     resolved_model: str | None
     model_kind: str
-    hosting_kind: str
+    hosting_kind: ModelHostingKind | str
     source_kind: str
     llm_vendor: str | None
     api_provider: str | None
@@ -124,6 +130,20 @@ class LeaderboardCollection:
     issues: list[LeaderboardCollectionIssue]
 
 
+@dataclass(frozen=True, slots=True)
+class VerifiedEntryResult:
+    entry: LeaderboardEntry | None
+    issues: list[LeaderboardCollectionIssue]
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class LeaderboardSortKey:
+    negative_accuracy: float
+    cost_per_million_items: float
+    negative_created_at_timestamp: float
+    run_id: RunID
+
+
 class LeaderboardBuildError(RuntimeError):
     def __init__(self, *, issues: list[LeaderboardCollectionIssue]) -> None:
         self.issues = issues
@@ -135,13 +155,20 @@ def _bootstrap_accuracy_ci(*, values: list[bool]) -> AccuracyInterval:
     if len(values) == 0:
         return AccuracyInterval(low=None, high=None)
     numeric: NDArray[np.float64] = np.array(
-        [1.0 if value else 0.0 for value in values],
+        object=[1.0 if value else 0.0 for value in values],
         dtype=np.float64,
     )
     rng = np.random.default_rng(DEFAULT_BOOTSTRAP_SEED)
-    estimates: NDArray[np.float64] = np.empty(DEFAULT_BOOTSTRAP_RESAMPLES, dtype=np.float64)
+    estimates: NDArray[np.float64] = np.empty(
+        shape=DEFAULT_BOOTSTRAP_RESAMPLES,
+        dtype=np.float64,
+    )
     for index in range(DEFAULT_BOOTSTRAP_RESAMPLES):
-        sample: NDArray[np.float64] = rng.choice(numeric, size=len(numeric), replace=True)
+        sample: NDArray[np.float64] = rng.choice(
+            a=numeric,
+            size=len(numeric),
+            replace=True,
+        )
         estimates[index] = float(np.mean(sample))
     percentiles: NDArray[np.float64] = np.percentile(
         a=estimates,
@@ -165,8 +192,12 @@ def _divide(*, numerator: float | int | None, denominator: int) -> float | None:
 
 
 def _token_total(*, usage: TokenUsage) -> int | None:
-    values = [usage.input_tokens, usage.output_tokens, usage.reasoning_output_tokens]
-    present = [value for value in values if value is not None]
+    values: list[int | None] = [
+        usage.input_tokens,
+        usage.output_tokens,
+        usage.reasoning_output_tokens,
+    ]
+    present: list[int] = [value for value in values if value is not None]
     if len(present) == 0:
         return None
     return sum(present)
@@ -202,12 +233,24 @@ def _transport_error_vote_count(*, predictions: list[PredictionRecord]) -> int:
     )
 
 
-def _hosting_kind(*, model_kind: str) -> str:
+def _hosting_kind(*, model_kind: str) -> ModelHostingKind | str:
     if model_kind == CLOUD_LLM_KIND:
-        return "cloud_api"
+        return ModelHostingKind.CLOUD_API
     if model_kind == SELF_HOSTED_LLM_KIND:
-        return "self_hosted"
-    return "unknown"
+        return ModelHostingKind.SELF_HOSTED
+    return UNKNOWN_MODEL_HOSTING_KIND
+
+
+def _api_provider(*, model: ModelReference) -> str | None:
+    if isinstance(model, CloudLlmReference):
+        return model.api_provider
+    return None
+
+
+def _reasoning_effort(*, model: ModelReference) -> str | None:
+    if isinstance(model, CloudLlmReference):
+        return model.reasoning_effort
+    return None
 
 
 def _best_group_key(*, loaded: LoadedRun) -> str:
@@ -215,7 +258,9 @@ def _best_group_key(*, loaded: LoadedRun) -> str:
     return "|".join(
         [
             metadata.model.display_name,
-            metadata.dataset.dataset_version or "",
+            metadata.dataset.dataset_version
+            if metadata.dataset.dataset_version is not None
+            else MISSING_DATASET_VERSION_GROUP_VALUE,
             metadata.prompt.id,
         ]
     )
@@ -243,7 +288,7 @@ def _entry_for_run(
         rank=rank,
         run_id=metadata.run_id,
         run_url=f"runs/{metadata.run_id}/",
-        created_at=metadata.created_at,
+        created_at=metadata.created_at.isoformat(),
         git_commit=metadata.git_commit,
         runner_github_handle=metadata.runner.github_handle,
         runner_name=metadata.runner.name,
@@ -254,10 +299,10 @@ def _entry_for_run(
         hosting_kind=_hosting_kind(model_kind=model_kind),
         source_kind=model.source_kind.value,
         llm_vendor=model.llm_vendor,
-        api_provider=getattr(model, "api_provider", None),
+        api_provider=_api_provider(model=model),
         license=model.license,
         model_url=model.model_url,
-        reasoning_effort=getattr(model, "reasoning_effort", None),
+        reasoning_effort=_reasoning_effort(model=model),
         prompt_id=metadata.prompt.id,
         prompt_name=prompt.name if prompt is not None else None,
         dataset_id=metadata.dataset.dataset_id,
@@ -335,7 +380,7 @@ def _official_dataset(
 
 
 def _format_verification_issues(*, issues: list[RunValidationIssue]) -> str:
-    failed_rules = sorted({issue.rule.value for issue in issues})
+    failed_rules: list[str] = sorted({issue.rule.value for issue in issues})
     return f"failed verification ({', '.join(failed_rules)})"
 
 
@@ -352,13 +397,18 @@ def _verified_entry_for_run(
     run_dir: Path,
     official: bool,
     dataset_cache: dict[str, DatasetBundle],
-) -> tuple[LeaderboardEntry | None, list[LeaderboardCollectionIssue]]:
+) -> VerifiedEntryResult:
     try:
         loaded = load_run_directory(run_dir=run_dir)
     except Exception as exc:
-        return None, [LeaderboardCollectionIssue(run_dir=run_dir, message=f"cannot load ({exc})")]
+        return VerifiedEntryResult(
+            entry=None,
+            issues=[
+                LeaderboardCollectionIssue(run_dir=run_dir, message=f"cannot load ({exc})"),
+            ],
+        )
 
-    local_issues = [
+    local_issues: list[LeaderboardCollectionIssue] = [
         LeaderboardCollectionIssue(run_dir=run_dir, message=message)
         for message in _eligibility_issues(loaded=loaded)
     ]
@@ -384,35 +434,44 @@ def _verified_entry_for_run(
             )
 
     if len(local_issues) > 0:
-        return None, local_issues
+        return VerifiedEntryResult(entry=None, issues=local_issues)
 
     try:
         report = verify_run_directory(run_dir=run_dir, dataset=dataset, prompt=prompt)
     except Exception as exc:
-        return None, [
-            LeaderboardCollectionIssue(run_dir=run_dir, message=f"cannot verify ({exc})")
-        ]
+        return VerifiedEntryResult(
+            entry=None,
+            issues=[
+                LeaderboardCollectionIssue(run_dir=run_dir, message=f"cannot verify ({exc})"),
+            ],
+        )
     if report.has_errors():
-        return None, [
-            LeaderboardCollectionIssue(
-                run_dir=run_dir,
-                message=_format_verification_issues(issues=report.issues),
-            )
-        ]
-    return _entry_for_run(loaded=loaded, prompt=prompt, rank=0), []
+        return VerifiedEntryResult(
+            entry=None,
+            issues=[
+                LeaderboardCollectionIssue(
+                    run_dir=run_dir,
+                    message=_format_verification_issues(issues=report.issues),
+                ),
+            ],
+        )
+    return VerifiedEntryResult(
+        entry=_entry_for_run(loaded=loaded, prompt=prompt, rank=0),
+        issues=[],
+    )
 
 
-def _created_at_timestamp(*, value: str) -> float:
+def _created_at_timestamp(*, value: str) -> float | None:
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError:
-        return 0.0
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.timestamp()
 
 
-def _sort_key(entry: LeaderboardEntry) -> tuple[float, float, float, str]:
+def _sort_key(entry: LeaderboardEntry) -> LeaderboardSortKey:
     accuracy = entry.accuracy if entry.accuracy is not None else -1.0
     cost = (
         entry.cost_per_million_items
@@ -420,12 +479,21 @@ def _sort_key(entry: LeaderboardEntry) -> tuple[float, float, float, str]:
         else float("inf")
     )
     created_at = _created_at_timestamp(value=entry.created_at)
-    return (-accuracy, cost, -created_at, entry.run_id)
+    created_at_sort_value = created_at if created_at is not None else float("-inf")
+    return LeaderboardSortKey(
+        negative_accuracy=-accuracy,
+        cost_per_million_items=cost,
+        negative_created_at_timestamp=-created_at_sort_value,
+        run_id=entry.run_id,
+    )
 
 
 def _ranked(*, entries: list[LeaderboardEntry]) -> list[LeaderboardEntry]:
-    sorted_entries = sorted(entries, key=_sort_key)
-    return [entry.model_copy(update={"rank": rank}) for rank, entry in enumerate(sorted_entries, 1)]
+    sorted_entries: list[LeaderboardEntry] = sorted(entries, key=_sort_key)
+    return [
+        entry.model_copy(update={RANK_FIELD: rank})
+        for rank, entry in enumerate(sorted_entries, 1)
+    ]
 
 
 def collect_leaderboard_entries(
@@ -442,24 +510,24 @@ def collect_leaderboard_entries(
         for run_dir in sorted(path for path in results_dir.iterdir() if path.is_dir()):
             if not (run_dir / RUN_METADATA_FILENAME).exists():
                 continue
-            entry, run_issues = _verified_entry_for_run(
+            result = _verified_entry_for_run(
                 run_dir=run_dir,
                 official=official,
                 dataset_cache=dataset_cache,
             )
-            issues.extend(run_issues)
-            if entry is None:
+            issues.extend(result.issues)
+            if result.entry is None:
                 continue
-            if entry.run_id in seen_run_ids:
+            if result.entry.run_id in seen_run_ids:
                 issues.append(
                     LeaderboardCollectionIssue(
                         run_dir=run_dir,
-                        message=f"duplicate run_id {entry.run_id}",
+                        message=f"duplicate run_id {result.entry.run_id}",
                     )
                 )
                 continue
-            seen_run_ids.add(entry.run_id)
-            entries.append(entry)
+            seen_run_ids.add(result.entry.run_id)
+            entries.append(result.entry)
     if fail_on_invalid and len(issues) > 0:
         raise LeaderboardBuildError(issues=issues)
     return LeaderboardCollection(entries=_ranked(entries=entries), issues=issues)

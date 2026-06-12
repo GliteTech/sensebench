@@ -1,42 +1,68 @@
 from __future__ import annotations
 
 from sensebench.datasets.context import build_context_window, build_dataset_index
-from sensebench.datasets.models import DatasetBundle, Document, Sentence, Token, WsdItem
+from sensebench.datasets.models import (
+    DatasetBundle,
+    DatasetID,
+    Document,
+    DocumentID,
+    ItemID,
+    SenseKey,
+    Sentence,
+    SentenceID,
+    Token,
+    WsdItem,
+)
+
+DATASET_ID: DatasetID = "fixture"
+DATASET_VERSION: str = "1"
+DOCUMENT_ID: DocumentID = "d1"
+PREVIOUS_SENTENCE_ID: SentenceID = "s1"
+TARGET_SENTENCE_ID: SentenceID = "s2"
+NEXT_SENTENCE_ID: SentenceID = "s3"
+ITEM_ID: ItemID = "i1"
+TARGET_TEXT: str = "bank"
+TARGET_LEMMA: str = "bank"
+TARGET_POS: str = "NOUN"
+GOLD_SENSE_KEY: SenseKey = "bank%1:14:00::"
+PREVIOUS_SENTENCES: int = 1
+NEXT_SENTENCES: int = 1
+EXPECTED_CONTEXT_TEXT: str = "Before The bank closed After"
 
 
 def _bundle() -> DatasetBundle:
     return DatasetBundle(
-        dataset_id="fixture",
-        dataset_version="1",
+        dataset_id=DATASET_ID,
+        dataset_version=DATASET_VERSION,
         dataset_revision=None,
         content_hash=None,
         documents=[
             Document(
-                document_id="d1",
+                document_id=DOCUMENT_ID,
                 sentences=[
-                    Sentence(sentence_id="s1", tokens=[Token(text="Before")]),
+                    Sentence(sentence_id=PREVIOUS_SENTENCE_ID, tokens=[Token(text="Before")]),
                     Sentence(
-                        sentence_id="s2",
+                        sentence_id=TARGET_SENTENCE_ID,
                         tokens=[
                             Token(text="The"),
-                            Token(text="bank", item_id="i1"),
+                            Token(text=TARGET_TEXT, item_id=ITEM_ID),
                             Token(text="closed"),
                         ],
                     ),
-                    Sentence(sentence_id="s3", tokens=[Token(text="After")]),
+                    Sentence(sentence_id=NEXT_SENTENCE_ID, tokens=[Token(text="After")]),
                 ],
             )
         ],
         items=[
             WsdItem(
-                item_id="i1",
-                document_id="d1",
-                sentence_id="s2",
+                item_id=ITEM_ID,
+                document_id=DOCUMENT_ID,
+                sentence_id=TARGET_SENTENCE_ID,
                 target_token_index=1,
-                target_text="bank",
-                lemma="bank",
-                pos="NOUN",
-                gold_sense_keys=["bank%1:14:00::"],
+                target_text=TARGET_TEXT,
+                lemma=TARGET_LEMMA,
+                pos=TARGET_POS,
+                gold_sense_keys=[GOLD_SENSE_KEY],
             )
         ],
     )
@@ -48,11 +74,11 @@ def test_context_window_uses_token_offset() -> None:
     window = build_context_window(
         index=index,
         item=bundle.items[0],
-        previous_sentences=1,
-        next_sentences=1,
+        previous_sentences=PREVIOUS_SENTENCES,
+        next_sentences=NEXT_SENTENCES,
     )
 
-    assert window.text == "Before The bank closed After"
-    assert window.text[window.target_start_char : window.target_end_char] == "bank"
-    assert window.sentences_before == 1
-    assert window.sentences_after == 1
+    assert window.text == EXPECTED_CONTEXT_TEXT
+    assert window.text[window.target_start_char : window.target_end_char] == TARGET_TEXT
+    assert window.sentences_before == PREVIOUS_SENTENCES
+    assert window.sentences_after == NEXT_SENTENCES

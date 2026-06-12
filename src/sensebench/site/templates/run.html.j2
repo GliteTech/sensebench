@@ -217,7 +217,7 @@
         {% for summary in detail.slices %}
         <tr>
           <td>{{ summary.group }}</td>
-          <td>{{ summary.value }}</td>
+          <td>{{ summary.value or "n/a" }}</td>
           <td>{{ summary.accuracy|pct }}</td>
           <td>{{ summary.correct_count }}</td>
           <td>{{ summary.item_count }}</td>
@@ -238,8 +238,8 @@
           <h3>{{ example.lemma }} {{ example.pos|title }}</h3>
           <p class="example-meta">
             Instance: {{ example.item_id }}
-            <span>Dataset: {{ example.source_dataset }}</span>
-            <span>Bucket: {{ example.bucket_group }} / {{ example.bucket_value }}</span>
+            <span>Dataset: {{ example.source_dataset or "n/a" }}</span>
+            <span>Bucket: {{ example.bucket_group }} / {{ example.bucket_value or "n/a" }}</span>
           </p>
         </div>
         <div class="example-outcome">

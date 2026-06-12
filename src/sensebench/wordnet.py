@@ -4,25 +4,37 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from sensebench.datasets.models import SenseKey
 
 EXPECTED_WORDNET_VERSION: str = "3.0"
+WORDNET_CORPUS_ID: str = "wordnet"
 
 type SynsetID = str
-type WordNetPos = str
+type LemmaText = str
+type NormalizedLemma = str
+type SynonymText = str
+
+
+class WordNetPos(StrEnum):
+    NOUN = "n"
+    VERB = "v"
+    ADJECTIVE = "a"
+    ADVERB = "r"
+
 
 PROJECT_POS_TO_WORDNET: dict[str, WordNetPos] = {
-    "NOUN": "n",
-    "VERB": "v",
-    "ADJ": "a",
-    "ADV": "r",
-    "n": "n",
-    "v": "v",
-    "a": "a",
-    "s": "a",
-    "r": "r",
+    "NOUN": WordNetPos.NOUN,
+    "VERB": WordNetPos.VERB,
+    "ADJ": WordNetPos.ADJECTIVE,
+    "ADV": WordNetPos.ADVERB,
+    "n": WordNetPos.NOUN,
+    "v": WordNetPos.VERB,
+    "a": WordNetPos.ADJECTIVE,
+    "s": WordNetPos.ADJECTIVE,
+    "r": WordNetPos.ADVERB,
 }
 
 
@@ -32,7 +44,7 @@ class SenseCandidate:
     synset_id: SynsetID
     pos: WordNetPos
     definition: str
-    synonyms: list[str]
+    synonyms: list[SynonymText]
     examples: list[str]
 
 
@@ -44,7 +56,7 @@ def _wordnet() -> Any:
     return wn
 
 
-def _normalize_lemma(*, value: str) -> str:
+def _normalize_lemma(*, value: LemmaText | SynonymText) -> NormalizedLemma:
     return "".join(
         character for character in value.lower().replace("_", " ") if character.isalnum()
     )
@@ -54,11 +66,19 @@ def wordnet_pos(*, pos: str) -> WordNetPos | None:
     return PROJECT_POS_TO_WORDNET.get(pos)
 
 
+def _synset_pos(*, synset: Any) -> WordNetPos:
+    raw_pos = str(synset.pos())
+    pos = wordnet_pos(pos=raw_pos)
+    if pos is None:
+        raise ValueError(f"unsupported WordNet POS: {raw_pos}")
+    return pos
+
+
 def _download_wordnet_corpus() -> None:
     import nltk  # type: ignore[import-untyped]
 
     print("Downloading the NLTK WordNet corpus (one-time setup)...", file=sys.stderr)
-    nltk.download("wordnet", quiet=True)
+    nltk.download(info_or_id=WORDNET_CORPUS_ID, quiet=True)
 
 
 def wordnet_version() -> str:
@@ -73,7 +93,7 @@ def wordnet_version() -> str:
     return version
 
 
-def _target_sense_key(*, synset: Any, target_lemma: str) -> SenseKey:
+def _target_sense_key(*, synset: Any, target_lemma: LemmaText) -> SenseKey:
     normalized_target = _normalize_lemma(value=target_lemma)
     lemmas: list[Any] = list(synset.lemmas())
     for lemma in lemmas:
@@ -84,13 +104,13 @@ def _target_sense_key(*, synset: Any, target_lemma: str) -> SenseKey:
     return str(lemmas[0].key())
 
 
-def _synonyms(*, synset: Any, target_lemma: str) -> list[str]:
+def _synonyms(*, synset: Any, target_lemma: LemmaText) -> list[SynonymText]:
     normalized_target = _normalize_lemma(value=target_lemma)
-    values: list[str] = []
-    seen: set[str] = set()
+    values: list[SynonymText] = []
+    seen: set[NormalizedLemma] = set()
     lemma_names: list[Any] = list(synset.lemma_names())
     for lemma_name in lemma_names:
-        rendered = str(lemma_name).replace("_", " ")
+        rendered: SynonymText = str(lemma_name).replace("_", " ")
         normalized = _normalize_lemma(value=rendered)
         if normalized == normalized_target or normalized in seen:
             continue
@@ -99,10 +119,15 @@ def _synonyms(*, synset: Any, target_lemma: str) -> list[str]:
     return values
 
 
-def get_candidate_senses(*, lemma: str, pos: str) -> list[SenseCandidate]:
+def get_candidate_senses(*, lemma: LemmaText, pos: str) -> list[SenseCandidate]:
     wn = _wordnet()
     wn_pos = wordnet_pos(pos=pos)
-    synsets: list[Any] = list(wn.synsets(lemma, pos=wn_pos))
+    synsets: list[Any] = list(
+        wn.synsets(
+            lemma=lemma,
+            pos=wn_pos.value if wn_pos is not None else None,
+        )
+    )
     candidates: list[SenseCandidate] = []
     for synset in synsets:
         examples: list[str] = [str(example).strip() for example in synset.examples()]
@@ -110,7 +135,7 @@ def get_candidate_senses(*, lemma: str, pos: str) -> list[SenseCandidate]:
             SenseCandidate(
                 sense_key=_target_sense_key(synset=synset, target_lemma=lemma),
                 synset_id=str(synset.name()),
-                pos=str(synset.pos()),
+                pos=_synset_pos(synset=synset),
                 definition=str(synset.definition()),
                 synonyms=_synonyms(synset=synset, target_lemma=lemma),
                 examples=examples,

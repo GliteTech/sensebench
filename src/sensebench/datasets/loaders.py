@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
+from hashlib import sha256
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from sensebench.datasets.models import (
     DatasetBundle,
@@ -25,6 +25,7 @@ HASH_CHUNK_SIZE_BYTES: int = 1024 * 1024
 CONTEXT_DOCUMENT_ID_SUFFIX: str = "::context"
 ORIGINAL_DOCUMENT_ID_METADATA_KEY: str = "original_document_id"
 ORIGINAL_SENTENCE_ID_METADATA_KEY: str = "original_sentence_id"
+GENERATED_SENTENCE_ID_SEPARATOR: str = ".s"
 
 
 class JsonDatasetRecord(BaseModel):
@@ -42,10 +43,19 @@ class JsonDatasetRecord(BaseModel):
     sentences: list[list[str]] = Field(min_length=1)
     metadata: dict[str, str] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def validate_indexes(self) -> JsonDatasetRecord:
+        if self.sentence_index >= len(self.sentences):
+            raise ValueError("sentence_index is within sentences")
+        target_sentence = self.sentences[self.sentence_index]
+        if self.target_token_index >= len(target_sentence):
+            raise ValueError("target_token_index is within target sentence")
+        return self
+
 
 def file_content_hash(*, path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    digest = sha256()
+    with path.open(mode="rb") as handle:
         while True:
             chunk = handle.read(HASH_CHUNK_SIZE_BYTES)
             if len(chunk) == 0:
@@ -58,14 +68,17 @@ def _tokens_from_sentence(
     *,
     words: list[str],
     item_id: ItemID,
-    target_index: int,
+    target_index: int | None,
 ) -> list[Token]:
     tokens: list[Token] = []
     for token_index, word in enumerate(words):
+        token_item_id = (
+            item_id if target_index is not None and token_index == target_index else None
+        )
         tokens.append(
             Token(
                 text=word,
-                item_id=item_id if token_index == target_index else None,
+                item_id=token_item_id,
             )
         )
     return tokens
@@ -73,6 +86,10 @@ def _tokens_from_sentence(
 
 def _context_document_id(*, record: JsonDatasetRecord) -> DocumentID:
     return f"{record.item_id}{CONTEXT_DOCUMENT_ID_SUFFIX}"
+
+
+def _generated_sentence_id(*, item_id: ItemID, sentence_index: int) -> SentenceID:
+    return f"{item_id}{GENERATED_SENTENCE_ID_SEPARATOR}{sentence_index}"
 
 
 def _item_metadata(*, record: JsonDatasetRecord) -> dict[str, str]:
@@ -100,20 +117,27 @@ def _bundle_from_records(
             sentence_id = (
                 record.sentence_id
                 if sentence_index == record.sentence_index and record.sentence_id is not None
-                else f"{record.item_id}.s{sentence_index}"
+                else _generated_sentence_id(
+                    item_id=record.item_id,
+                    sentence_index=sentence_index,
+                )
+            )
+            target_index = (
+                record.target_token_index if sentence_index == record.sentence_index else None
             )
             tokens = _tokens_from_sentence(
                 words=words,
                 item_id=record.item_id,
-                target_index=record.target_token_index
-                if sentence_index == record.sentence_index
-                else -1,
+                target_index=target_index,
             )
             sentences.append(Sentence(sentence_id=sentence_id, tokens=tokens))
         item_sentence_id = (
             record.sentence_id
             if record.sentence_id is not None
-            else f"{record.item_id}.s{record.sentence_index}"
+            else _generated_sentence_id(
+                item_id=record.item_id,
+                sentence_index=record.sentence_index,
+            )
         )
         documents.append(Document(document_id=context_document_id, sentences=sentences))
         items.append(

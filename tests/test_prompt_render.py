@@ -1,28 +1,58 @@
 from __future__ import annotations
 
 from sensebench.datasets.context import build_dataset_index
-from sensebench.datasets.models import DatasetBundle, Document, Sentence, Token, WsdItem
-from sensebench.paths import PROMPT_REGISTRY_DIR
+from sensebench.datasets.models import (
+    DatasetBundle,
+    DatasetID,
+    Document,
+    DocumentID,
+    ItemID,
+    SenseKey,
+    Sentence,
+    SentenceID,
+    Token,
+    WsdItem,
+)
+from sensebench.paths import P001_PROMPT_PATH
+from sensebench.prompts.models import TEMPLATE_VARIABLE_CONTEXT
 from sensebench.prompts.registry import load_prompt_definition
 from sensebench.prompts.render import _render_template, render_task
-from sensebench.wordnet import SenseCandidate
+from sensebench.wordnet import SenseCandidate, SynsetID, WordNetPos
+
+DATASET_ID: DatasetID = "fixture"
+DATASET_VERSION: str = "1"
+DOCUMENT_ID: DocumentID = "d1"
+SENTENCE_ID: SentenceID = "s1"
+ITEM_ID: ItemID = "i1"
+TARGET_TEXT: str = "bank"
+TARGET_LEMMA: str = "bank"
+TARGET_POS: str = "NOUN"
+SENSE_KEY: SenseKey = "bank%1:17:00::"
+SYNSET_ID: SynsetID = "bank.n.01"
+DEFINITION: str = "sloping land"
+SYNONYM: str = "slope"
+EXAMPLE: str = "he sat on the bank"
+CONTEXT_VALUE: str = "HELLO"
+UNKNOWN_VARIABLE: str = "unknown"
+DOLLAR_TEMPLATE: str = "It costs $5 or $context or ${context}, said {{context}}."
+DOLLAR_TEMPLATE_RENDERED: str = "It costs $5 or $context or ${context}, said HELLO."
 
 
 def _bundle() -> DatasetBundle:
     return DatasetBundle(
-        dataset_id="fixture",
-        dataset_version="1",
+        dataset_id=DATASET_ID,
+        dataset_version=DATASET_VERSION,
         dataset_revision=None,
         content_hash=None,
         documents=[
             Document(
-                document_id="d1",
+                document_id=DOCUMENT_ID,
                 sentences=[
                     Sentence(
-                        sentence_id="s1",
+                        sentence_id=SENTENCE_ID,
                         tokens=[
                             Token(text="The"),
-                            Token(text="bank", item_id="i1"),
+                            Token(text=TARGET_TEXT, item_id=ITEM_ID),
                             Token(text="was"),
                             Token(text="steep"),
                         ],
@@ -32,14 +62,14 @@ def _bundle() -> DatasetBundle:
         ],
         items=[
             WsdItem(
-                item_id="i1",
-                document_id="d1",
-                sentence_id="s1",
+                item_id=ITEM_ID,
+                document_id=DOCUMENT_ID,
+                sentence_id=SENTENCE_ID,
                 target_token_index=1,
-                target_text="bank",
-                lemma="bank",
-                pos="NOUN",
-                gold_sense_keys=["bank%1:17:00::"],
+                target_text=TARGET_TEXT,
+                lemma=TARGET_LEMMA,
+                pos=TARGET_POS,
+                gold_sense_keys=[SENSE_KEY],
             )
         ],
     )
@@ -47,7 +77,7 @@ def _bundle() -> DatasetBundle:
 
 def test_render_task_marks_target_and_formats_candidates() -> None:
     prompt = load_prompt_definition(
-        path=PROMPT_REGISTRY_DIR / "p001.json",
+        path=P001_PROMPT_PATH,
     )
     bundle = _bundle()
     rendered = render_task(
@@ -56,40 +86,43 @@ def test_render_task_marks_target_and_formats_candidates() -> None:
         dataset_index=build_dataset_index(bundle=bundle),
         candidates=[
             SenseCandidate(
-                sense_key="bank%1:17:00::",
-                synset_id="bank.n.01",
-                pos="n",
-                definition="sloping land",
-                synonyms=["slope"],
-                examples=["he sat on the bank"],
+                sense_key=SENSE_KEY,
+                synset_id=SYNSET_ID,
+                pos=WordNetPos.NOUN,
+                definition=DEFINITION,
+                synonyms=[SYNONYM],
+                examples=[EXAMPLE],
             )
         ],
     )
 
     user_message = rendered.messages[1].content
-    assert "<t>bank</t>" in user_message
-    assert "sense_key=bank%1:17:00::" in user_message
+    assert f"<t>{TARGET_TEXT}</t>" in user_message
+    assert f"sense_key={SENSE_KEY}" in user_message
     assert rendered.render_hash.startswith("sha256:")
     assert all("{{" not in message.content for message in rendered.messages)
 
 
 def test_render_template_substitutes_every_validator_accepted_spelling() -> None:
-    variables = {"context": "HELLO"}
+    variables: dict[str, str] = {TEMPLATE_VARIABLE_CONTEXT: CONTEXT_VALUE}
 
-    assert _render_template(content="{{context}}", variables=variables) == "HELLO"
-    assert _render_template(content="{{ context }}", variables=variables) == "HELLO"
-    assert _render_template(content="{{context }}", variables=variables) == "HELLO"
-    assert _render_template(content="{{ context}}", variables=variables) == "HELLO"
-    assert _render_template(content="{{  context  }}", variables=variables) == "HELLO"
+    assert _render_template(content="{{context}}", variables=variables) == CONTEXT_VALUE
+    assert _render_template(content="{{ context }}", variables=variables) == CONTEXT_VALUE
+    assert _render_template(content="{{context }}", variables=variables) == CONTEXT_VALUE
+    assert _render_template(content="{{ context}}", variables=variables) == CONTEXT_VALUE
+    assert _render_template(content="{{  context  }}", variables=variables) == CONTEXT_VALUE
 
 
 def test_render_template_leaves_dollar_text_and_unknown_variables_alone() -> None:
-    variables = {"context": "HELLO"}
+    variables: dict[str, str] = {TEMPLATE_VARIABLE_CONTEXT: CONTEXT_VALUE}
 
     rendered = _render_template(
-        content="It costs $5 or $context or ${context}, said {{context}}.",
+        content=DOLLAR_TEMPLATE,
         variables=variables,
     )
 
-    assert rendered == "It costs $5 or $context or ${context}, said HELLO."
-    assert _render_template(content="{{unknown}}", variables=variables) == "{{unknown}}"
+    assert rendered == DOLLAR_TEMPLATE_RENDERED
+    assert (
+        _render_template(content=f"{{{{{UNKNOWN_VARIABLE}}}}}", variables=variables)
+        == f"{{{{{UNKNOWN_VARIABLE}}}}}"
+    )

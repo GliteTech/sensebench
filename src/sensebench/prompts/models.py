@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import re
 from enum import StrEnum
+from re import Pattern
+from re import compile as compile_regex
 from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PROMPT_ID_PATTERN: str = r"^p[0-9]{3,}$"
-TEMPLATE_VARIABLE_PATTERN: re.Pattern[str] = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
+TEMPLATE_VARIABLE_PATTERN: Pattern[str] = compile_regex(
+    r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}"
+)
 TEMPLATE_VARIABLE_CANDIDATE_SENSES: str = "candidate_senses"
 TEMPLATE_VARIABLE_CONTEXT: str = "context"
 TEMPLATE_VARIABLE_ITEM_ID: str = "item_id"
@@ -27,7 +30,7 @@ KNOWN_TEMPLATE_VARIABLES: frozenset[str] = frozenset(
     }
 )
 SENSE_INDEX_FIELD: str = "sense_index"
-TEMPLATE_TYPE_FIELD: Final[str] = "template_type"
+TEMPLATE_KIND_FIELD: Final[str] = "template_type"
 
 type PromptID = str
 
@@ -130,7 +133,7 @@ class PromptDefinition(StrictPromptModel):
     description: str = Field(min_length=1)
     supersedes: PromptID | None = Field(default=None, pattern=PROMPT_ID_PATTERN)
     notes: str | None = Field(default=None, min_length=1)
-    template_kind: Annotated[TemplateKind, Field(alias=TEMPLATE_TYPE_FIELD)]
+    template_kind: Annotated[TemplateKind, Field(alias=TEMPLATE_KIND_FIELD)]
     template: PromptTemplate
     params: PromptParams
     output: PromptOutput

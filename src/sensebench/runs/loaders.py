@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import gzip
 from dataclasses import dataclass
+from gzip import open as gzip_open
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -41,7 +41,7 @@ def _load_gzip_jsonl_models[T_RunModel: BaseModel](
     model_cls: type[T_RunModel],
 ) -> list[T_RunModel]:
     records: list[T_RunModel] = []
-    with gzip.open(path, mode="rt", encoding="utf-8") as handle:
+    with gzip_open(filename=path, mode="rt", encoding="utf-8") as handle:
         for raw_line in handle:
             line = raw_line.strip()
             if len(line) == 0:

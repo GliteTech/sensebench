@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-import asyncio
+from asyncio import run as run_async
+from json import dumps
 
 from sensebench.datasets.context import ContextWindow
-from sensebench.prompts.models import MessageRole, OutputMode
+from sensebench.datasets.models import ItemID, SenseKey
+from sensebench.prompts.models import SENSE_INDEX_FIELD, MessageRole, OutputMode, PromptID
 from sensebench.prompts.render import CandidateChoice, ChatMessage, RenderedTask
 from sensebench.runner.client import CompletionClient
 from sensebench.runner.evaluate import EvaluationConfig, evaluate_item
@@ -15,8 +17,37 @@ from sensebench.runs.models import (
     CostBreakdown,
     CostSourceKind,
     MessageRecord,
+    ModelID,
     TokenUsage,
 )
+from sensebench.wordnet import SynsetID
+
+ITEM_ID: ItemID = "i1"
+PROMPT_ID: PromptID = "p001"
+FAKE_MODEL: ModelID = "fake"
+FIRST_SENSE_KEY: SenseKey = "sense-1"
+SECOND_SENSE_KEY: SenseKey = "sense-2"
+FIRST_SYNSET_ID: SynsetID = "synset-1"
+SECOND_SYNSET_ID: SynsetID = "synset-2"
+SENSE_KEYS_BY_INDEX: dict[int, SenseKey] = {
+    1: FIRST_SENSE_KEY,
+    2: SECOND_SENSE_KEY,
+}
+SYNSET_IDS_BY_INDEX: dict[int, SynsetID] = {
+    1: FIRST_SYNSET_ID,
+    2: SECOND_SYNSET_ID,
+}
+USER_MESSAGE_CONTENT: str = "choose"
+RENDER_HASH: str = "sha256:test"
+INVALID_RAW_OUTPUT: str = "not json"
+INPUT_TOKENS: int = 1
+OUTPUT_TOKENS: int = 1
+CALL_COST_USD: float = 0.01
+CALL_LATENCY_SECONDS: float = 0.1
+
+
+def raw_output_for_sense_index(*, sense_index: int) -> str:
+    return dumps({SENSE_INDEX_FIELD: sense_index})
 
 
 class FakeClient(CompletionClient):
@@ -24,6 +55,7 @@ class FakeClient(CompletionClient):
         self.outputs: list[str] = list(outputs)
 
     async def complete(self, *, request: CompletionRequest) -> CompletionResult:
+        assert len(self.outputs) > 0, "outputs contains a completion response"
         output = self.outputs.pop(0)
         return CompletionResult(
             call=CallRecord(
@@ -40,25 +72,38 @@ class FakeClient(CompletionClient):
                     for message in request.messages
                 ],
                 raw_output=output,
-                usage=TokenUsage(input_tokens=1, cached_input_tokens=None, output_tokens=1),
-                cost=CostBreakdown(total_usd=0.01, source=CostSourceKind.LITELLM_ESTIMATE),
-                latency_seconds=0.1,
+                usage=TokenUsage(
+                    input_tokens=INPUT_TOKENS,
+                    cached_input_tokens=None,
+                    output_tokens=OUTPUT_TOKENS,
+                ),
+                cost=CostBreakdown(
+                    total_usd=CALL_COST_USD,
+                    source=CostSourceKind.LITELLM_ESTIMATE,
+                ),
+                latency_seconds=CALL_LATENCY_SECONDS,
             )
         )
 
 
 def _rendered(*, candidate_count: int) -> RenderedTask:
+    assert candidate_count >= 1, "candidate_count is at least one"
+    assert candidate_count <= len(SENSE_KEYS_BY_INDEX), "candidate_count has fixture senses"
     candidates: list[CandidateChoice] = [
-        CandidateChoice(index=index, sense_key=f"sense-{index}", synset_id=f"synset-{index}")
+        CandidateChoice(
+            index=index,
+            sense_key=SENSE_KEYS_BY_INDEX[index],
+            synset_id=SYNSET_IDS_BY_INDEX[index],
+        )
         for index in range(1, candidate_count + 1)
     ]
     return RenderedTask(
-        item_id="i1",
-        prompt_id="p001",
-        messages=[ChatMessage(role=MessageRole.USER, content="choose")],
+        item_id=ITEM_ID,
+        prompt_id=PROMPT_ID,
+        messages=[ChatMessage(role=MessageRole.USER, content=USER_MESSAGE_CONTENT)],
         candidates=candidates,
         output_mode=OutputMode.JSON_SENSE_INDEX,
-        render_hash="sha256:test",
+        render_hash=RENDER_HASH,
         shuffle_seed=None,
         context=ContextWindow(
             text="x",
@@ -71,40 +116,50 @@ def _rendered(*, candidate_count: int) -> RenderedTask:
 
 
 def test_invalid_output_gets_one_semantic_reask() -> None:
-    evaluation = asyncio.run(
+    evaluation = run_async(
         evaluate_item(
             rendered=_rendered(candidate_count=2),
-            gold_sense_keys=["sense-2"],
-            client=FakeClient(outputs=["not json", '{"sense_index": 2}']),
-            config=EvaluationConfig(model="fake"),
+            gold_sense_keys=[SECOND_SENSE_KEY],
+            client=FakeClient(
+                outputs=[
+                    INVALID_RAW_OUTPUT,
+                    raw_output_for_sense_index(sense_index=2),
+                ]
+            ),
+            config=EvaluationConfig(model=FAKE_MODEL),
         )
     )
 
-    assert evaluation.prediction.predicted_sense_key == "sense-2"
+    assert evaluation.prediction.predicted_sense_key == SECOND_SENSE_KEY
     assert len(evaluation.calls) == 2
     assert evaluation.calls[1].attempt_kind == AttemptKind.SEMANTIC_REASK
 
 
 def test_majority_tie_uses_earliest_vote() -> None:
-    evaluation = asyncio.run(
+    evaluation = run_async(
         evaluate_item(
             rendered=_rendered(candidate_count=2),
-            gold_sense_keys=["sense-2"],
-            client=FakeClient(outputs=['{"sense_index": 2}', '{"sense_index": 1}']),
-            config=EvaluationConfig(model="fake", votes_per_item=2),
+            gold_sense_keys=[SECOND_SENSE_KEY],
+            client=FakeClient(
+                outputs=[
+                    raw_output_for_sense_index(sense_index=2),
+                    raw_output_for_sense_index(sense_index=1),
+                ]
+            ),
+            config=EvaluationConfig(model=FAKE_MODEL, votes_per_item=2),
         )
     )
 
-    assert evaluation.prediction.predicted_sense_key == "sense-2"
+    assert evaluation.prediction.predicted_sense_key == SECOND_SENSE_KEY
 
 
 def test_monosemous_item_short_circuits_without_calls() -> None:
-    evaluation = asyncio.run(
+    evaluation = run_async(
         evaluate_item(
             rendered=_rendered(candidate_count=1),
-            gold_sense_keys=["sense-1"],
+            gold_sense_keys=[FIRST_SENSE_KEY],
             client=FakeClient(outputs=[]),
-            config=EvaluationConfig(model="fake"),
+            config=EvaluationConfig(model=FAKE_MODEL),
         )
     )
 
