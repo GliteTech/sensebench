@@ -172,6 +172,20 @@
         {% endfor %}
       </div>
 
+      {% if example.prompt_messages %}
+      <details class="raw-prompt">
+        <summary>Show raw prompt</summary>
+        <div class="prompt-message-list">
+          {% for message in example.prompt_messages %}
+          <section class="prompt-message">
+            <p class="prompt-role">{{ message.role.value }}</p>
+            <pre class="prompt-content">{{ message.content }}</pre>
+          </section>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
       <h4>WordNet 3.0 senses</h4>
       <ol class="sense-list">
         {% for candidate in example.candidates %}
