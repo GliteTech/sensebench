@@ -146,8 +146,12 @@ echo "starting vLLM server (log: $SERVER_LOG)" >&2
 SERVE_SCRIPT=$LOGS_DIR/serve-$JOB.cmd.sh
 {
   printf '#!/usr/bin/env bash\n'
-  printf 'exec vllm serve %q --port %q --max-model-len 8192 --gpu-memory-utilization 0.90' \
-    "$CHECKPOINT" "$PORT"
+  # Serve the (possibly third-party quantized) checkpoint under the canonical
+  # model id so the OpenAI model id, the runner's --model, and the recorded
+  # display name all match the model identity rather than the checkpoint repo.
+  printf 'exec vllm serve %q --port %q --served-model-name %q' \
+    "$CHECKPOINT" "$PORT" "$MODEL"
+  printf ' --max-model-len 8192 --gpu-memory-utilization 0.90'
   for serve_arg in "${SERVE_ARGS[@]}"; do
     printf ' %q' "$serve_arg"
   done
@@ -161,17 +165,17 @@ tmux new-session -d -s "$VLLM_SESSION" "bash $SERVE_SCRIPT > $SERVER_LOG 2>&1"
 
 # Readiness = the server lists THIS checkpoint; a bare /health check could be
 # answered by a stale server from a previous leg.
-echo "waiting for $CHECKPOINT at http://localhost:$PORT/v1/models" >&2
+echo "waiting for $MODEL at http://localhost:$PORT/v1/models" >&2
 HEALTH_DEADLINE=$(( $(date +%s) + HEALTH_TIMEOUT_SECONDS ))
-until curl -sf "http://localhost:$PORT/v1/models" 2>/dev/null | grep -qF "\"$CHECKPOINT\""; do
+until curl -sf "http://localhost:$PORT/v1/models" 2>/dev/null | grep -qF "\"$MODEL\""; do
   if [ "$(date +%s)" -ge "$HEALTH_DEADLINE" ]; then
-    echo "vLLM did not serve $CHECKPOINT within ${HEALTH_TIMEOUT_SECONDS}s; last server log:" >&2
+    echo "vLLM did not serve $MODEL within ${HEALTH_TIMEOUT_SECONDS}s; last server log:" >&2
     tail -100 "$SERVER_LOG" >&2 || true
     fail "server_health_timeout"
   fi
   sleep "$HEALTH_POLL_SECONDS"
 done
-echo "server healthy and serving $CHECKPOINT" >&2
+echo "server healthy and serving $MODEL" >&2
 
 for PROMPT in $PROMPTS; do
   MAX_TOKENS=$(jq -r --arg prompt "$PROMPT" '.prompt_max_tokens[$prompt]' "$MANIFEST")
@@ -194,7 +198,7 @@ for PROMPT in $PROMPTS; do
   if ! sensebench run \
     --prompt "$PROMPT" \
     --dataset "$DATASET" \
-    --model "$CHECKPOINT" \
+    --model "$MODEL" \
     --hosting-kind self_hosted \
     --endpoint-base-url "http://localhost:$PORT/v1" \
     --quantization "$QUANTIZATION" \

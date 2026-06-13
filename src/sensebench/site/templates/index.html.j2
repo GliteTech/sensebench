@@ -170,12 +170,11 @@
     <table id="leaderboard-table">
       <thead>
         <tr>
-          <th><button type="button" data-sort="rank">Rank</button></th>
+          <th aria-sort="ascending"><button type="button" data-sort="rank">Rank<span class="sort-arrow" aria-hidden="true"> ▲</span></button></th>
           <th>Compare</th>
           <th><button type="button" data-sort="model">Model</button></th>
           <th><button type="button" data-sort="accuracy">Accuracy</button></th>
           <th><button type="button" data-sort="cost_per_million_items">Cost / M items</button></th>
-          <th><button type="button" data-sort="seconds_per_item">Speed (s / item)</button></th>
           <th>Prompt</th>
           <th>Dataset</th>
           <th>Run</th>
@@ -198,10 +197,9 @@
             {% endif %}
           </td>
           <td>{{ entry.cost_per_million_items|money }}</td>
-          <td>{{ entry.seconds_per_item|seconds }}</td>
           <td>{{ entry.prompt_id }}</td>
           <td>{{ entry.dataset_version }}</td>
-          <td><a href="{{ base_path }}{{ entry.run_url }}">{{ entry.run_id }}</a></td>
+          <td><a href="{{ base_path }}{{ entry.run_url }}" title="{{ entry.run_id }}">view</a></td>
           <td>{% if entry.run_id in frontier_run_ids %}<span class="badge badge-frontier" title="On the accuracy-cost Pareto frontier">★</span>{% endif %}</td>
         </tr>
         {% endfor %}

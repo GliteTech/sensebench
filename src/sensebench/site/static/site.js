@@ -159,6 +159,19 @@
     return entry.model;
   }
 
+  function shortModelName(model) {
+    const slash = model.indexOf("/");
+    return slash === -1 ? model : model.slice(slash + 1);
+  }
+
+  function shortModelLabel(entry) {
+    const short = shortModelName(entry.model);
+    if (entry.reasoning_effort) {
+      return `${short} (${entry.reasoning_effort})`;
+    }
+    return short;
+  }
+
   function sourceLabel(entry) {
     return sourceLabels[entry.source_kind] || "Unknown source";
   }
@@ -404,10 +417,9 @@
           </td>
           <td><div class="cell-primary">${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
           <td>${formatMoney(entry.cost_per_million_items)}</td>
-          <td>${formatSeconds(entry.seconds_per_item)}</td>
           <td>${escapeHtml(entry.prompt_id)}</td>
           <td>${escapeHtml(entry.dataset_version)}</td>
-          <td><a href="${basePath}${escapeHtml(entry.run_url)}">${escapeHtml(entry.run_id)}</a></td>
+          <td><a href="${basePath}${escapeHtml(entry.run_url)}" title="${escapeHtml(entry.run_id)}">view</a></td>
           <td>${frontierHtml}</td>
         </tr>`;
       })
@@ -426,6 +438,29 @@
         }
         render();
       });
+    });
+  }
+
+  function updateSortIndicators() {
+    table.querySelectorAll("[data-sort]").forEach((button) => {
+      const existing = button.querySelector(".sort-arrow");
+      if (existing) {
+        existing.remove();
+      }
+      const isActive = button.dataset.sort === state.sortKey;
+      const th = button.closest("th");
+      if (isActive) {
+        const arrow = document.createElement("span");
+        arrow.className = "sort-arrow";
+        arrow.setAttribute("aria-hidden", "true");
+        arrow.textContent = state.sortDirection === 1 ? " ▲" : " ▼";
+        button.appendChild(arrow);
+        if (th) {
+          th.setAttribute("aria-sort", state.sortDirection === 1 ? "ascending" : "descending");
+        }
+      } else if (th) {
+        th.removeAttribute("aria-sort");
+      }
     });
   }
 
@@ -472,6 +507,12 @@
     const baselines = visibleBaselines();
     if (!mainChart) {
       mainChart = window.echarts.init(chartElement);
+      mainChart.on("click", (params) => {
+        const runUrl = params?.data?.entry?.run_url;
+        if (runUrl) {
+          window.location.href = `${basePath}${runUrl}`;
+        }
+      });
     }
     const yValues = [
       ...visible.map((point) => point.y),
@@ -494,12 +535,20 @@
               half == null
                 ? `Accuracy: ${formatPercent(entry.accuracy)}`
                 : `Accuracy: ${formatPercent(entry.accuracy)} ±${formatPercent(half)}`;
-            return [
-              `<strong>${escapeHtml(modelLabel(entry))}</strong>`,
+            const lines = [
+              `<strong>${escapeHtml(shortModelLabel(entry))}</strong>`,
               `Prompt: ${escapeHtml(promptLabel(entry))}`,
               accuracyText,
               `${metric.axisLabel}: ${metric.format(metric.value(entry))}`
-            ].join("<br>");
+            ];
+            const gpu = gpuLabel(entry);
+            if (gpu != null) {
+              lines.push(`GPU: ${escapeHtml(gpu)}`);
+            }
+            if (entry.quantization) {
+              lines.push(`Quantization: ${escapeHtml(entry.quantization)}`);
+            }
+            return lines.join("<br>");
           }
         },
         xAxis: {
@@ -550,7 +599,7 @@
               position: "top",
               fontSize: 11,
               formatter: (params) =>
-                params.data.entry ? modelLabel(params.data.entry) : ""
+                params.data.entry ? shortModelLabel(params.data.entry) : ""
             },
             labelLayout: { hideOverlap: true },
             data: frontier.map((point) => ({
@@ -946,6 +995,7 @@
     const frontierIds = new Set(frontierPoints.map((point) => point.entry.run_id));
     const rows = sortRows(decorateRows(entries, frontierIds));
     renderTable(rows);
+    updateSortIndicators();
     renderMainChart(entries, frontierPoints, metric);
     renderCompareCharts();
     renderPairwise();

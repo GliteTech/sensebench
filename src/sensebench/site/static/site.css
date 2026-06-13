@@ -311,6 +311,11 @@ th button {
   padding: 0;
 }
 
+.sort-arrow {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 tbody tr:hover {
   background: var(--surface-2);
 }

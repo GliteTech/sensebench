@@ -25,6 +25,7 @@ RUN_ID: str = f"vllm-{JOB_ID}-{GPU_PRESET}-p003-lexen-v0.1.0-20260613"
 CHECKPOINT: str = "ibm-granite/granite-4.1-8b-fp8"
 PINNED_REVISION: str = "070021b3608433b6107a00733d561c9779b9937e"
 DEFAULT_IMAGE: str = "vllm/vllm-openai:v0.22.1"
+RELEASE_COMMIT: str = "947a5470000000000000000000000000deadbeef"
 
 
 def _load_backfill_module() -> ModuleType:
@@ -64,7 +65,7 @@ def _write_self_hosted_run(*, run_dir: Path) -> None:
         run_id=RUN_ID,
         model=model,
         machine=fixture_machine(),
-    )
+    ).model_copy(update={"git_commit": None})
     prediction = voted_prediction(
         chosen_index=2,
         gold_sense_keys=[SECOND_SENSE_KEY],
@@ -87,7 +88,11 @@ def test_backfill_enriches_self_hosted_run(tmp_path: Path) -> None:
     before = verify_run_directory(run_dir=run_dir)
     assert RunValidationRule.MODEL_PROVENANCE in issue_rules(report=before)
 
-    result = module.backfill_run(run_dir=run_dir, manifest=_manifest())
+    result = module.backfill_run(
+        run_dir=run_dir,
+        manifest=_manifest(),
+        git_commit=RELEASE_COMMIT,
+    )
     assert "backfilled" in result
 
     metadata = RunMetadata.model_validate_json(
@@ -95,6 +100,7 @@ def test_backfill_enriches_self_hosted_run(tmp_path: Path) -> None:
     )
     assert metadata.model.hf_revision == PINNED_REVISION
     assert metadata.model.container_image == DEFAULT_IMAGE
+    assert metadata.git_commit == RELEASE_COMMIT
     assert metadata.model.serve_command is not None
     assert CHECKPOINT in metadata.model.serve_command
     assert "--max-num-batched-tokens 8192" in metadata.model.serve_command
