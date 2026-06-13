@@ -104,12 +104,19 @@ MODEL=$(job_field '.model')
 CHECKPOINT=$(job_field '.served_checkpoint // .model')
 HF_REVISION=$(job_field '.hf_revision // empty')
 QUANTIZATION=$(job_field '.quantization')
-SERVE_ARGS=$(job_field '.serve_args | join(" ")')
+# Read serve args one-per-line into an array so values containing spaces or
+# JSON (e.g. --default-chat-template-kwargs '{"enable_thinking": false}')
+# survive intact instead of being word-split.
+mapfile -t SERVE_ARGS < <(job_field '.serve_args[]')
 VENDOR=$(job_field '.vendor')
 LICENSE=$(job_field '.license')
 MODEL_URL=$(job_field '.model_url')
 NOTES=$(job_field '.notes // empty')
 
+CONTAINER_IMAGE=$(job_field '.image_override // empty')
+if [ -z "$CONTAINER_IMAGE" ]; then
+  CONTAINER_IMAGE=$(jq -r '.default_image' "$MANIFEST")
+fi
 CONCURRENCY=$(jq -r --arg gpu "$GPU_PRESET" '.gpu_presets[$gpu].concurrency' "$MANIFEST")
 DATASET=$(jq -r '.dataset' "$MANIFEST")
 TEMPERATURE=$(jq -r '.sampling.temperature' "$MANIFEST")
@@ -133,9 +140,24 @@ fi
 
 stop_vllm
 echo "starting vLLM server (log: $SERVER_LOG)" >&2
-tmux new-session -d -s "$VLLM_SESSION" \
-  "vllm serve $CHECKPOINT --port $PORT --max-model-len 8192 --gpu-memory-utilization 0.90 \
-   $SERVE_ARGS ${HF_REVISION:+--revision $HF_REVISION} > $SERVER_LOG 2>&1"
+# Build the launch command in a script file with printf %q so every argument
+# (including JSON values) is faithfully quoted; tmux then just runs the file,
+# avoiding a second round of word-splitting on the serve args.
+SERVE_SCRIPT=$LOGS_DIR/serve-$JOB.cmd.sh
+{
+  printf '#!/usr/bin/env bash\n'
+  printf 'exec vllm serve %q --port %q --max-model-len 8192 --gpu-memory-utilization 0.90' \
+    "$CHECKPOINT" "$PORT"
+  for serve_arg in "${SERVE_ARGS[@]}"; do
+    printf ' %q' "$serve_arg"
+  done
+  if [ -n "$HF_REVISION" ]; then
+    printf ' --revision %q' "$HF_REVISION"
+  fi
+  printf '\n'
+} > "$SERVE_SCRIPT"
+SERVE_COMMAND=$(tail -1 "$SERVE_SCRIPT")
+tmux new-session -d -s "$VLLM_SESSION" "bash $SERVE_SCRIPT > $SERVER_LOG 2>&1"
 
 # Readiness = the server lists THIS checkpoint; a bare /health check could be
 # answered by a stale server from a previous leg.
@@ -177,6 +199,8 @@ for PROMPT in $PROMPTS; do
     --endpoint-base-url "http://localhost:$PORT/v1" \
     --quantization "$QUANTIZATION" \
     "${HF_REVISION_ARGS[@]}" \
+    --container-image "$CONTAINER_IMAGE" \
+    --serve-command "$SERVE_COMMAND" \
     --source-kind open_source \
     --vendor "$VENDOR" \
     --license "$LICENSE" \
