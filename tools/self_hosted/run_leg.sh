@@ -205,6 +205,17 @@ for PROMPT in $PROMPTS; do
 done
 
 stop_vllm
+
+# Evict this leg's checkpoint from the HF cache so a batch of large models does
+# not exhaust the disk (each leg keeps only its own weights resident).
+if [ "${EVICT_MODEL:-0}" = "1" ]; then
+  CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}/hub/models--${CHECKPOINT//\//--}"
+  if [ -d "$CACHE_DIR" ]; then
+    echo "evicting $CHECKPOINT from HF cache ($CACHE_DIR)" >&2
+    rm -rf "$CACHE_DIR"
+  fi
+fi
+
 echo "waiting for GPU memory to drain" >&2
 DRAIN_DEADLINE=$(( $(date +%s) + GPU_DRAIN_TIMEOUT_SECONDS ))
 while [ "$(date +%s)" -lt "$DRAIN_DEADLINE" ]; do
