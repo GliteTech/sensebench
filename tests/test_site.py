@@ -46,6 +46,7 @@ from sensebench.runs.models import (
     CostBreakdown,
     CostSourceKind,
     DatasetReference,
+    ExecutionInfo,
     MessageRecord,
     ModelID,
     ModelSourceKind,
@@ -57,6 +58,7 @@ from sensebench.runs.models import (
     RunMetadata,
     RunnerIdentity,
     RunPolicy,
+    RunTiming,
     RunTotals,
     SamplingParameters,
     TieBreakKind,
@@ -92,6 +94,7 @@ INPUT_UNCACHED_PRICE_USD: float = 0.0001
 INPUT_CACHED_PRICE_USD: float = 0.00001
 OUTPUT_PRICE_USD: float = 0.001
 LATENCY_SECONDS: float = 0.5
+TEST_CONCURRENCY: int = 8
 EXPECTED_COST_PER_MILLION_ITEMS: float = 20_000.0
 EXPECTED_TOKENS_PER_ITEM: float = 110.0
 SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v3"
@@ -281,6 +284,14 @@ def _write_verified_run(
             semantic_reasks_per_invalid_vote=CALL_VOTE_INDEX,
             tie_break=TieBreakKind.EARLIEST_VOTE,
             monosemous_policy=MonosemousPolicyKind.SHORT_CIRCUIT,
+        ),
+        execution=ExecutionInfo(
+            concurrency=TEST_CONCURRENCY,
+            timing=RunTiming(
+                benchmark_started_at=TEST_CREATED_AT,
+                benchmark_ended_at=TEST_CREATED_AT,
+                benchmark_seconds=LATENCY_SECONDS,
+            ),
         ),
         totals=RunTotals(
             item_count=CALL_VOTE_INDEX,

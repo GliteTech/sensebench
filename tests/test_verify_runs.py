@@ -6,7 +6,15 @@ from pathlib import Path
 from sensebench.datasets.models import ItemID, SenseKey
 from sensebench.prompts.models import SENSE_INDEX_FIELD, PromptID
 from sensebench.runner.writer import write_run_artifacts
-from sensebench.runs.models import AttemptKind, CallID, RunID
+from sensebench.runs.models import (
+    RUN_SCHEMA_VERSION_V1,
+    AttemptKind,
+    CallID,
+    CostBreakdown,
+    CostSourceKind,
+    RunID,
+    RunMetadata,
+)
 from sensebench.verify.runs import (
     CALLS_AFTER_SUCCESS_MESSAGE,
     RunValidationRule,
@@ -16,13 +24,17 @@ from tests.run_fixtures import (
     CALL_ID,
     DEFAULT_RUN_ID,
     FIRST_SENSE_KEY,
+    FIXTURE_BENCHMARK_SECONDS,
+    FIXTURE_HOURLY_RATE_USD,
     SECOND_SENSE_KEY,
     fixture_dataset,
+    fixture_machine,
     issue_rules,
     make_metadata,
     monosemous_prediction,
     registered_prompt,
     renderable_dataset,
+    self_hosted_model,
     success_call,
     voted_prediction,
 )
@@ -379,3 +391,165 @@ def test_verify_detects_forged_candidate_set(tmp_path: Path) -> None:
     )
 
     assert RunValidationRule.CANDIDATE_SET in issue_rules(report=report)
+
+
+def _self_hosted_metadata(*, cost: CostBreakdown | None = None) -> RunMetadata:
+    return make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        model=self_hosted_model(),
+        machine=fixture_machine(),
+        cost=cost,
+    )
+
+
+def _machine_time_cost_breakdown(*, total_usd: float) -> CostBreakdown:
+    return CostBreakdown(total_usd=total_usd, source=CostSourceKind.MACHINE_TIME_ESTIMATE)
+
+
+def _write_voted_run(*, run_dir: Path, metadata: RunMetadata) -> None:
+    prediction = voted_prediction(
+        chosen_index=2,
+        gold_sense_keys=[SECOND_SENSE_KEY],
+        is_correct=True,
+    )
+    write_run_artifacts(
+        run_dir=run_dir,
+        metadata=metadata,
+        predictions=[prediction],
+        calls=[success_call(raw_output=raw_output_for_sense_index(sense_index=2))],
+    )
+
+
+def test_verify_v1_run_without_new_sections_passes(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        schema_version=RUN_SCHEMA_VERSION_V1,
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert report.has_errors() is False
+
+
+def test_verify_v1_run_with_machine_section_fails(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        schema_version=RUN_SCHEMA_VERSION_V1,
+        machine=fixture_machine(),
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.SCHEMA_SECTIONS in issue_rules(report=report)
+
+
+def test_verify_v2_run_requires_execution_section(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+    ).model_copy(update={"execution": None})
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.SCHEMA_SECTIONS in issue_rules(report=report)
+
+
+def test_verify_self_hosted_run_with_machine_passes(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    expected_cost = FIXTURE_BENCHMARK_SECONDS * FIXTURE_HOURLY_RATE_USD / 3600.0
+    metadata = _self_hosted_metadata(
+        cost=_machine_time_cost_breakdown(total_usd=expected_cost),
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert report.has_errors() is False
+
+
+def test_verify_self_hosted_run_without_machine_fails(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        model=self_hosted_model(),
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.MACHINE_INFO in issue_rules(report=report)
+
+
+def test_verify_detects_tampered_machine_time_cost(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    expected_cost = FIXTURE_BENCHMARK_SECONDS * FIXTURE_HOURLY_RATE_USD / 3600.0
+    metadata = _self_hosted_metadata(
+        cost=_machine_time_cost_breakdown(total_usd=expected_cost * 2),
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.MACHINE_COST in issue_rules(report=report)
+
+
+def test_verify_detects_elapsed_benchmark_mismatch(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+    )
+    tampered_totals = metadata.totals.model_copy(
+        update={"elapsed_seconds": FIXTURE_BENCHMARK_SECONDS + 1.0},
+    )
+    metadata = metadata.model_copy(update={"totals": tampered_totals})
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.EXECUTION_TIMING in issue_rules(report=report)
+
+
+def test_verify_detects_call_latency_exceeding_benchmark(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    metadata = make_metadata(item_count=1, correct_count=1, accuracy=1.0, call_count=1)
+    prediction = voted_prediction(
+        chosen_index=2,
+        gold_sense_keys=[SECOND_SENSE_KEY],
+        is_correct=True,
+    )
+    slow_call = success_call(
+        raw_output=raw_output_for_sense_index(sense_index=2),
+    ).model_copy(update={"latency_seconds": FIXTURE_BENCHMARK_SECONDS * 10})
+    write_run_artifacts(
+        run_dir=run_dir,
+        metadata=metadata,
+        predictions=[prediction],
+        calls=[slow_call],
+    )
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.EXECUTION_TIMING in issue_rules(report=report)

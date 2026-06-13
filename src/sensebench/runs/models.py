@@ -12,11 +12,13 @@ from sensebench.datasets.models import DatasetID, ItemID, SenseKey
 from sensebench.prompts.models import MessageRole, PromptID
 from sensebench.wordnet import SynsetID
 
-type RunSchemaVersion = Literal["sensebench-run-v1"]
+type RunSchemaVersion = Literal["sensebench-run-v1", "sensebench-run-v2"]
 type CloudLlmKind = Literal["cloud_llm"]
 type SelfHostedLlmKind = Literal["self_hosted_llm"]
 
-RUN_SCHEMA_VERSION: RunSchemaVersion = "sensebench-run-v1"
+RUN_SCHEMA_VERSION_V1: RunSchemaVersion = "sensebench-run-v1"
+RUN_SCHEMA_VERSION_V2: RunSchemaVersion = "sensebench-run-v2"
+RUN_SCHEMA_VERSION: RunSchemaVersion = RUN_SCHEMA_VERSION_V2
 CLOUD_LLM_KIND: CloudLlmKind = "cloud_llm"
 SELF_HOSTED_LLM_KIND: SelfHostedLlmKind = "self_hosted_llm"
 MODEL_REFERENCE_KIND_FIELD: str = "kind"
@@ -87,6 +89,7 @@ class MonosemousPolicyKind(StrEnum):
 class CostSourceKind(StrEnum):
     PROVIDER_REPORTED = "provider_reported"
     LITELLM_ESTIMATE = "litellm_estimate"
+    MACHINE_TIME_ESTIMATE = "machine_time_estimate"
     NO_CALLS = "no_calls"
     UNAVAILABLE = "unavailable"
 
@@ -144,8 +147,6 @@ class SelfHostedLlmReference(StrictRunModel):
     inference_engine: str | None = None
     inference_engine_version: str | None = None
     endpoint_base_url: str
-    gpu: str | None = None
-    cpu: str | None = None
 
 
 type ModelReference = Annotated[
@@ -167,6 +168,42 @@ class RunPolicy(StrictRunModel):
     semantic_reasks_per_invalid_vote: NonNegativeInt
     tie_break: TieBreakKind
     monosemous_policy: MonosemousPolicyKind
+
+
+class MachineGpuInfo(StrictRunModel):
+    name: str
+    count: PositiveInt
+    vram_mib_per_gpu: NonNegativeInt | None = None
+    driver_version: str | None = None
+    cuda_version: str | None = None
+
+
+class MachineInfo(StrictRunModel):
+    platform: str | None = None
+    cpu_model: str | None = None
+    cpu_cores: PositiveInt | None = None
+    ram_gib: NonNegativeFloat | None = None
+    gpu: MachineGpuInfo | None = None
+    provider: str | None = None
+    instance_id: str | None = None
+    hourly_rate_usd: NonNegativeFloat | None = None
+
+
+class RunTiming(StrictRunModel):
+    benchmark_started_at: datetime
+    benchmark_ended_at: datetime
+    benchmark_seconds: NonNegativeFloat
+    setup_seconds: NonNegativeFloat | None = None
+
+    @field_serializer("benchmark_started_at", "benchmark_ended_at")
+    def serialize_timestamps(self, value: datetime) -> str:
+        return value.isoformat()
+
+
+class ExecutionInfo(StrictRunModel):
+    concurrency: PositiveInt
+    warmup_call_count: NonNegativeInt = 0
+    timing: RunTiming
 
 
 class TokenUsage(StrictRunModel):
@@ -215,6 +252,8 @@ class RunMetadata(StrictRunModel):
     model: ModelReference
     sampling: SamplingParameters
     policy: RunPolicy
+    machine: MachineInfo | None = None
+    execution: ExecutionInfo | None = None
     totals: RunTotals
 
     @field_serializer("created_at")
