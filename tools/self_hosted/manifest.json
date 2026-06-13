@@ -6,7 +6,7 @@
   "prompt_max_tokens": {
     "p001": 1024,
     "p002": 64,
-    "p003": 256
+    "p003": 2048
   },
   "sampling": {
     "temperature": 0.0
@@ -259,7 +259,8 @@
         "--load-format",
         "mistral",
         "--quantization",
-        "fp8"
+        "fp8",
+        "--language-model-only"
       ],
       "vendor": "Mistral AI",
       "license": "apache-2.0",
