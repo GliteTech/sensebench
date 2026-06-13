@@ -25,7 +25,13 @@ if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 
-if [ -d "$WORKDIR/repo/.git" ]; then
+# A private repo cannot be cloned anonymously; ship it as a git bundle instead
+# (scp it to $WORKDIR/repo.bundle) so no credentials ever land on the box.
+if [ -f "$WORKDIR/repo.bundle" ]; then
+  echo "installing repo from bundle" >&2
+  rm -rf "$WORKDIR/repo"
+  git clone --branch "$BRANCH" "$WORKDIR/repo.bundle" "$WORKDIR/repo"
+elif [ -d "$WORKDIR/repo/.git" ]; then
   echo "updating existing checkout on branch $BRANCH" >&2
   git -C "$WORKDIR/repo" fetch origin "$BRANCH"
   git -C "$WORKDIR/repo" checkout "$BRANCH"
