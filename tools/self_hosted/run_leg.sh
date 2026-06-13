@@ -57,19 +57,24 @@ mkdir -p "$STATUS_DIR" "$LOGS_DIR" "$RUNS_DIR"
 STATUS_FILE=$STATUS_DIR/$JOB
 SERVER_LOG=$LOGS_DIR/server-$JOB.log
 
-# vLLM engine workers can outlive their tmux session; kill the process tree and
-# wait for the API port to actually close so the next server can bind it.
+# vLLM engine workers outlive their tmux session and rename themselves to
+# VLLM::EngineCore, so kill every vLLM process pattern and wait until the GPU
+# memory is actually released before the next server starts.
 stop_vllm() {
   tmux kill-session -t "$VLLM_SESSION" 2>/dev/null || true
-  pkill -f "vllm serve" 2>/dev/null || true
+  pkill -9 -f "vllm serve" 2>/dev/null || true
+  pkill -9 -f "VLLM::" 2>/dev/null || true
+  pkill -9 -f "vllm.entrypoints" 2>/dev/null || true
   for _ in $(seq 1 24); do
-    if ! curl -sf "http://localhost:$PORT/health" >/dev/null 2>&1; then
+    USED_MIB=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits \
+      | sort -rn | head -1 || echo 0)
+    if [ "${USED_MIB:-0}" -lt "$GPU_DRAIN_MAX_MIB" ] \
+      && ! curl -sf "http://localhost:$PORT/health" >/dev/null 2>&1; then
       return 0
     fi
     sleep 5
   done
-  pkill -9 -f "vllm serve" 2>/dev/null || true
-  sleep 5
+  echo "warning: GPU memory still in use after stop_vllm" >&2
 }
 
 fail() {
