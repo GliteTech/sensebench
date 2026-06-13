@@ -14,7 +14,7 @@ from sensebench.datasets.models import (
     Token,
     WsdItem,
 )
-from sensebench.paths import P001_PROMPT_PATH, P003_PROMPT_PATH
+from sensebench.paths import P001_PROMPT_PATH, P003_PROMPT_PATH, P004_PROMPT_PATH
 from sensebench.prompts.models import TEMPLATE_VARIABLE_CONTEXT
 from sensebench.prompts.registry import load_prompt_definition
 from sensebench.prompts.render import _render_template, render_task
@@ -171,6 +171,36 @@ def test_render_task_detokenizes_context_for_p003() -> None:
     assert f"the <t>{TARGET_TEXT}</t>, he said." in user_message
     assert " ," not in user_message
     assert " ." not in user_message
+
+
+def test_render_task_detokenizes_context_for_p004() -> None:
+    prompt = load_prompt_definition(path=P004_PROMPT_PATH)
+    bundle = _detokenized_bundle()
+    rendered = render_task(
+        prompt=prompt,
+        item=bundle.items[0],
+        dataset_index=build_dataset_index(bundle=bundle),
+        candidates=[
+            SenseCandidate(
+                sense_key=SENSE_KEY,
+                synset_id=SYNSET_ID,
+                pos=WordNetPos.NOUN,
+                definition=DEFINITION,
+                synonyms=[SYNONYM],
+                examples=[EXAMPLE],
+            )
+        ],
+    )
+
+    # p004 is the minimal single-message twin of p002, so the user message is
+    # the only message; it must be detokenized (like p003) and ask for a plain
+    # integer (no JSON sense_index field).
+    assert len(rendered.messages) == 1
+    user_message = rendered.messages[0].content
+    assert f"the <t>{TARGET_TEXT}</t>, he said." in user_message
+    assert " ," not in user_message
+    assert " ." not in user_message
+    assert "sense_index" not in user_message
 
 
 def test_render_template_substitutes_every_validator_accepted_spelling() -> None:
