@@ -145,6 +145,23 @@ Some models return otherwise valid answers inside markdown fences or with small 
 JSON object. SenseBench normalizes common unambiguous forms during extraction and verification, but
 older run artifacts produced before that parser behavior should be rerun before submission.
 
+## Self-hosted models (vLLM)
+
+Open-weight models can be benchmarked against a local [vLLM](https://docs.vllm.ai/) server:
+
+```bash
+vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000 --max-model-len 8192
+export HOSTED_VLLM_API_KEY=dummy
+sensebench run --prompt p003 --model meta-llama/Llama-3.1-8B-Instruct \
+  --hosting-kind self_hosted --endpoint-base-url http://localhost:8000/v1 \
+  --source-kind open_source --hourly-rate-usd 2.50 --github-handle your-github-handle
+```
+
+GPU details and the vLLM engine version are collected automatically when the endpoint is on
+localhost, and `--hourly-rate-usd` enables the machine-time cost metric. See
+[docs/self_hosted.md](docs/self_hosted.md) for the full operator runbook, including the vast.ai
+batch tooling under `tools/self_hosted/`.
+
 ## Verify a run
 
 Verification replays the full chain — prompt rendering, answer extraction, vote decisions, and
