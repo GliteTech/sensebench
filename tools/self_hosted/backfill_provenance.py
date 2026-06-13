@@ -60,7 +60,12 @@ def _container_image(*, job: dict[str, Any], manifest: dict[str, Any]) -> str:
     return str(manifest["default_image"])
 
 
-def backfill_run(*, run_dir: Path, manifest: dict[str, Any]) -> str:
+def backfill_run(
+    *,
+    run_dir: Path,
+    manifest: dict[str, Any],
+    git_commit: str | None = None,
+) -> str:
     metadata_path = run_dir / RUN_METADATA_FILENAME
     metadata = _load_json(path=metadata_path)
     model = metadata.get("model", {})
@@ -79,6 +84,11 @@ def backfill_run(*, run_dir: Path, manifest: dict[str, Any]) -> str:
     if not model.get("container_image"):
         model["container_image"] = _container_image(job=job, manifest=manifest)
         updated = True
+    # The on-box runner invokes sensebench outside the repo dir, so git_commit is
+    # recorded as null; backfill it with the released sensebench commit.
+    if git_commit is not None and not metadata.get("git_commit"):
+        metadata["git_commit"] = git_commit
+        updated = True
     if not updated:
         return "ok (already complete)"
     metadata["model"] = model
@@ -90,6 +100,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs-dir", default="runs")
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST_PATH))
+    parser.add_argument(
+        "--git-commit",
+        default=None,
+        help="Released sensebench commit to record when the run captured none.",
+    )
     args = parser.parse_args(argv)
     manifest = _load_json(path=Path(args.manifest))
     runs_dir = Path(args.runs_dir)
@@ -99,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         if path.is_dir() and (path / RUN_METADATA_FILENAME).exists()
     )
     for run_dir in run_dirs:
-        result = backfill_run(run_dir=run_dir, manifest=manifest)
+        result = backfill_run(run_dir=run_dir, manifest=manifest, git_commit=args.git_commit)
         print(f"{run_dir.name}: {result}")
     return 0
 
