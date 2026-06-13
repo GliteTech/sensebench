@@ -57,10 +57,25 @@ mkdir -p "$STATUS_DIR" "$LOGS_DIR" "$RUNS_DIR"
 STATUS_FILE=$STATUS_DIR/$JOB
 SERVER_LOG=$LOGS_DIR/server-$JOB.log
 
+# vLLM engine workers can outlive their tmux session; kill the process tree and
+# wait for the API port to actually close so the next server can bind it.
+stop_vllm() {
+  tmux kill-session -t "$VLLM_SESSION" 2>/dev/null || true
+  pkill -f "vllm serve" 2>/dev/null || true
+  for _ in $(seq 1 24); do
+    if ! curl -sf "http://localhost:$PORT/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 5
+  done
+  pkill -9 -f "vllm serve" 2>/dev/null || true
+  sleep 5
+}
+
 fail() {
   echo "FAILED:$1" > "$STATUS_FILE"
   echo "FAILED:$1" >&2
-  tmux kill-session -t "$VLLM_SESSION" 2>/dev/null || true
+  stop_vllm
   exit 1
 }
 
@@ -111,23 +126,25 @@ else
   fail "no_hf_downloader"
 fi
 
-tmux kill-session -t "$VLLM_SESSION" 2>/dev/null || true
+stop_vllm
 echo "starting vLLM server (log: $SERVER_LOG)" >&2
 tmux new-session -d -s "$VLLM_SESSION" \
   "vllm serve $CHECKPOINT --port $PORT --max-model-len 8192 --gpu-memory-utilization 0.90 \
    $SERVE_ARGS ${HF_REVISION:+--revision $HF_REVISION} > $SERVER_LOG 2>&1"
 
-echo "waiting for http://localhost:$PORT/health" >&2
+# Readiness = the server lists THIS checkpoint; a bare /health check could be
+# answered by a stale server from a previous leg.
+echo "waiting for $CHECKPOINT at http://localhost:$PORT/v1/models" >&2
 HEALTH_DEADLINE=$(( $(date +%s) + HEALTH_TIMEOUT_SECONDS ))
-until curl -sf "http://localhost:$PORT/health" >/dev/null 2>&1; do
+until curl -sf "http://localhost:$PORT/v1/models" 2>/dev/null | grep -qF "\"$CHECKPOINT\""; do
   if [ "$(date +%s)" -ge "$HEALTH_DEADLINE" ]; then
-    echo "vLLM did not become healthy within ${HEALTH_TIMEOUT_SECONDS}s; last server log:" >&2
+    echo "vLLM did not serve $CHECKPOINT within ${HEALTH_TIMEOUT_SECONDS}s; last server log:" >&2
     tail -100 "$SERVER_LOG" >&2 || true
     fail "server_health_timeout"
   fi
   sleep "$HEALTH_POLL_SECONDS"
 done
-echo "server healthy" >&2
+echo "server healthy and serving $CHECKPOINT" >&2
 
 for PROMPT in $PROMPTS; do
   MAX_TOKENS=$(jq -r --arg prompt "$PROMPT" '.prompt_max_tokens[$prompt]' "$MANIFEST")
@@ -182,7 +199,7 @@ for PROMPT in $PROMPTS; do
   fi
 done
 
-tmux kill-session -t "$VLLM_SESSION" 2>/dev/null || true
+stop_vllm
 echo "waiting for GPU memory to drain" >&2
 DRAIN_DEADLINE=$(( $(date +%s) + GPU_DRAIN_TIMEOUT_SECONDS ))
 while [ "$(date +%s)" -lt "$DRAIN_DEADLINE" ]; do
