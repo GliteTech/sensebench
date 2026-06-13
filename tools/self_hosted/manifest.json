@@ -184,6 +184,8 @@
       "quantization": "fp8",
       "serve_args": [
         "--trust-remote-code",
+        "--max-num-seqs",
+        "256",
         "--default-chat-template-kwargs",
         "{\"enable_thinking\": false}"
       ],
