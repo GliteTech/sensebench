@@ -14,6 +14,7 @@ src/sensebench/prompts/
     p001.json
     p002.json
     p003.json
+    p004.json
 ```
 
 The `registered/` directory is the immutable prompt registry. The surrounding
@@ -48,7 +49,12 @@ Prompt identity is intentionally simple:
 p001
 p002
 p003
+p004
 ```
+
+`p004` is the minimal single-sentence prompt `p002` with `detokenize: true`: it keeps the short,
+plain-integer form of `p002` but renders the context as natural English like `p003`, giving a clean
+A/B on whether detokenized input helps the minimal prompt.
 
 SenseBench does not use prompt versions. If a prompt changes, it receives a new ID. A prompt may
 optionally point to an older prompt with `supersedes`.
