@@ -126,6 +126,7 @@ HOSTING_FILTER_ID: str = "hosting-filter"
 GPU_FILTER_ID: str = "gpu-filter"
 QUANT_FILTER_ID: str = "quant-filter"
 X_METRIC_SELECT_ID: str = "x-metric-select"
+X_SCALE_SELECT_ID: str = "x-scale-select"
 MACHINE_TIMING_HEADING_TEXT: str = "Machine &amp; Timing"
 MACHINE_SECONDS_PER_ITEM_TEXT: str = "Machine seconds / item"
 SPEED_COLUMN_HEADER_TEXT: str = "Speed (s / item)"
@@ -450,6 +451,7 @@ def test_build_site_emits_static_pages_and_data(
     assert SOURCE_FILTER_ID in index_html
     assert HOSTING_FILTER_ID in index_html
     assert X_METRIC_SELECT_ID in index_html
+    assert X_SCALE_SELECT_ID in index_html
     assert GPU_FILTER_ID not in index_html
     assert QUANT_FILTER_ID not in index_html
     assert BUILT_BY_GLITE_TEXT in index_html
