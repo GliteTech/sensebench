@@ -69,12 +69,28 @@
     return scale === "log" ? points.filter((point) => point.x > 0) : points;
   }
 
-  // Colorblind-aware categorical palette (Tableau 10, minus the frontier green).
-  const FAMILY_PALETTE = [
-    "#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F",
-    "#EDC948", "#B07AA1", "#FF9DA7", "#9C755F", "#499894"
-  ];
-  const MAX_FAMILY_COLORS = 10;
+  // Fixed family -> colour map. Brand-anchored where it doesn't hurt contrast
+  // (Google blue, Meta navy, NVIDIA green, Mistral orange, OpenAI teal,
+  // Anthropic rust, DeepSeek indigo); the rest are spread around the wheel for
+  // distinguishability. Fixed (not frequency-ranked) so a family keeps its
+  // colour across filters and sessions.
+  const FAMILY_COLORS = {
+    Gemma: "#4285F4", // Google blue
+    Llama: "#0D2C8B", // deep navy (Meta)
+    Qwen: "#8E24AA", // purple
+    DeepSeek: "#5C7CFA", // indigo (DeepSeek)
+    GLM: "#00ACC1", // cyan
+    Mistral: "#F57C00", // orange (Mistral)
+    Nemotron: "#6FAE00", // green (NVIDIA)
+    GPT: "#10A37F", // teal (OpenAI)
+    Claude: "#C2410C", // rust/clay (Anthropic)
+    Hunyuan: "#C2185B", // crimson
+    Phi: "#FFB300", // amber
+    Granite: "#90A4AE", // blue-grey
+    OLMo: "#827717", // olive
+    Command: "#5D4037", // brown (Cohere)
+    MiniMax: "#455A64" // dark slate
+  };
   const OTHER_FAMILY_LABEL = "Other";
   const OTHER_FAMILY_COLOR = "#9aa0a6";
   // Model name -> family. Order matters; first match wins.
@@ -115,28 +131,30 @@
     return isSelfHosted(entry) ? "triangle" : "circle";
   }
 
-  // Assign palette colors to the most common families; collapse the tail to "Other".
+  // Group points by family using the fixed colour map; unknown families -> "Other".
+  // Colour per family is fixed; only the legend order follows frequency.
   function familyAssignments(points) {
     const counts = new Map();
+    let hasOther = false;
     for (const point of points) {
       const family = familyOf(point.entry);
-      counts.set(family, (counts.get(family) || 0) + 1);
+      if (FAMILY_COLORS[family]) {
+        counts.set(family, (counts.get(family) || 0) + 1);
+      } else {
+        hasOther = true;
+      }
     }
-    const ordered = [...counts.entries()]
+    const legendFamilies = [...counts.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map((entry) => entry[0]);
-    const top = ordered.slice(0, MAX_FAMILY_COLORS);
-    const topSet = new Set(top);
-    const colorOf = new Map();
-    top.forEach((family, index) => colorOf.set(family, FAMILY_PALETTE[index % FAMILY_PALETTE.length]));
-    const hasOther = ordered.length > top.length;
     if (hasOther) {
-      colorOf.set(OTHER_FAMILY_LABEL, OTHER_FAMILY_COLOR);
+      legendFamilies.push(OTHER_FAMILY_LABEL);
     }
-    const legendFamilies = hasOther ? [...top, OTHER_FAMILY_LABEL] : [...top];
+    const colorOf = new Map(Object.entries(FAMILY_COLORS));
+    colorOf.set(OTHER_FAMILY_LABEL, OTHER_FAMILY_COLOR);
     const display = (entry) => {
       const family = familyOf(entry);
-      return topSet.has(family) ? family : OTHER_FAMILY_LABEL;
+      return FAMILY_COLORS[family] ? family : OTHER_FAMILY_LABEL;
     };
     return { colorOf, display, legendFamilies };
   }
@@ -685,8 +703,8 @@
             showSymbol: true,
             symbol: "emptyCircle",
             symbolSize: 12,
-            itemStyle: { color: "#7cb342" },
-            lineStyle: { width: 2, color: "#7cb342" },
+            itemStyle: { color: "#374151" },
+            lineStyle: { width: 2, color: "#374151" },
             emphasis: { disabled: true },
             blur: { lineStyle: { opacity: 0.9 }, itemStyle: { opacity: 0.9 } },
             z: 5,
