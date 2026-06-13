@@ -1,0 +1,105 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "vllm-qwen3-235b-a22b-fp8-b300-p003-lexen-v0.1.0-20260613",
+  "created_at": "2026-06-13T12:02:57.561966+00:00",
+  "git_commit": null,
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": null,
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v0.1.0",
+    "dataset_revision": null,
+    "content_hash": "sha256:0222f3be1b54975692f2be67f271db0a351eb627e327e346d6b8155f9d1ba856",
+    "item_count": 4917
+  },
+  "prompt": {
+    "id": "p003",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "self_hosted_llm",
+    "display_name": "Qwen/Qwen3-235B-A22B",
+    "requested_model": "hosted_vllm/Qwen/Qwen3-235B-A22B",
+    "resolved_model": "Qwen/Qwen3-235B-A22B",
+    "resolved_model_counts": {
+      "Qwen/Qwen3-235B-A22B": 4920
+    },
+    "llm_vendor": "Alibaba",
+    "source_kind": "open_source",
+    "license": "apache-2.0",
+    "model_url": "https://huggingface.co/Qwen/Qwen3-235B-A22B",
+    "hf_revision": "39eb2b067ea6b8e3e1dd97d3cd0c7ffeaf3e1a35",
+    "quantization": "fp8",
+    "inference_engine": "vllm",
+    "inference_engine_version": "0.22.1",
+    "container_image": "vllm/vllm-openai:v0.22.1",
+    "serve_command": "exec vllm serve Qwen/Qwen3-235B-A22B-FP8 --port 8000 --served-model-name Qwen/Qwen3-235B-A22B --max-model-len 8192 --gpu-memory-utilization 0.90 --max-num-seqs 64 --default-chat-template-kwargs \\{\\\"enable_thinking\\\":\\ false\\} --revision 39eb2b067ea6b8e3e1dd97d3cd0c7ffeaf3e1a35",
+    "endpoint_base_url": "http://localhost:8000/v1"
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": null,
+    "max_tokens": 2048,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "machine": {
+    "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.35",
+    "cpu_model": "Intel(R) Xeon(R) 6776P",
+    "cpu_cores": 256,
+    "ram_gib": 3023.5,
+    "gpu": {
+      "name": "NVIDIA B300 SXM6 AC",
+      "count": 1,
+      "vram_mib_per_gpu": 275040,
+      "driver_version": "590.48.01",
+      "cuda_version": "13.1"
+    },
+    "provider": "vast.ai",
+    "instance_id": "40816418",
+    "hourly_rate_usd": 6.72
+  },
+  "execution": {
+    "concurrency": 64,
+    "warmup_call_count": 8,
+    "timing": {
+      "benchmark_started_at": "2026-06-13T12:00:24.803498+00:00",
+      "benchmark_ended_at": "2026-06-13T12:02:57.554798+00:00",
+      "benchmark_seconds": 152.7512925742194,
+      "setup_seconds": 5.446262962184846
+    }
+  },
+  "totals": {
+    "item_count": 4917,
+    "correct_count": 4156,
+    "accuracy": 0.8452308318080131,
+    "call_count": 4920,
+    "usage": {
+      "input_tokens": 3147242,
+      "cached_input_tokens": null,
+      "output_tokens": 39497,
+      "reasoning_output_tokens": null
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 0.2851357461385429,
+      "input_uncached_usd": null,
+      "input_cached_usd": null,
+      "output_usd": null,
+      "input_uncached_unit_price_usd": null,
+      "input_cached_unit_price_usd": null,
+      "output_unit_price_usd": null,
+      "source": "machine_time_estimate"
+    },
+    "elapsed_seconds": 152.7512925742194
+  }
+}
