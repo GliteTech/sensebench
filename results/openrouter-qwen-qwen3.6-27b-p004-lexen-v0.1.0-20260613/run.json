@@ -1,0 +1,86 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "openrouter-qwen-qwen3.6-27b-p004-lexen-v0.1.0-20260613",
+  "created_at": "2026-06-13T17:13:49.033944+00:00",
+  "git_commit": "cab41fcf53e8b943fb034a27068cf975c2f86e65",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": null,
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v0.1.0",
+    "dataset_revision": null,
+    "content_hash": "sha256:0222f3be1b54975692f2be67f271db0a351eb627e327e346d6b8155f9d1ba856",
+    "item_count": 4917
+  },
+  "prompt": {
+    "id": "p004",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "openrouter/qwen/qwen3.6-27b",
+    "requested_model": "openrouter/qwen/qwen3.6-27b",
+    "resolved_model": "qwen/qwen3.6-27b-20260422",
+    "resolved_model_counts": {
+      "qwen/qwen3.6-27b-20260422": 4935
+    },
+    "llm_vendor": "Alibaba",
+    "api_provider": "OpenRouter",
+    "source_kind": "open_source",
+    "license": "apache-2.0",
+    "model_url": "https://huggingface.co/Qwen/Qwen3.6-27B",
+    "reasoning_effort": null,
+    "endpoint_base_url": null
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": null,
+    "max_tokens": 8192,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "machine": null,
+  "execution": {
+    "concurrency": 512,
+    "warmup_call_count": 0,
+    "timing": {
+      "benchmark_started_at": "2026-06-13T17:03:07.557899+00:00",
+      "benchmark_ended_at": "2026-06-13T17:13:49.031674+00:00",
+      "benchmark_seconds": 641.4745094170212,
+      "setup_seconds": 1.0735179170151241
+    }
+  },
+  "totals": {
+    "item_count": 4917,
+    "correct_count": 4402,
+    "accuracy": 0.8952613382143584,
+    "call_count": 4935,
+    "usage": {
+      "input_tokens": 1189942,
+      "cached_input_tokens": 256,
+      "output_tokens": 4813065,
+      "reasoning_output_tokens": 4169425
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 13.921945877,
+      "input_uncached_usd": 0.395669021,
+      "input_cached_usd": null,
+      "output_usd": 13.56851426,
+      "input_uncached_unit_price_usd": null,
+      "input_cached_unit_price_usd": null,
+      "output_unit_price_usd": null,
+      "source": "provider_reported"
+    },
+    "elapsed_seconds": 641.4745094170212
+  }
+}
