@@ -64,8 +64,6 @@
       <dt>Quantization</dt><dd>{{ metadata.model.quantization or "n/a" }}</dd>
       <dt>Inference engine</dt><dd>{{ metadata.model.inference_engine or "n/a" }}</dd>
       <dt>Engine version</dt><dd>{{ metadata.model.inference_engine_version or "n/a" }}</dd>
-      <dt>GPU</dt><dd>{{ metadata.model.gpu or "n/a" }}</dd>
-      <dt>CPU</dt><dd>{{ metadata.model.cpu or "n/a" }}</dd>
       {% endif %}
     </dl>
   </div>
@@ -103,6 +101,30 @@
       <dt>Transport errors</dt><dd>{{ entry.transport_error_vote_count }}</dd>
     </dl>
   </div>
+  {% if metadata.machine %}
+  <div class="detail-block">
+    <h2>Machine &amp; Timing</h2>
+    <dl>
+      {% if metadata.machine.gpu %}
+      <dt>GPU</dt><dd>{% if metadata.machine.gpu.count > 1 %}{{ metadata.machine.gpu.count }}×{% endif %}{{ metadata.machine.gpu.name }}</dd>
+      <dt>VRAM / GPU</dt><dd>{% if metadata.machine.gpu.vram_mib_per_gpu is not none %}{{ metadata.machine.gpu.vram_mib_per_gpu|num }} MiB{% else %}n/a{% endif %}</dd>
+      <dt>Driver</dt><dd>{{ metadata.machine.gpu.driver_version or "n/a" }}</dd>
+      <dt>CUDA</dt><dd>{{ metadata.machine.gpu.cuda_version or "n/a" }}</dd>
+      {% else %}
+      <dt>GPU</dt><dd>n/a</dd>
+      {% endif %}
+      <dt>CPU</dt><dd>{{ metadata.machine.cpu_model or "n/a" }}{% if metadata.machine.cpu_cores %} ({{ metadata.machine.cpu_cores|num }} cores){% endif %}</dd>
+      <dt>RAM</dt><dd>{% if metadata.machine.ram_gib is not none %}{{ metadata.machine.ram_gib|num }} GiB{% else %}n/a{% endif %}</dd>
+      <dt>Platform</dt><dd>{{ metadata.machine.platform or "n/a" }}</dd>
+      <dt>Provider</dt><dd>{{ metadata.machine.provider or "n/a" }}{% if metadata.machine.instance_id %} ({{ metadata.machine.instance_id }}){% endif %}</dd>
+      <dt>Hourly rate</dt><dd>{% if metadata.machine.hourly_rate_usd is not none %}{{ metadata.machine.hourly_rate_usd|money }}/h{% else %}n/a{% endif %}</dd>
+      <dt>Benchmark time</dt><dd>{{ entry.benchmark_seconds|seconds }}</dd>
+      <dt>Seconds / item</dt><dd>{{ entry.seconds_per_item|seconds }}</dd>
+      <dt>Concurrency</dt><dd>{{ entry.concurrency|num }}</dd>
+    </dl>
+    <p class="note">Benchmark time covers only the per-item evaluation loop on this machine, excluding model and asset loading.</p>
+  </div>
+  {% endif %}
   <div class="detail-block">
     <h2>Runner</h2>
     <dl>
@@ -144,7 +166,7 @@
 
 <section class="cost-panel">
   <h2>Cost And Token Breakdown</h2>
-  <p class="note">Actual recorded run cost: {{ entry.cost_usd|money }}. Cost estimate source: {{ entry.cost_source }}.</p>
+  <p class="note">Actual recorded run cost: {{ entry.cost_usd|money }}. Cost estimate source: {{ entry.cost_source }}.{% if entry.cost_source == "machine_time_estimate" %} Cost is estimated from machine time multiplied by the recorded hourly rate.{% endif %}</p>
   <div class="table-scroll">
     <table>
       <thead>

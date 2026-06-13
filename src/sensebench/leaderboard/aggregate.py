@@ -32,6 +32,7 @@ from sensebench.runs.models import (
     PredictionRecord,
     PredictionStatus,
     RunID,
+    SelfHostedLlmReference,
     TokenUsage,
     VoteStatus,
 )
@@ -41,11 +42,18 @@ DEFAULT_BOOTSTRAP_RESAMPLES: int = 2000
 DEFAULT_BOOTSTRAP_SEED: int = 12345
 CONFIDENCE_LOW_PERCENTILE: float = 2.5
 CONFIDENCE_HIGH_PERCENTILE: float = 97.5
-LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v4"
+LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v5"
 RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
 UNKNOWN_MODEL_HOSTING_KIND: str = "unknown"
 MISSING_DATASET_VERSION_GROUP_VALUE: str = "dataset_version:none"
 RANK_FIELD: str = "rank"
+GPU_LABEL_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("H200", "H200 141GB"),
+    ("H100", "H100 80GB"),
+    ("A100", "A100 80GB"),
+    ("RTX 4090", "RTX 4090"),
+)
+GPU_NAME_PREFIXES_TO_STRIP: tuple[str, ...] = ("NVIDIA ", "GeForce ")
 
 
 class LeaderboardModel(BaseModel):
@@ -76,6 +84,13 @@ class LeaderboardEntry(LeaderboardModel):
     license: str | None
     model_url: str | None
     reasoning_effort: str | None
+    quantization: str | None
+    inference_engine: str | None
+    inference_engine_version: str | None
+    hf_revision: str | None
+    gpu: str | None
+    gpu_count: int | None
+    hourly_rate_usd: float | None
     prompt_id: PromptID
     prompt_name: str | None
     dataset_id: DatasetID
@@ -109,6 +124,9 @@ class LeaderboardEntry(LeaderboardModel):
     output_unit_price_usd: float | None
     cost_per_million_items: float | None
     elapsed_seconds: float | None
+    benchmark_seconds: float | None
+    seconds_per_item: float | None
+    concurrency: int | None
     best_group_key: str
 
 
@@ -253,6 +271,22 @@ def _reasoning_effort(*, model: ModelReference) -> str | None:
     return None
 
 
+def _self_hosted_model(*, model: ModelReference) -> SelfHostedLlmReference | None:
+    if isinstance(model, SelfHostedLlmReference):
+        return model
+    return None
+
+
+def _gpu_label(*, name: str) -> str:
+    for substring, label in GPU_LABEL_PATTERNS:
+        if substring in name:
+            return label
+    label = name
+    for prefix in GPU_NAME_PREFIXES_TO_STRIP:
+        label = label.removeprefix(prefix)
+    return label
+
+
 def _best_group_key(*, loaded: LoadedRun) -> str:
     metadata = loaded.metadata
     return "|".join(
@@ -283,6 +317,11 @@ def _entry_for_run(
     cost_usd = cost.total_usd
     model = metadata.model
     model_kind = model.kind
+    self_hosted = _self_hosted_model(model=model)
+    machine = metadata.machine
+    machine_gpu = machine.gpu if machine is not None else None
+    execution = metadata.execution
+    benchmark_seconds = execution.timing.benchmark_seconds if execution is not None else None
     return LeaderboardEntry(
         rank=rank,
         run_id=metadata.run_id,
@@ -302,6 +341,15 @@ def _entry_for_run(
         license=model.license,
         model_url=model.model_url,
         reasoning_effort=_reasoning_effort(model=model),
+        quantization=self_hosted.quantization if self_hosted is not None else None,
+        inference_engine=self_hosted.inference_engine if self_hosted is not None else None,
+        inference_engine_version=(
+            self_hosted.inference_engine_version if self_hosted is not None else None
+        ),
+        hf_revision=self_hosted.hf_revision if self_hosted is not None else None,
+        gpu=_gpu_label(name=machine_gpu.name) if machine_gpu is not None else None,
+        gpu_count=machine_gpu.count if machine_gpu is not None else None,
+        hourly_rate_usd=machine.hourly_rate_usd if machine is not None else None,
         prompt_id=metadata.prompt.id,
         prompt_name=prompt.name if prompt is not None else None,
         dataset_id=metadata.dataset.dataset_id,
@@ -337,6 +385,13 @@ def _entry_for_run(
         if cost_usd is None or item_count <= 0
         else (cost_usd / item_count) * 1_000_000,
         elapsed_seconds=metadata.totals.elapsed_seconds,
+        benchmark_seconds=benchmark_seconds,
+        seconds_per_item=(
+            _divide(numerator=benchmark_seconds, denominator=item_count)
+            if self_hosted is not None
+            else None
+        ),
+        concurrency=execution.concurrency if execution is not None else None,
         best_group_key=_best_group_key(loaded=loaded),
     )
 
