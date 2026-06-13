@@ -1,8 +1,16 @@
 {
   "dataset": "lexen-v0.1.0",
-  "prompts": ["p003"],
-  "prompt_max_tokens": {"p001": 1024, "p002": 64, "p003": 256},
-  "sampling": {"temperature": 0.0},
+  "prompts": [
+    "p003"
+  ],
+  "prompt_max_tokens": {
+    "p001": 1024,
+    "p002": 64,
+    "p003": 256
+  },
+  "sampling": {
+    "temperature": 0.0
+  },
   "warmup_calls": 8,
   "default_image": "vllm/vllm-openai:v0.22.1",
   "gpu_presets": {
@@ -31,12 +39,18 @@
   "jobs": [
     {
       "job_id": "granite-4.1-8b-fp8",
-      "gpus": ["h100", "h200"],
+      "gpus": [
+        "h100",
+        "h200"
+      ],
       "model": "ibm-granite/granite-4.1-8b-fp8",
       "served_checkpoint": "ibm-granite/granite-4.1-8b-fp8",
       "hf_revision": "070021b3608433b6107a00733d561c9779b9937e",
       "quantization": "fp8",
-      "serve_args": ["--max-num-batched-tokens", "8192"],
+      "serve_args": [
+        "--max-num-batched-tokens",
+        "8192"
+      ],
       "vendor": "IBM",
       "license": "apache-2.0",
       "model_url": "https://huggingface.co/ibm-granite/granite-4.1-8b-fp8",
@@ -45,12 +59,17 @@
     },
     {
       "job_id": "granite-4.1-8b-bf16",
-      "gpus": ["a100"],
+      "gpus": [
+        "a100"
+      ],
       "model": "ibm-granite/granite-4.1-8b",
       "served_checkpoint": "ibm-granite/granite-4.1-8b",
       "hf_revision": "1504002f650e656a0a3789d99574df12e3e94ed0",
       "quantization": "bf16",
-      "serve_args": ["--max-num-batched-tokens", "8192"],
+      "serve_args": [
+        "--max-num-batched-tokens",
+        "8192"
+      ],
       "vendor": "IBM",
       "license": "apache-2.0",
       "model_url": "https://huggingface.co/ibm-granite/granite-4.1-8b",
@@ -59,12 +78,21 @@
     },
     {
       "job_id": "llama-3.1-8b-fp8",
-      "gpus": ["h100", "h200"],
+      "gpus": [
+        "h100",
+        "h200"
+      ],
       "model": "meta-llama/Llama-3.1-8B-Instruct",
       "served_checkpoint": "meta-llama/Llama-3.1-8B-Instruct",
       "hf_revision": null,
       "quantization": "fp8",
-      "serve_args": ["--dtype", "auto", "--quantization", "fp8", "--enable-prefix-caching"],
+      "serve_args": [
+        "--dtype",
+        "auto",
+        "--quantization",
+        "fp8",
+        "--enable-prefix-caching"
+      ],
       "vendor": "Meta",
       "license": "llama3.1",
       "model_url": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct",
@@ -73,12 +101,18 @@
     },
     {
       "job_id": "llama-3.1-8b-bf16",
-      "gpus": ["a100"],
+      "gpus": [
+        "a100"
+      ],
       "model": "meta-llama/Llama-3.1-8B-Instruct",
       "served_checkpoint": "meta-llama/Llama-3.1-8B-Instruct",
       "hf_revision": null,
       "quantization": "bf16",
-      "serve_args": ["--dtype", "auto", "--enable-prefix-caching"],
+      "serve_args": [
+        "--dtype",
+        "auto",
+        "--enable-prefix-caching"
+      ],
       "vendor": "Meta",
       "license": "llama3.1",
       "model_url": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct",
@@ -87,15 +121,21 @@
     },
     {
       "job_id": "gemma-4-e2b-fp8",
-      "gpus": ["h100", "h200"],
+      "gpus": [
+        "h100",
+        "h200"
+      ],
       "model": "google/gemma-4-E2B-it",
       "served_checkpoint": "google/gemma-4-E2B-it",
       "hf_revision": null,
       "quantization": "fp8",
       "serve_args": [
-        "--dtype", "bfloat16",
-        "--quantization", "fp8",
-        "--max-num-seqs", "128",
+        "--dtype",
+        "bfloat16",
+        "--quantization",
+        "fp8",
+        "--max-num-seqs",
+        "128",
         "--no-enable-prefix-caching",
         "--language-model-only"
       ],
@@ -107,15 +147,21 @@
     },
     {
       "job_id": "gemma-4-e4b-fp8",
-      "gpus": ["h100", "h200"],
+      "gpus": [
+        "h100",
+        "h200"
+      ],
       "model": "google/gemma-4-E4B-it",
       "served_checkpoint": "google/gemma-4-E4B-it",
       "hf_revision": null,
       "quantization": "fp8",
       "serve_args": [
-        "--dtype", "bfloat16",
-        "--quantization", "fp8",
-        "--max-num-seqs", "128",
+        "--dtype",
+        "bfloat16",
+        "--quantization",
+        "fp8",
+        "--max-num-seqs",
+        "128",
         "--no-enable-prefix-caching",
         "--language-model-only"
       ],
@@ -127,12 +173,20 @@
     },
     {
       "job_id": "qwen3.6-27b-fp8",
-      "gpus": ["a100", "h100", "h200"],
+      "gpus": [
+        "a100",
+        "h100",
+        "h200"
+      ],
       "model": "Qwen/Qwen3.6-27B-FP8",
       "served_checkpoint": "Qwen/Qwen3.6-27B-FP8",
       "hf_revision": null,
       "quantization": "fp8",
-      "serve_args": ["--trust-remote-code"],
+      "serve_args": [
+        "--trust-remote-code",
+        "--default-chat-template-kwargs",
+        "enable_thinking=false"
+      ],
       "vendor": "Alibaba",
       "license": "apache-2.0",
       "model_url": "https://huggingface.co/Qwen/Qwen3.6-27B-FP8",
@@ -141,13 +195,18 @@
     },
     {
       "job_id": "gemma-4-26b-a4b-fp8",
-      "gpus": ["a100", "h100", "h200"],
+      "gpus": [
+        "a100",
+        "h100",
+        "h200"
+      ],
       "model": "RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic",
       "served_checkpoint": "RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic",
       "hf_revision": null,
       "quantization": "fp8",
       "serve_args": [
-        "--max-num-seqs", "256",
+        "--max-num-seqs",
+        "256",
         "--no-enable-prefix-caching",
         "--language-model-only"
       ],
@@ -159,12 +218,22 @@
     },
     {
       "job_id": "qwen3.6-35b-a3b-fp8",
-      "gpus": ["a100", "h100", "h200"],
+      "gpus": [
+        "a100",
+        "h100",
+        "h200"
+      ],
       "model": "Qwen/Qwen3.6-35B-A3B-FP8",
       "served_checkpoint": "Qwen/Qwen3.6-35B-A3B-FP8",
       "hf_revision": null,
       "quantization": "fp8",
-      "serve_args": ["--language-model-only", "--max-num-seqs", "256"],
+      "serve_args": [
+        "--language-model-only",
+        "--max-num-seqs",
+        "256",
+        "--default-chat-template-kwargs",
+        "enable_thinking=false"
+      ],
       "vendor": "Alibaba",
       "license": "apache-2.0",
       "model_url": "https://huggingface.co/Qwen/Qwen3.6-35B-A3B-FP8",
@@ -173,16 +242,24 @@
     },
     {
       "job_id": "mistral-small-3.2-fp8",
-      "gpus": ["a100", "h100", "h200"],
+      "gpus": [
+        "a100",
+        "h100",
+        "h200"
+      ],
       "model": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
       "served_checkpoint": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
       "hf_revision": null,
       "quantization": "fp8",
       "serve_args": [
-        "--tokenizer-mode", "mistral",
-        "--config-format", "mistral",
-        "--load-format", "mistral",
-        "--quantization", "fp8"
+        "--tokenizer-mode",
+        "mistral",
+        "--config-format",
+        "mistral",
+        "--load-format",
+        "mistral",
+        "--quantization",
+        "fp8"
       ],
       "vendor": "Mistral AI",
       "license": "apache-2.0",
