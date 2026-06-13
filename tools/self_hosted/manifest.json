@@ -1,7 +1,7 @@
 {
   "dataset": "lexen-v0.1.0",
   "prompts": ["p003"],
-  "prompt_max_tokens": {"p001": 1024, "p002": 64, "p003": 64},
+  "prompt_max_tokens": {"p001": 1024, "p002": 64, "p003": 256},
   "sampling": {"temperature": 0.0},
   "warmup_calls": 8,
   "default_image": "vllm/vllm-openai:v0.22.1",
