@@ -32,6 +32,7 @@ from sensebench.runs.models import (
     PredictionRecord,
     PredictionStatus,
     RunID,
+    RunPolicy,
     SelfHostedLlmReference,
     TokenUsage,
     VoteStatus,
@@ -44,6 +45,8 @@ CONFIDENCE_LOW_PERCENTILE: float = 2.5
 CONFIDENCE_HIGH_PERCENTILE: float = 97.5
 LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v5"
 RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
+OFFICIAL_VOTES_PER_ITEM: int = 1
+OFFICIAL_SEMANTIC_REASKS: int = 1
 UNKNOWN_MODEL_HOSTING_KIND: str = "unknown"
 MISSING_DATASET_VERSION_GROUP_VALUE: str = "dataset_version:none"
 RANK_FIELD: str = "rank"
@@ -448,6 +451,24 @@ def _eligibility_issues(*, loaded: LoadedRun, official: bool) -> list[str]:
         issues.append(
             "official submissions require runner.github_handle in run.json "
             "(set it with: sensebench set-runner <run-dir> --github-handle <handle>)"
+        )
+    if official:
+        issues.extend(_protocol_issues(policy=loaded.metadata.policy))
+    return issues
+
+
+def _protocol_issues(*, policy: RunPolicy) -> list[str]:
+    issues: list[str] = []
+    if policy.votes_per_item != OFFICIAL_VOTES_PER_ITEM:
+        issues.append(
+            f"official submissions must use votes_per_item={OFFICIAL_VOTES_PER_ITEM} "
+            f"(single-vote protocol), found {policy.votes_per_item}"
+        )
+    if policy.semantic_reasks_per_invalid_vote != OFFICIAL_SEMANTIC_REASKS:
+        issues.append(
+            "official submissions must use "
+            f"semantic_reasks_per_invalid_vote={OFFICIAL_SEMANTIC_REASKS}, "
+            f"found {policy.semantic_reasks_per_invalid_vote}"
         )
     return issues
 

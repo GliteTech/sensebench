@@ -7,6 +7,7 @@
   const sourceFilter = document.getElementById("source-filter");
   const hostingFilter = document.getElementById("hosting-filter");
   const gpuFilter = document.getElementById("gpu-filter");
+  const quantFilter = document.getElementById("quant-filter");
   const xMetricSelect = document.getElementById("x-metric-select");
   const maxCostFilter = document.getElementById("max-cost-filter");
   const viewFilter = document.getElementById("view-filter");
@@ -226,6 +227,7 @@
     const source = sourceFilter?.value || "";
     const hosting = hostingFilter?.value || "";
     const gpu = gpuFilter?.value || "";
+    const quant = quantFilter?.value || "";
     const maxCost = activeMaxCost();
     let entries = state.entries.filter((entry) => {
       if (dataset && entry.dataset_version !== dataset) {
@@ -241,6 +243,9 @@
         return false;
       }
       if (gpu && entry.gpu !== gpu) {
+        return false;
+      }
+      if (quant && entry.quantization !== quant) {
         return false;
       }
       if (maxCost != null) {
@@ -380,6 +385,9 @@
           vendorParts.push(escapeHtml(entry.llm_vendor));
         }
         vendorParts.push(escapeHtml(sourceLabel(entry)));
+        if (entry.quantization) {
+          vendorParts.push(escapeHtml(entry.quantization));
+        }
         const gpu = gpuLabel(entry);
         if (gpu != null) {
           vendorParts.push(escapeHtml(gpu));
@@ -721,10 +729,21 @@
               half == null
                 ? ""
                 : `<div class="cell-secondary">±${formatPercent(half)}</div>`;
+            const secondaryParts = [
+              escapeHtml(entry.prompt_id),
+              escapeHtml(entry.dataset_version ?? "")
+            ];
+            if (entry.quantization) {
+              secondaryParts.push(escapeHtml(entry.quantization));
+            }
+            const gpu = gpuLabel(entry);
+            if (gpu != null) {
+              secondaryParts.push(escapeHtml(gpu));
+            }
             return `<tr>
               <td>
                 <div class="cell-primary">${escapeHtml(modelLabel(entry))}</div>
-                <div class="cell-secondary">${escapeHtml(entry.prompt_id)} · ${escapeHtml(entry.dataset_version ?? "")}</div>
+                <div class="cell-secondary">${secondaryParts.join(" · ")}</div>
               </td>
               <td><div class="cell-primary">${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
               <td>${formatMoney(entry.cost_per_million_items)}</td>
@@ -940,6 +959,7 @@
       sourceFilter,
       hostingFilter,
       gpuFilter,
+      quantFilter,
       xMetricSelect,
       maxCostFilter,
       viewFilter,

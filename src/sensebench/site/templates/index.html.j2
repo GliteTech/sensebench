@@ -83,6 +83,17 @@
     </select>
   </label>
   {% endif %}
+  {% if site_data.summary.quantizations %}
+  <label>
+    Quantization
+    <select id="quant-filter">
+      <option value="">All quantization</option>
+      {% for quantization in site_data.summary.quantizations %}
+      <option value="{{ quantization }}">{{ quantization }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
   <label>
     Chart X-axis
     <select id="x-metric-select">
@@ -178,7 +189,7 @@
           <td></td>
           <td>
             <div class="cell-primary">{{ entry.model }}{% if entry.reasoning_effort %} ({{ entry.reasoning_effort }}){% endif %}</div>
-            <div class="cell-secondary">{% if entry.llm_vendor %}{{ entry.llm_vendor }} · {% endif %}{{ entry.source_kind|source_label }}{% if entry.gpu %} · {% if entry.gpu_count and entry.gpu_count > 1 %}{{ entry.gpu_count }}×{% endif %}{{ entry.gpu }}{% endif %}</div>
+            <div class="cell-secondary">{% if entry.llm_vendor %}{{ entry.llm_vendor }} · {% endif %}{{ entry.source_kind|source_label }}{% if entry.quantization %} · {{ entry.quantization }}{% endif %}{% if entry.gpu %} · {% if entry.gpu_count and entry.gpu_count > 1 %}{{ entry.gpu_count }}×{% endif %}{{ entry.gpu }}{% endif %}</div>
           </td>
           <td>
             <div class="cell-primary">{{ entry.accuracy|pct }}</div>

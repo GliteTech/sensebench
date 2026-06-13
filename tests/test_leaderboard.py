@@ -4,14 +4,23 @@ from json import dumps
 from pathlib import Path
 
 from sensebench.leaderboard.aggregate import (
+    OFFICIAL_SEMANTIC_REASKS,
+    OFFICIAL_VOTES_PER_ITEM,
     LeaderboardFile,
+    _protocol_issues,
     collect_leaderboard_entries,
     emit_leaderboard,
 )
 from sensebench.paths import LEADERBOARD_JSON_PATH, RUN_METADATA_FILENAME, SUBMITTED_RESULTS_DIR
 from sensebench.prompts.models import SENSE_INDEX_FIELD, PromptID
 from sensebench.runner.writer import write_run_artifacts
-from sensebench.runs.models import ModelHostingKind, RunID
+from sensebench.runs.models import (
+    ModelHostingKind,
+    MonosemousPolicyKind,
+    RunID,
+    RunPolicy,
+    TieBreakKind,
+)
 from tests.run_fixtures import (
     DATASET_VERSION,
     FIXTURE_BENCHMARK_SECONDS,
@@ -199,3 +208,34 @@ def test_best_group_key_collapses_prompts_and_runs(tmp_path: Path) -> None:
     assert len(collection.entries) == 2
     group_keys = {entry.best_group_key for entry in collection.entries}
     assert len(group_keys) == 1, "same model and dataset share one best-view group"
+
+
+def _policy(*, votes: int, reasks: int) -> RunPolicy:
+    return RunPolicy(
+        votes_per_item=votes,
+        semantic_reasks_per_invalid_vote=reasks,
+        tie_break=TieBreakKind.EARLIEST_VOTE,
+        monosemous_policy=MonosemousPolicyKind.SHORT_CIRCUIT,
+    )
+
+
+def test_protocol_issues_accepts_canonical_single_vote() -> None:
+    issues = _protocol_issues(
+        policy=_policy(votes=OFFICIAL_VOTES_PER_ITEM, reasks=OFFICIAL_SEMANTIC_REASKS),
+    )
+
+    assert issues == []
+
+
+def test_protocol_issues_rejects_self_consistency_voting() -> None:
+    issues = _protocol_issues(policy=_policy(votes=3, reasks=OFFICIAL_SEMANTIC_REASKS))
+
+    assert len(issues) == 1
+    assert "votes_per_item" in issues[0]
+
+
+def test_protocol_issues_rejects_extra_reasks() -> None:
+    issues = _protocol_issues(policy=_policy(votes=OFFICIAL_VOTES_PER_ITEM, reasks=2))
+
+    assert len(issues) == 1
+    assert "semantic_reasks" in issues[0]

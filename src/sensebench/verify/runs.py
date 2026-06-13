@@ -43,6 +43,7 @@ ACCURACY_TOLERANCE: float = 1e-12
 TIMING_TOLERANCE_SECONDS: float = 1e-9
 CALL_LATENCY_TOLERANCE_SECONDS: float = 0.05
 MACHINE_COST_RELATIVE_TOLERANCE: float = 1e-9
+MAX_OUTPUT_TRUNCATION_FRACTION: float = 0.05
 MESSAGE_ROLE_FIELD: str = "role"
 MESSAGE_CONTENT_FIELD: str = "content"
 DATASET_ITEM_DIFF_SAMPLE_LIMIT: int = 10
@@ -75,6 +76,8 @@ class RunValidationRule(StrEnum):
     EXECUTION_TIMING = "execution_timing"
     MACHINE_INFO = "machine_info"
     MACHINE_COST = "machine_cost"
+    MODEL_PROVENANCE = "model_provenance"
+    OUTPUT_TRUNCATION = "output_truncation"
 
 
 @dataclass(frozen=True, slots=True)
@@ -921,6 +924,57 @@ def _machine_cost_issues(*, metadata: RunMetadata) -> list[RunValidationIssue]:
     ]
 
 
+def _model_provenance_issues(*, metadata: RunMetadata) -> list[RunValidationIssue]:
+    if metadata.model.kind != SELF_HOSTED_LLM_KIND:
+        return []
+    revision = metadata.model.hf_revision
+    if revision is not None and len(revision.strip()) > 0:
+        return []
+    return [
+        RunValidationIssue(
+            rule=RunValidationRule.MODEL_PROVENANCE,
+            location=RUN_METADATA_FILENAME,
+            message=(
+                "self-hosted runs must record model.hf_revision "
+                "(the resolved checkpoint commit) for reproducibility"
+            ),
+        )
+    ]
+
+
+def _output_truncation_issues(
+    *,
+    metadata: RunMetadata,
+    calls: list[CallRecord],
+) -> list[RunValidationIssue]:
+    max_tokens = metadata.sampling.max_tokens
+    if max_tokens is None:
+        return []
+    observed = [
+        call.usage.output_tokens
+        for call in calls
+        if call.status == CallStatus.SUCCESS and call.usage.output_tokens is not None
+    ]
+    if len(observed) == 0:
+        return []
+    truncated = sum(1 for output_tokens in observed if output_tokens >= max_tokens)
+    fraction = truncated / len(observed)
+    if fraction <= MAX_OUTPUT_TRUNCATION_FRACTION:
+        return []
+    return [
+        RunValidationIssue(
+            rule=RunValidationRule.OUTPUT_TRUNCATION,
+            location=CALLS_FILENAME,
+            message=(
+                f"{truncated} of {len(observed)} successful calls "
+                f"({fraction:.1%}) hit the max_tokens cap {max_tokens}; "
+                f"the cap must not truncate more than "
+                f"{MAX_OUTPUT_TRUNCATION_FRACTION:.0%} of outputs"
+            ),
+        )
+    ]
+
+
 def verify_run_directory(
     *,
     run_dir: Path,
@@ -958,6 +1012,8 @@ def verify_run_directory(
     issues.extend(_execution_timing_issues(metadata=loaded.metadata, calls=loaded.calls))
     issues.extend(_machine_info_issues(metadata=loaded.metadata))
     issues.extend(_machine_cost_issues(metadata=loaded.metadata))
+    issues.extend(_model_provenance_issues(metadata=loaded.metadata))
+    issues.extend(_output_truncation_issues(metadata=loaded.metadata, calls=loaded.calls))
     verification_prompt: PromptDefinition | None = None
     if prompt is not None and prompt.id == loaded.metadata.prompt.id:
         verification_prompt = prompt
