@@ -22,6 +22,8 @@ from sensebench.prompts.registry import load_prompt_definition
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
     RUN_SCHEMA_VERSION,
+    RUN_SCHEMA_VERSION_V1,
+    SELF_HOSTED_LLM_KIND,
     AttemptKind,
     CallID,
     CallRecord,
@@ -31,8 +33,12 @@ from sensebench.runs.models import (
     CostBreakdown,
     CostSourceKind,
     DatasetReference,
+    ExecutionInfo,
+    MachineGpuInfo,
+    MachineInfo,
     MessageRecord,
     ModelID,
+    ModelReference,
     ModelSourceKind,
     MonosemousPolicyKind,
     PredictionRecord,
@@ -42,8 +48,11 @@ from sensebench.runs.models import (
     RunMetadata,
     RunnerIdentity,
     RunPolicy,
+    RunSchemaVersion,
+    RunTiming,
     RunTotals,
     SamplingParameters,
+    SelfHostedLlmReference,
     TieBreakKind,
     TokenUsage,
     VoteRecord,
@@ -81,10 +90,78 @@ SENSE_KEYS_BY_INDEX: dict[int, SenseKey] = {
     1: FIRST_SENSE_KEY,
     2: SECOND_SENSE_KEY,
 }
+SELF_HOSTED_MODEL_NAME: ModelID = "fake-local"
+FIXTURE_ENDPOINT_BASE_URL: str = "http://localhost:8000/v1"
+FIXTURE_QUANTIZATION: str = "fp8"
+FIXTURE_INFERENCE_ENGINE: str = "vllm"
+FIXTURE_INFERENCE_ENGINE_VERSION: str = "0.22.1"
+FIXTURE_HF_REVISION: str = "deadbeef"
+FIXTURE_GPU_NAME: str = "NVIDIA H100 80GB HBM3"
+FIXTURE_GPU_COUNT: int = 1
+FIXTURE_GPU_VRAM_MIB: int = 81559
+FIXTURE_DRIVER_VERSION: str = "565.57.01"
+FIXTURE_CUDA_VERSION: str = "12.7"
+FIXTURE_CPU_MODEL: str = "AMD EPYC 9554 64-Core Processor"
+FIXTURE_CPU_CORES: int = 32
+FIXTURE_RAM_GIB: float = 251.6
+FIXTURE_MACHINE_PLATFORM: str = "Linux-5.15.0-generic-x86_64"
+FIXTURE_PROVIDER: str = "vast.ai"
+FIXTURE_INSTANCE_ID: str = "40430336"
+FIXTURE_HOURLY_RATE_USD: float = 2.49
+FIXTURE_BENCHMARK_SECONDS: float = 30.0
+FIXTURE_SETUP_SECONDS: float = 2.0
+FIXTURE_CONCURRENCY: int = 64
+FIXTURE_BENCHMARK_STARTED_AT: datetime = datetime(2026, 6, 12, 0, 0, 0, tzinfo=UTC)
+FIXTURE_BENCHMARK_ENDED_AT: datetime = datetime(2026, 6, 12, 0, 0, 30, tzinfo=UTC)
 
 
 def registered_prompt() -> PromptDefinition:
     return load_prompt_definition(path=P001_PROMPT_PATH)
+
+
+def fixture_machine() -> MachineInfo:
+    return MachineInfo(
+        platform=FIXTURE_MACHINE_PLATFORM,
+        cpu_model=FIXTURE_CPU_MODEL,
+        cpu_cores=FIXTURE_CPU_CORES,
+        ram_gib=FIXTURE_RAM_GIB,
+        gpu=MachineGpuInfo(
+            name=FIXTURE_GPU_NAME,
+            count=FIXTURE_GPU_COUNT,
+            vram_mib_per_gpu=FIXTURE_GPU_VRAM_MIB,
+            driver_version=FIXTURE_DRIVER_VERSION,
+            cuda_version=FIXTURE_CUDA_VERSION,
+        ),
+        provider=FIXTURE_PROVIDER,
+        instance_id=FIXTURE_INSTANCE_ID,
+        hourly_rate_usd=FIXTURE_HOURLY_RATE_USD,
+    )
+
+
+def self_hosted_model(*, model_name: ModelID = SELF_HOSTED_MODEL_NAME) -> SelfHostedLlmReference:
+    return SelfHostedLlmReference(
+        kind=SELF_HOSTED_LLM_KIND,
+        display_name=model_name,
+        requested_model=model_name,
+        source_kind=ModelSourceKind.OPEN_SOURCE,
+        hf_revision=FIXTURE_HF_REVISION,
+        quantization=FIXTURE_QUANTIZATION,
+        inference_engine=FIXTURE_INFERENCE_ENGINE,
+        inference_engine_version=FIXTURE_INFERENCE_ENGINE_VERSION,
+        endpoint_base_url=FIXTURE_ENDPOINT_BASE_URL,
+    )
+
+
+def default_execution() -> ExecutionInfo:
+    return ExecutionInfo(
+        concurrency=FIXTURE_CONCURRENCY,
+        timing=RunTiming(
+            benchmark_started_at=FIXTURE_BENCHMARK_STARTED_AT,
+            benchmark_ended_at=FIXTURE_BENCHMARK_ENDED_AT,
+            benchmark_seconds=FIXTURE_BENCHMARK_SECONDS,
+            setup_seconds=FIXTURE_SETUP_SECONDS,
+        ),
+    )
 
 
 def make_metadata(
@@ -98,9 +175,15 @@ def make_metadata(
     dataset_version: str = DATASET_VERSION,
     run_id: RunID = DEFAULT_RUN_ID,
     github_handle: str | None = RUNNER_GITHUB_HANDLE,
+    schema_version: RunSchemaVersion = RUN_SCHEMA_VERSION,
+    model: ModelReference | None = None,
+    machine: MachineInfo | None = None,
+    cost: CostBreakdown | None = None,
+    sampling: SamplingParameters | None = None,
 ) -> RunMetadata:
+    is_v1 = schema_version == RUN_SCHEMA_VERSION_V1
     return RunMetadata(
-        schema_version=RUN_SCHEMA_VERSION,
+        schema_version=schema_version,
         run_id=run_id,
         created_at=RUN_CREATED_AT,
         git_commit=GIT_COMMIT,
@@ -112,26 +195,33 @@ def make_metadata(
             item_count=item_count,
         ),
         prompt=PromptReference(id=prompt_id, sensebench_version=SENSEBENCH_VERSION),
-        model=CloudLlmReference(
+        model=model
+        if model is not None
+        else CloudLlmReference(
             kind=CLOUD_LLM_KIND,
             display_name=MODEL_NAME,
             requested_model=MODEL_NAME,
             source_kind=ModelSourceKind.UNKNOWN,
         ),
-        sampling=SamplingParameters(),
+        sampling=sampling if sampling is not None else SamplingParameters(),
         policy=RunPolicy(
             votes_per_item=VOTES_PER_ITEM,
             semantic_reasks_per_invalid_vote=SEMANTIC_REASKS_PER_INVALID_VOTE,
             tie_break=TieBreakKind.EARLIEST_VOTE,
             monosemous_policy=MonosemousPolicyKind.SHORT_CIRCUIT,
         ),
+        machine=machine,
+        execution=None if is_v1 else default_execution(),
         totals=RunTotals(
             item_count=item_count,
             correct_count=correct_count,
             accuracy=accuracy,
             call_count=call_count,
             usage=TokenUsage(),
-            cost=CostBreakdown(total_usd=NO_CALL_COST_USD, source=CostSourceKind.NO_CALLS),
+            cost=cost
+            if cost is not None
+            else CostBreakdown(total_usd=NO_CALL_COST_USD, source=CostSourceKind.NO_CALLS),
+            elapsed_seconds=None if is_v1 else FIXTURE_BENCHMARK_SECONDS,
         ),
     )
 

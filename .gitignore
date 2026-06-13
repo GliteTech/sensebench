@@ -36,3 +36,6 @@ Thumbs.db
 
 # Local working notes
 /todo.md
+
+# Self-hosted orchestration state (instance coords, fetched runs)
+/work/

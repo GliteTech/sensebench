@@ -46,7 +46,9 @@ from sensebench.runs.models import (
     CostBreakdown,
     CostSourceKind,
     DatasetReference,
+    ExecutionInfo,
     MessageRecord,
+    ModelHostingKind,
     ModelID,
     ModelSourceKind,
     MonosemousPolicyKind,
@@ -57,6 +59,7 @@ from sensebench.runs.models import (
     RunMetadata,
     RunnerIdentity,
     RunPolicy,
+    RunTiming,
     RunTotals,
     SamplingParameters,
     TieBreakKind,
@@ -65,12 +68,22 @@ from sensebench.runs.models import (
     VoteStatus,
 )
 from sensebench.wordnet import get_candidate_senses
+from tests.run_fixtures import (
+    FIXTURE_GPU_NAME,
+    FIXTURE_INFERENCE_ENGINE,
+    FIXTURE_PROVIDER,
+    FIXTURE_QUANTIZATION,
+    SELF_HOSTED_MODEL_NAME,
+    fixture_machine,
+    self_hosted_model,
+)
 
 SMOKE_ITEMS_PATH: Path = Path("tests/data/smoke_items.jsonl")
 TEST_RELEASE_ID: str = DEFAULT_LEXEN_RELEASE_ID
 TEST_DATASET_ID: DatasetID = LEXEN_DATASET_ID
 TEST_RELEASE_URL: str = "https://example.com/items.jsonl"
 TEST_RUN_ID: RunID = "fake-model-p001-lexen-v0.1.0-20260612"
+SELF_HOSTED_RUN_ID: RunID = "fake-local-p001-lexen-v0.1.0-20260612"
 TEST_MODEL_NAME: ModelID = "fake-model"
 TEST_BASE_URL: str = "https://example.com/sensebench/"
 TEST_CREATED_AT: datetime = datetime(2026, 6, 12, tzinfo=UTC)
@@ -92,10 +105,11 @@ INPUT_UNCACHED_PRICE_USD: float = 0.0001
 INPUT_CACHED_PRICE_USD: float = 0.00001
 OUTPUT_PRICE_USD: float = 0.001
 LATENCY_SECONDS: float = 0.5
+TEST_CONCURRENCY: int = 8
 EXPECTED_COST_PER_MILLION_ITEMS: float = 20_000.0
 EXPECTED_TOKENS_PER_ITEM: float = 110.0
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v3"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v4"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v5"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v5"
 TARGET_ART_TEXT: str = "art"
 TARGET_LEMMA_TEXT: str = "Target lemma: art"
 SHOW_RAW_PROMPT_TEXT: str = "Show raw prompt"
@@ -109,6 +123,13 @@ EXPECTED_CORRECTNESS_BITS: str = "0"
 REFERENCE_BASELINES_TEXT: str = "Reference Baselines"
 MAX_COST_FILTER_ID: str = "max-cost-filter"
 SOURCE_FILTER_ID: str = "source-filter"
+HOSTING_FILTER_ID: str = "hosting-filter"
+GPU_FILTER_ID: str = "gpu-filter"
+QUANT_FILTER_ID: str = "quant-filter"
+X_METRIC_SELECT_ID: str = "x-metric-select"
+MACHINE_TIMING_HEADING_TEXT: str = "Machine &amp; Timing"
+MACHINE_SECONDS_PER_ITEM_TEXT: str = "Machine seconds / item"
+EXPECTED_GPU_LABEL: str = "H100 80GB"
 BUILT_BY_GLITE_TEXT: str = "Built by Glite"
 EXPECTED_BASELINE_COUNT: int = 4
 ECHARTS_VENDOR_PATH: Path = Path("vendor") / "echarts.min.js"
@@ -187,6 +208,7 @@ def _write_verified_run(
     model_name: ModelID = TEST_MODEL_NAME,
     content_hash: str | None = None,
     choose_gold: bool = True,
+    self_hosted: bool = False,
 ) -> None:
     prompt = load_prompt_definition(path=P001_PROMPT_PATH)
     item = dataset.items[0]
@@ -267,7 +289,9 @@ def _write_verified_run(
             item_count=len(dataset.items),
         ),
         prompt=PromptReference(id=prompt.id, sensebench_version=SENSEBENCH_VERSION),
-        model=CloudLlmReference(
+        model=self_hosted_model(model_name=model_name)
+        if self_hosted
+        else CloudLlmReference(
             kind=CLOUD_LLM_KIND,
             display_name=model_name,
             requested_model=model_name,
@@ -281,6 +305,15 @@ def _write_verified_run(
             semantic_reasks_per_invalid_vote=CALL_VOTE_INDEX,
             tie_break=TieBreakKind.EARLIEST_VOTE,
             monosemous_policy=MonosemousPolicyKind.SHORT_CIRCUIT,
+        ),
+        machine=fixture_machine() if self_hosted else None,
+        execution=ExecutionInfo(
+            concurrency=TEST_CONCURRENCY,
+            timing=RunTiming(
+                benchmark_started_at=TEST_CREATED_AT,
+                benchmark_ended_at=TEST_CREATED_AT,
+                benchmark_seconds=LATENCY_SECONDS,
+            ),
         ),
         totals=RunTotals(
             item_count=CALL_VOTE_INDEX,
@@ -355,6 +388,8 @@ def test_build_site_emits_static_pages_and_data(
     )
     assert site_data.schema_version == SITE_DATA_SCHEMA_VERSION
     assert site_data.summary.verified_run_count == 1
+    assert site_data.summary.gpus == []
+    assert site_data.summary.quantizations == []
     entry = site_data.entries[0]
     assert entry.accuracy == 0.0
     assert entry.cost_per_million_items == EXPECTED_COST_PER_MILLION_ITEMS
@@ -424,12 +459,92 @@ def test_build_site_emits_static_pages_and_data(
     assert EXPECTED_PRICE_TEXT in run_html
     assert LEGACY_PRICE_TEXT not in run_html
     assert f"artifacts/runs/{TEST_RUN_ID}/{RUN_METADATA_FILENAME}" in run_html
+    assert MACHINE_TIMING_HEADING_TEXT not in run_html
 
     index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
     assert REFERENCE_BASELINES_TEXT in index_html
     assert MAX_COST_FILTER_ID in index_html
     assert SOURCE_FILTER_ID in index_html
+    assert HOSTING_FILTER_ID in index_html
+    assert X_METRIC_SELECT_ID in index_html
+    assert GPU_FILTER_ID not in index_html
+    assert QUANT_FILTER_ID not in index_html
     assert BUILT_BY_GLITE_TEXT in index_html
+
+
+def test_build_site_self_hosted_run(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    dataset = _dataset()
+    _patch_registered_dataset(monkeypatch=monkeypatch, dataset=dataset)
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    output_dir = tmp_path / SITE_OUTPUT_DIR
+    _write_verified_run(
+        results_dir=results_dir,
+        dataset=dataset,
+        run_id=TEST_RUN_ID,
+    )
+    _write_verified_run(
+        results_dir=results_dir,
+        dataset=dataset,
+        run_id=SELF_HOSTED_RUN_ID,
+        model_name=SELF_HOSTED_MODEL_NAME,
+        self_hosted=True,
+    )
+
+    site_build_module.build_site(
+        results_dir=results_dir,
+        output_dir=output_dir,
+        base_url=TEST_BASE_URL,
+        strict=True,
+    )
+
+    site_data = site_build_module.SiteData.model_validate_json(
+        (output_dir / SITE_DATA_DIRNAME / LEADERBOARD_JSON_PATH).read_text(encoding="utf-8")
+    )
+    assert site_data.summary.verified_run_count == 2
+    assert site_data.summary.gpus == [EXPECTED_GPU_LABEL]
+    assert site_data.summary.quantizations == [FIXTURE_QUANTIZATION]
+    self_hosted_entry = next(
+        entry for entry in site_data.entries if entry.run_id == SELF_HOSTED_RUN_ID
+    )
+    assert self_hosted_entry.hosting_kind == ModelHostingKind.SELF_HOSTED
+    assert self_hosted_entry.gpu == EXPECTED_GPU_LABEL
+    assert self_hosted_entry.quantization == FIXTURE_QUANTIZATION
+    assert self_hosted_entry.seconds_per_item == LATENCY_SECONDS
+    cloud_entry = next(entry for entry in site_data.entries if entry.run_id == TEST_RUN_ID)
+    assert cloud_entry.seconds_per_item is None
+
+    index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
+    assert GPU_FILTER_ID in index_html
+    assert EXPECTED_GPU_LABEL in index_html
+    assert QUANT_FILTER_ID in index_html
+    assert FIXTURE_QUANTIZATION in index_html
+    assert MACHINE_SECONDS_PER_ITEM_TEXT in index_html
+
+    self_hosted_run_html = (
+        output_dir / SITE_RUNS_DIRNAME / SELF_HOSTED_RUN_ID / INDEX_HTML_FILENAME
+    ).read_text(encoding="utf-8")
+    assert MACHINE_TIMING_HEADING_TEXT in self_hosted_run_html
+    assert FIXTURE_GPU_NAME in self_hosted_run_html
+    assert FIXTURE_PROVIDER in self_hosted_run_html
+    assert FIXTURE_INFERENCE_ENGINE in self_hosted_run_html
+
+    cloud_run_html = (
+        output_dir / SITE_RUNS_DIRNAME / TEST_RUN_ID / INDEX_HTML_FILENAME
+    ).read_text(encoding="utf-8")
+    assert MACHINE_TIMING_HEADING_TEXT not in cloud_run_html
+
+    run_detail = site_build_module.RunDetail.model_validate_json(
+        (
+            output_dir / SITE_DATA_DIRNAME / SITE_RUNS_DIRNAME / f"{SELF_HOSTED_RUN_ID}.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert run_detail.schema_version == RUN_DETAIL_SCHEMA_VERSION
+    assert run_detail.metadata.machine is not None
+    assert run_detail.metadata.machine.gpu is not None
+    assert run_detail.metadata.machine.gpu.name == FIXTURE_GPU_NAME
 
 
 def test_format_money_rounds_by_magnitude() -> None:

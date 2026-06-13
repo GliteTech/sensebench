@@ -72,8 +72,8 @@ from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v3"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v4"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v5"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v5"
 RUN_ARTIFACT_ROOT: Path = Path("artifacts") / "runs"
 MAX_ERROR_EXAMPLES: int = 12
 PACKAGE_NAME: str = "sensebench.site"
@@ -150,6 +150,8 @@ class SiteSummary(SiteModel):
     model_count: int
     dataset_versions: list[str]
     prompt_ids: list[str]
+    gpus: list[str]
+    quantizations: list[str]
     top_accuracy: float | None
     generated_at: str
 
@@ -442,6 +444,10 @@ def _site_summary(*, collection: LeaderboardCollection) -> SiteSummary:
             {entry.dataset_version for entry in entries if entry.dataset_version is not None}
         ),
         prompt_ids=sorted({entry.prompt_id for entry in entries}),
+        gpus=sorted({entry.gpu for entry in entries if entry.gpu is not None}),
+        quantizations=sorted(
+            {entry.quantization for entry in entries if entry.quantization is not None}
+        ),
         top_accuracy=top_accuracy,
         generated_at=datetime.now(tz=UTC).isoformat(),
     )
@@ -1019,6 +1025,52 @@ def _static_pages() -> list[StaticPage]:
                         "The default leaderboard view lists every verified run; the "
                         "collapsed view keeps only the best verified run per model and "
                         "dataset version, across prompts and reasoning efforts.",
+                    ),
+                ),
+                PageSection(
+                    title="Self-Hosted Runs",
+                    paragraphs=(
+                        "Self-hosted runs record the GPU machine they ran on and a "
+                        "benchmark time that covers only the per-item evaluation loop, "
+                        "excluding model download, weight loading, and inference engine "
+                        "startup.",
+                        "Machine seconds per item is the benchmark time divided by the "
+                        "item count at the recorded concurrency; it is comparable only "
+                        "across runs on the same GPU configuration.",
+                        "When the machine's hourly rate is known, run cost is estimated "
+                        "as machine time multiplied by that rate (cost source "
+                        "machine_time_estimate); otherwise cost is unavailable.",
+                    ),
+                ),
+                PageSection(
+                    title="Comparing Across GPUs and Quantization",
+                    paragraphs=(
+                        "Self-hosted rows record the quantization used (for example fp8 "
+                        "or bf16) alongside the GPU. The same model may appear at "
+                        "different quantization on different GPUs because each GPU is run "
+                        "at its best practical configuration: native fp8 on H100 and "
+                        "H200, and bf16 on A100, which has no native fp8 hardware. A "
+                        "cross-GPU accuracy difference for one model therefore reflects "
+                        "both the hardware and the quantization, and the two should not "
+                        "be attributed to the GPU alone.",
+                        "Quantized inference is not bit-identical across GPU "
+                        "architectures, so the same model under greedy decoding can "
+                        "produce slightly different accuracy on different GPUs. Small "
+                        "cross-GPU accuracy differences for an identical model and "
+                        "quantization are expected and are a property of the kernels, "
+                        "not a measurement error.",
+                        "Throughput is measured at a fixed per-GPU concurrency, reported "
+                        "as machine seconds per item, so figures are comparable at a "
+                        "standard load rather than at each model's individually tuned "
+                        "optimum. Accuracy is computed under greedy decoding "
+                        "(temperature 0) and is deterministic given the weights; "
+                        "reported confidence intervals are fixed-seed bootstrap "
+                        "intervals and pairwise comparisons use McNemar's test.",
+                        "The per-item generation cap is a runaway guard, not a scoring "
+                        "knob: it is set high enough that compliant models reach their "
+                        "answer and stop at the end-of-sequence token well before the "
+                        "cap. Submissions whose outputs are truncated by the cap on a "
+                        "material fraction of items are rejected by verification.",
                     ),
                 ),
             ),

@@ -38,11 +38,20 @@ from sensebench.prompts.models import PromptDefinition
 from sensebench.prompts.registry import load_prompt_definition
 from sensebench.prompts.render import render_task
 from sensebench.runner.client import LiteLlmClient
+from sensebench.runner.endpoint import (
+    VLLM_ENGINE_NAME,
+    is_local_endpoint,
+    litellm_model_id,
+    probe_openai_endpoint,
+    served_model_id,
+)
+from sensebench.runner.machine import collect_machine_info
 from sensebench.runner.run import CompletedRun, RunConfig, preflight_model, run_benchmark
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
     SELF_HOSTED_LLM_KIND,
     CloudLlmReference,
+    MachineInfo,
     ModelHostingKind,
     ModelSourceKind,
     PredictionStatus,
@@ -58,7 +67,13 @@ from sensebench.wordnet import SenseCandidate, get_candidate_senses, wordnet_ver
 
 CommandHandler = Callable[..., int]
 DEFAULT_RUN_CONCURRENCY: int = 512
+DEFAULT_SELF_HOSTED_CONCURRENCY: int = 256
 DEFAULT_MAX_TOKENS: int = 512
+MISSING_MACHINE_GPU_WARNING: str = (
+    "warning: no GPU details collected for this self-hosted run; run "
+    "`sensebench machine-info` on the GPU host and pass --machine-info-json "
+    "(self-hosted submissions without GPU details fail verification)"
+)
 RUN_ID_DATE_FORMAT: str = "%Y%m%d"
 RUN_ID_COLLISION_TIME_FORMAT: str = "%H%M%S"
 RUN_ID_SLUG_KEEP_CHARACTERS: str = "._-"
@@ -79,6 +94,20 @@ def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def _non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
+
+
+def _non_negative_float(value: str) -> float:
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative number")
     return parsed
 
 
@@ -208,6 +237,15 @@ def _print_run_preamble(*, config: RunConfig) -> None:
         f"max_tokens={config.sampling.max_tokens}",
         file=sys.stderr,
     )
+    machine = config.machine
+    if machine is not None and machine.gpu is not None:
+        rate_text = (
+            f" @ ${machine.hourly_rate_usd}/h" if machine.hourly_rate_usd is not None else ""
+        )
+        print(
+            f"machine: {machine.gpu.count}x {machine.gpu.name}{rate_text}",
+            file=sys.stderr,
+        )
     handle = config.runner.github_handle
     if handle is not None and len(handle.strip()) > 0:
         print(f"runner:  github:{handle}", file=sys.stderr)
@@ -365,7 +403,7 @@ def _self_hosted_model_reference(*, args: argparse.Namespace) -> SelfHostedLlmRe
     return SelfHostedLlmReference(
         kind=SELF_HOSTED_LLM_KIND,
         display_name=str(args.model),
-        requested_model=str(args.model),
+        requested_model=litellm_model_id(model=str(args.model)),
         resolved_model=None,
         llm_vendor=args.vendor,
         source_kind=ModelSourceKind(str(args.source_kind)),
@@ -375,9 +413,9 @@ def _self_hosted_model_reference(*, args: argparse.Namespace) -> SelfHostedLlmRe
         quantization=args.quantization,
         inference_engine=args.inference_engine,
         inference_engine_version=args.inference_engine_version,
+        container_image=args.container_image,
+        serve_command=args.serve_command,
         endpoint_base_url=endpoint_base_url,
-        gpu=args.gpu,
-        cpu=args.cpu,
     )
 
 
@@ -399,6 +437,60 @@ def _sampling(*, args: argparse.Namespace) -> SamplingParameters:
     )
 
 
+def _machine_overrides(*, args: argparse.Namespace) -> dict[str, object]:
+    overrides: dict[str, object] = {}
+    if args.provider is not None:
+        overrides["provider"] = str(args.provider)
+    if args.instance_id is not None:
+        overrides["instance_id"] = str(args.instance_id)
+    if args.hourly_rate_usd is not None:
+        overrides["hourly_rate_usd"] = float(args.hourly_rate_usd)
+    return overrides
+
+
+def _machine_info(*, args: argparse.Namespace, endpoint_base_url: str) -> MachineInfo | None:
+    machine: MachineInfo | None = None
+    if args.machine_info_json is not None:
+        machine_path = Path(str(args.machine_info_json))
+        machine = MachineInfo.model_validate_json(machine_path.read_text(encoding="utf-8"))
+    elif is_local_endpoint(base_url=endpoint_base_url):
+        machine = collect_machine_info()
+    overrides = _machine_overrides(args=args)
+    if machine is None:
+        if len(overrides) == 0:
+            return None
+        machine = MachineInfo()
+    if len(overrides) > 0:
+        machine = machine.model_copy(update=overrides)
+    return machine
+
+
+def _resolved_concurrency(*, args: argparse.Namespace, hosting_kind: ModelHostingKind) -> int:
+    if args.concurrency is not None:
+        return int(args.concurrency)
+    if hosting_kind == ModelHostingKind.SELF_HOSTED:
+        return DEFAULT_SELF_HOSTED_CONCURRENCY
+    return DEFAULT_RUN_CONCURRENCY
+
+
+def _probe_self_hosted_endpoint(*, model: SelfHostedLlmReference) -> SelfHostedLlmReference:
+    probe = probe_openai_endpoint(base_url=model.endpoint_base_url)
+    served = served_model_id(requested_model=model.requested_model)
+    if served not in probe.served_model_ids:
+        raise RuntimeError(
+            f"model {served} is not served by {model.endpoint_base_url}; "
+            f"served models: {', '.join(probe.served_model_ids) or '(none)'}"
+        )
+    if model.inference_engine is None and probe.engine_version is not None:
+        return model.model_copy(
+            update={
+                "inference_engine": VLLM_ENGINE_NAME,
+                "inference_engine_version": probe.engine_version,
+            }
+        )
+    return model
+
+
 async def _run_async(*, args: argparse.Namespace) -> int:
     _load_local_env()
     dataset = _resolve_dataset(args=args)
@@ -411,6 +503,13 @@ async def _run_async(*, args: argparse.Namespace) -> int:
         )
     prompt = _load_prompt(prompt=str(args.prompt))
     model = _model_reference(args=args)
+    machine: MachineInfo | None = None
+    if isinstance(model, SelfHostedLlmReference):
+        if not bool(args.skip_preflight):
+            model = _probe_self_hosted_endpoint(model=model)
+        machine = _machine_info(args=args, endpoint_base_url=model.endpoint_base_url)
+        if machine is None or machine.gpu is None:
+            print(MISSING_MACHINE_GPU_WARNING, file=sys.stderr)
     output_root = Path(args.output_root)
     run_id = _optional_arg(value=args.run_id)
     if run_id is None:
@@ -418,7 +517,7 @@ async def _run_async(*, args: argparse.Namespace) -> int:
             dataset.dataset_version if dataset.dataset_version is not None else dataset.dataset_id
         )
         run_id = _default_run_id(
-            model=model.requested_model,
+            model=model.display_name,
             prompt_id=prompt.id,
             dataset_label=dataset_label,
             output_root=output_root,
@@ -437,7 +536,12 @@ async def _run_async(*, args: argparse.Namespace) -> int:
         sampling=_sampling(args=args),
         votes_per_item=int(args.votes),
         semantic_reasks_per_invalid_vote=1,
-        concurrency=int(args.concurrency),
+        concurrency=_resolved_concurrency(
+            args=args,
+            hosting_kind=ModelHostingKind(str(args.hosting_kind)),
+        ),
+        machine=machine,
+        warmup_calls=int(args.warmup_calls),
         show_progress=not bool(args.no_progress),
     )
     _print_run_preamble(config=config)
@@ -445,7 +549,8 @@ async def _run_async(*, args: argparse.Namespace) -> int:
     if not bool(args.skip_preflight):
         await preflight_model(config=config, client=client)
         print(f"preflight OK: {model.requested_model}", file=sys.stderr)
-    _warn_if_unpriced(model=model.requested_model)
+    if isinstance(model, CloudLlmReference):
+        _warn_if_unpriced(model=model.requested_model)
     completed = await run_benchmark(config=config, client=client)
     _print_run_summary(completed=completed)
     _print_submission_guidance(completed=completed)
@@ -518,6 +623,16 @@ def _cmd_fetch_dataset(*, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_machine_info(*, args: argparse.Namespace) -> int:
+    machine = collect_machine_info(
+        provider=_optional_arg(value=args.provider),
+        instance_id=_optional_arg(value=args.instance_id),
+        hourly_rate_usd=args.hourly_rate_usd,
+    )
+    print(machine.model_dump_json(indent=2))
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SenseBench runner and verifier.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -548,7 +663,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--skip-preflight", action="store_true")
     run_parser.add_argument("--votes", type=_positive_int, default=1)
-    run_parser.add_argument("--concurrency", type=_positive_int, default=DEFAULT_RUN_CONCURRENCY)
+    run_parser.add_argument(
+        "--concurrency",
+        type=_positive_int,
+        default=None,
+        help=(
+            f"Concurrent items in flight (default {DEFAULT_RUN_CONCURRENCY} for cloud APIs, "
+            f"{DEFAULT_SELF_HOSTED_CONCURRENCY} for self-hosted endpoints)."
+        ),
+    )
     run_parser.add_argument("--no-progress", action="store_true")
     run_parser.add_argument("--temperature", type=float)
     run_parser.add_argument("--top-p", type=float)
@@ -573,9 +696,34 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--quantization")
     run_parser.add_argument("--inference-engine")
     run_parser.add_argument("--inference-engine-version")
+    run_parser.add_argument(
+        "--container-image",
+        help="Serving container image (with digest if known), e.g. vllm/vllm-openai:v0.22.1.",
+    )
+    run_parser.add_argument(
+        "--serve-command",
+        help="Exact inference server launch command, recorded for reproducibility.",
+    )
     run_parser.add_argument("--endpoint-base-url")
-    run_parser.add_argument("--gpu")
-    run_parser.add_argument("--cpu")
+    run_parser.add_argument(
+        "--machine-info-json",
+        default=None,
+        help="MachineInfo JSON file (from `sensebench machine-info` on the GPU host).",
+    )
+    run_parser.add_argument("--provider", help="Machine provider, e.g. vast.ai.")
+    run_parser.add_argument("--instance-id", help="Provider instance identifier.")
+    run_parser.add_argument(
+        "--hourly-rate-usd",
+        type=_non_negative_float,
+        default=None,
+        help="Machine hourly rate; enables machine-time cost estimation.",
+    )
+    run_parser.add_argument(
+        "--warmup-calls",
+        type=_non_negative_int,
+        default=0,
+        help="Unrecorded warmup completions before the timed benchmark loop.",
+    )
     run_parser.add_argument("--github-handle")
     run_parser.add_argument("--runner-name")
     run_parser.add_argument("--runner-contact")
@@ -632,6 +780,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     fetch_parser.add_argument("release", nargs="?", default=DEFAULT_LEXEN_RELEASE_ID)
     fetch_parser.set_defaults(func=_cmd_fetch_dataset)
+
+    machine_info_parser = subparsers.add_parser(
+        "machine-info",
+        help="Print this machine's hardware details as MachineInfo JSON.",
+    )
+    machine_info_parser.add_argument("--provider", help="Machine provider, e.g. vast.ai.")
+    machine_info_parser.add_argument("--instance-id", help="Provider instance identifier.")
+    machine_info_parser.add_argument(
+        "--hourly-rate-usd",
+        type=_non_negative_float,
+        default=None,
+        help="Machine hourly rate; enables machine-time cost estimation.",
+    )
+    machine_info_parser.set_defaults(func=_cmd_machine_info)
     return parser
 
 
