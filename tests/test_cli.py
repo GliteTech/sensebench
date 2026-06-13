@@ -4,15 +4,23 @@ from pathlib import Path
 
 import pytest
 
-from sensebench.cli import DEFAULT_RUN_CONCURRENCY, _build_parser, main
+from sensebench.cli import (
+    DEFAULT_RUN_CONCURRENCY,
+    DEFAULT_SELF_HOSTED_CONCURRENCY,
+    _build_parser,
+    _machine_info,
+    _resolved_concurrency,
+    _self_hosted_model_reference,
+    main,
+)
 from sensebench.paths import (
     DEFAULT_LEXEN_RELEASE_ID,
     RUN_METADATA_FILENAME,
     SITE_OUTPUT_DIR,
     SUBMITTED_RESULTS_DIR,
 )
-from sensebench.runs.models import RunMetadata
-from tests.run_fixtures import make_metadata
+from sensebench.runs.models import MachineInfo, ModelHostingKind, RunMetadata
+from tests.run_fixtures import fixture_machine, make_metadata
 
 RUN_ARGS: list[str] = ["run", "--prompt", "p001", "--model", "fake", "--run-id", "run-1"]
 SET_RUNNER_HANDLE: str = "octocat"
@@ -28,14 +36,27 @@ def test_cli_uses_registered_dataset_default() -> None:
     assert args.dataset_jsonl is None
 
 
-def test_run_cli_uses_512_default_concurrency() -> None:
+def test_run_cli_resolves_concurrency_by_hosting_kind() -> None:
     parser = _build_parser()
 
     args = parser.parse_args(["run", "--prompt", "p001", "--model", "fake", "--run-id", "run-1"])
 
-    assert args.concurrency == DEFAULT_RUN_CONCURRENCY
-    assert DEFAULT_RUN_CONCURRENCY == 512
+    assert args.concurrency is None
     assert args.no_progress is False
+    assert DEFAULT_RUN_CONCURRENCY == 512
+    assert DEFAULT_SELF_HOSTED_CONCURRENCY == 256
+    assert (
+        _resolved_concurrency(args=args, hosting_kind=ModelHostingKind.CLOUD_API)
+        == DEFAULT_RUN_CONCURRENCY
+    )
+    assert (
+        _resolved_concurrency(args=args, hosting_kind=ModelHostingKind.SELF_HOSTED)
+        == DEFAULT_SELF_HOSTED_CONCURRENCY
+    )
+    explicit = parser.parse_args([*RUN_ARGS, "--concurrency", "7"])
+    assert (
+        _resolved_concurrency(args=explicit, hosting_kind=ModelHostingKind.SELF_HOSTED) == 7
+    )
 
 
 def test_run_cli_run_id_is_optional() -> None:
@@ -125,3 +146,121 @@ def test_set_runner_rewrites_runner_identity(tmp_path: Path) -> None:
     assert updated.runner.name == SET_RUNNER_NAME
     assert updated.totals == metadata.totals
     assert updated.run_id == metadata.run_id
+
+
+def test_run_cli_parses_self_hosted_flags() -> None:
+    parser = _build_parser()
+
+    args = parser.parse_args(
+        [
+            *RUN_ARGS,
+            "--hosting-kind",
+            "self_hosted",
+            "--endpoint-base-url",
+            "http://localhost:8000/v1",
+            "--hourly-rate-usd",
+            "2.49",
+            "--provider",
+            "vast.ai",
+            "--instance-id",
+            "40430336",
+            "--warmup-calls",
+            "8",
+            "--machine-info-json",
+            "machine.json",
+        ]
+    )
+
+    assert args.hourly_rate_usd == 2.49
+    assert args.provider == "vast.ai"
+    assert args.instance_id == "40430336"
+    assert args.warmup_calls == 8
+    assert args.machine_info_json == "machine.json"
+
+
+def test_run_cli_rejects_negative_warmup_calls() -> None:
+    parser = _build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args([*RUN_ARGS, "--warmup-calls", "-1"])
+
+
+def test_run_cli_rejects_negative_hourly_rate() -> None:
+    parser = _build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args([*RUN_ARGS, "--hourly-rate-usd", "-1"])
+
+
+def test_self_hosted_model_reference_prefixes_requested_model() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "run",
+            "--prompt",
+            "p001",
+            "--model",
+            "Qwen/Qwen3.6-27B-FP8",
+            "--hosting-kind",
+            "self_hosted",
+            "--endpoint-base-url",
+            "http://localhost:8000/v1",
+        ]
+    )
+
+    model = _self_hosted_model_reference(args=args)
+
+    assert model.requested_model == "hosted_vllm/Qwen/Qwen3.6-27B-FP8"
+    assert model.display_name == "Qwen/Qwen3.6-27B-FP8"
+
+
+def test_machine_info_command_emits_machine_json(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = main(["machine-info", "--provider", "vast.ai", "--hourly-rate-usd", "2.5"])
+
+    assert exit_code == 0
+    machine = MachineInfo.model_validate_json(capsys.readouterr().out)
+    assert machine.provider == "vast.ai"
+    assert machine.hourly_rate_usd == 2.5
+
+
+def test_machine_info_helper_merges_overrides(tmp_path: Path) -> None:
+    machine_path = tmp_path / "machine.json"
+    machine_path.write_text(fixture_machine().model_dump_json(), encoding="utf-8")
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            *RUN_ARGS,
+            "--hosting-kind",
+            "self_hosted",
+            "--endpoint-base-url",
+            "https://gpu-box.example.com/v1",
+            "--machine-info-json",
+            str(machine_path),
+            "--hourly-rate-usd",
+            "9.99",
+        ]
+    )
+
+    machine = _machine_info(args=args, endpoint_base_url="https://gpu-box.example.com/v1")
+
+    assert machine is not None
+    assert machine.gpu == fixture_machine().gpu
+    assert machine.hourly_rate_usd == 9.99
+    assert machine.provider == fixture_machine().provider
+
+
+def test_machine_info_helper_remote_endpoint_without_json_is_none() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            *RUN_ARGS,
+            "--hosting-kind",
+            "self_hosted",
+            "--endpoint-base-url",
+            "https://gpu-box.example.com/v1",
+        ]
+    )
+
+    machine = _machine_info(args=args, endpoint_base_url="https://gpu-box.example.com/v1")
+
+    assert machine is None

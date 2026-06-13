@@ -65,6 +65,43 @@
     </select>
   </label>
   <label>
+    Hosting
+    <select id="hosting-filter">
+      <option value="">All hosting</option>
+      <option value="cloud_api">Cloud API</option>
+      <option value="self_hosted">Self-hosted</option>
+    </select>
+  </label>
+  {% if site_data.summary.gpus %}
+  <label>
+    GPU
+    <select id="gpu-filter">
+      <option value="">All GPUs</option>
+      {% for gpu in site_data.summary.gpus %}
+      <option value="{{ gpu }}">{{ gpu }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  {% if site_data.summary.quantizations %}
+  <label>
+    Quantization
+    <select id="quant-filter">
+      <option value="">All quantization</option>
+      {% for quantization in site_data.summary.quantizations %}
+      <option value="{{ quantization }}">{{ quantization }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <label>
+    Chart X-axis
+    <select id="x-metric-select">
+      <option value="cost_per_million_items" selected>Cost / M items</option>
+      <option value="seconds_per_item">Machine seconds / item</option>
+    </select>
+  </label>
+  <label>
     Max cost / M items ($)
     <input id="max-cost-filter" type="number" min="0" step="any" inputmode="decimal" placeholder="No limit">
   </label>
@@ -138,6 +175,7 @@
           <th><button type="button" data-sort="model">Model</button></th>
           <th><button type="button" data-sort="accuracy">Accuracy</button></th>
           <th><button type="button" data-sort="cost_per_million_items">Cost / M items</button></th>
+          <th><button type="button" data-sort="seconds_per_item">Speed (s / item)</button></th>
           <th>Prompt</th>
           <th>Dataset</th>
           <th>Run</th>
@@ -151,7 +189,7 @@
           <td></td>
           <td>
             <div class="cell-primary">{{ entry.model }}{% if entry.reasoning_effort %} ({{ entry.reasoning_effort }}){% endif %}</div>
-            <div class="cell-secondary">{% if entry.llm_vendor %}{{ entry.llm_vendor }} · {% endif %}{{ entry.source_kind|source_label }}</div>
+            <div class="cell-secondary">{% if entry.llm_vendor %}{{ entry.llm_vendor }} · {% endif %}{{ entry.source_kind|source_label }}{% if entry.quantization %} · {{ entry.quantization }}{% endif %}{% if entry.gpu %} · {% if entry.gpu_count and entry.gpu_count > 1 %}{{ entry.gpu_count }}×{% endif %}{{ entry.gpu }}{% endif %}</div>
           </td>
           <td>
             <div class="cell-primary">{{ entry.accuracy|pct }}</div>
@@ -160,6 +198,7 @@
             {% endif %}
           </td>
           <td>{{ entry.cost_per_million_items|money }}</td>
+          <td>{{ entry.seconds_per_item|seconds }}</td>
           <td>{{ entry.prompt_id }}</td>
           <td>{{ entry.dataset_version }}</td>
           <td><a href="{{ base_path }}{{ entry.run_url }}">{{ entry.run_id }}</a></td>
@@ -183,7 +222,8 @@
   <h2>Method Notes</h2>
   <p>Public rows are rebuilt from verified run artifacts in the repository. Accuracy is recomputed from predictions, and official runs are checked against the registered dataset hash and prompt ID.</p>
   <p>The ± value under each accuracy is half the width of a fixed-seed bootstrap 95% confidence interval. The small range under each rank lists the positions a run could plausibly occupy among the visible rows given overlapping intervals.</p>
-  <p>The Pareto frontier uses the visible rows: higher accuracy is better, and lower cost per million items is better. Starred rows are on the frontier.</p>
+  <p>The Pareto frontier uses the visible rows and the selected chart metric (cost per million items or machine seconds per item): higher accuracy is better, and a lower metric value is better. Starred rows are on the frontier.</p>
+  <p>Machine seconds per item is recorded for self-hosted runs only. It measures the per-item evaluation loop on the recorded machine, excluding model and asset loading; cloud API runs are excluded from that chart.</p>
   <p>Reference baselines are classic WSD systems scored from per-item predictions on the same dataset items; dashed chart lines show them for context.</p>
   <p>Comparing selected runs on the same dataset uses McNemar's test on paired per-item correctness, which detects differences that overlapping confidence intervals can miss.</p>
 </section>
