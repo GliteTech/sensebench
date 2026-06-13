@@ -3,7 +3,7 @@
   "id": "p002",
   "name": "Minimal Single-Sentence Prompt",
   "description": "Minimal English WSD prompt: only the target sentence with <t>...</t> target marking, candidate senses with index, definition, and at most one usage example, and a plain integer answer. Candidate senses are ordered by WordNet frequency.",
-  "template_type": "chat_messages",
+  "template_kind": "chat_messages",
   "template": {
     "messages": [
       {

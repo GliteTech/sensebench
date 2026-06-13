@@ -2,7 +2,7 @@
 """Destroy the vast.ai instance recorded in an instance.json file.
 
 Confirms the instance is actually gone (you keep paying until it is) and stamps
-destroyed_at into the instance.json on success. Stdlib only; runs locally.
+destroyed_at into the instance.json on success.
 """
 
 from __future__ import annotations
@@ -15,12 +15,12 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from tools.self_hosted.models import DESTROYED_AT_FIELD, InstanceRecord
+
 DEFAULT_VASTAI_COMMAND: str = "uvx vastai@0.5.0"
 DESTROY_POLL_ATTEMPTS: int = 3
 DESTROY_POLL_INTERVAL_SECONDS: float = 10.0
 GONE_STATUSES: frozenset[str] = frozenset({"destroyed", "terminated", "deleted"})
-INSTANCE_ID_FIELD: str = "instance_id"
-DESTROYED_AT_FIELD: str = "destroyed_at"
 
 
 def _log(*, message: str) -> None:
@@ -54,9 +54,12 @@ def _instance_is_gone(*, vastai_command: list[str], instance_id: int) -> bool:
     return isinstance(intended_status, str) and intended_status.lower() in GONE_STATUSES
 
 
-def _stamp_destroyed(*, instance_path: Path, record: dict[str, object]) -> None:
-    record[DESTROYED_AT_FIELD] = datetime.now(tz=UTC).isoformat()
-    instance_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+def _stamp_destroyed(*, instance_path: Path, record: InstanceRecord) -> None:
+    updated = record.model_copy(update={DESTROYED_AT_FIELD: datetime.now(tz=UTC)})
+    instance_path.write_text(
+        updated.model_dump_json(indent=2, exclude_none=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -72,12 +75,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     vastai_command: list[str] = str(args.vastai_cmd).split()
     instance_path = Path(str(args.instance_json))
-    record: object = json.loads(instance_path.read_text(encoding="utf-8"))
-    assert isinstance(record, dict), "instance.json holds a JSON object"
-    instance_id: object = record.get(INSTANCE_ID_FIELD)
-    if not isinstance(instance_id, int):
-        _log(message=f"{instance_path}: missing integer {INSTANCE_ID_FIELD} field")
+    try:
+        record = InstanceRecord.model_validate_json(instance_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        _log(message=f"{instance_path}: invalid instance record ({exc})")
         return 2
+    instance_id = record.instance_id
 
     destroy: list[str] = vastai_command + ["destroy", "instance", str(instance_id)]
     _log(message=f"destroying instance {instance_id}")

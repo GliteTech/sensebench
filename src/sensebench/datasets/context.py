@@ -10,6 +10,7 @@ from sensebench.datasets.models import (
     DatasetIndex,
     Document,
     DocumentID,
+    ItemID,
     Sentence,
     SentenceID,
     WsdItem,
@@ -96,24 +97,21 @@ def _detokenized_window(
     local_target_sentence_index: int,
     target_token_index: int,
     target_text: str,
-    item_id: str,
+    item_id: ItemID,
 ) -> ContextWindow:
     surfaces: list[str] = []
-    target_flat_index = -1
+    target_flat_index: int | None = None
     for sentence_index, sentence in enumerate(selected):
         for token_index, token in enumerate(sentence.tokens):
-            if (
-                sentence_index == local_target_sentence_index
-                and token_index == target_token_index
-            ):
+            if sentence_index == local_target_sentence_index and token_index == target_token_index:
                 target_flat_index = len(surfaces)
             surfaces.append(token.text)
-    if target_flat_index < 0:
+    if target_flat_index is None:
         raise ValueError(f"target_token_index out of range: {target_token_index}")
     pieces = detokenize_pieces(surfaces=surfaces)
     text = ""
-    target_start = -1
-    target_end = -1
+    target_start: int | None = None
+    target_end: int | None = None
     for piece_index, piece in enumerate(pieces):
         if piece.leading_space:
             text += SENTENCE_SEPARATOR
@@ -121,6 +119,8 @@ def _detokenized_window(
             target_start = len(text)
             target_end = target_start + len(piece.text)
         text += piece.text
+    assert target_start is not None, "target offset was recorded during detokenization"
+    assert target_end is not None, "target offset was recorded during detokenization"
     if text[target_start:target_end] != target_text:
         raise ValueError(f"context target offset mismatch for {item_id}")
     return ContextWindow(

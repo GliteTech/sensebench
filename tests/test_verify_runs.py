@@ -16,6 +16,7 @@ from sensebench.runs.models import (
     RunMetadata,
     SamplingParameters,
     TokenUsage,
+    VoteRecord,
 )
 from sensebench.verify.runs import (
     CALLS_AFTER_SUCCESS_MESSAGE,
@@ -49,6 +50,16 @@ UNKNOWN_ITEM_ID: ItemID = "i2"
 FORGED_GOLD_SENSE_KEY: SenseKey = "bank%1:17:00::"
 METADATA_CONTENT_HASH: str = f"sha256:{'a' * 64}"
 DATASET_CONTENT_HASH: str = f"sha256:{'b' * 64}"
+CALL_IDS_FIELD: str = "call_ids"
+VOTES_FIELD: str = "votes"
+ATTEMPT_INDEX_FIELD: str = "attempt_index"
+ATTEMPT_KIND_FIELD: str = "attempt_kind"
+EXECUTION_FIELD: str = "execution"
+ELAPSED_SECONDS_FIELD: str = "elapsed_seconds"
+TOTALS_FIELD: str = "totals"
+LATENCY_SECONDS_FIELD: str = "latency_seconds"
+HF_REVISION_FIELD: str = "hf_revision"
+USAGE_FIELD: str = "usage"
 
 
 def raw_output_for_sense_index(*, sense_index: int) -> str:
@@ -176,19 +187,19 @@ def test_verify_allows_redundant_same_vote_after_success(tmp_path: Path) -> None
         is_correct=True,
     )
     call_ids: list[CallID] = [CALL_ID, SEMANTIC_REASK_CALL_ID]
-    votes = [
+    votes: list[VoteRecord] = [
         prediction.votes[0].model_copy(
-            update={"call_ids": call_ids},
+            update={CALL_IDS_FIELD: call_ids},
         )
     ]
-    prediction = prediction.model_copy(update={"votes": votes})
+    prediction = prediction.model_copy(update={VOTES_FIELD: votes})
     reask_call = success_call(
         raw_output=raw_output_for_sense_index(sense_index=2),
         call_id=SEMANTIC_REASK_CALL_ID,
     ).model_copy(
         update={
-            "attempt_index": 2,
-            "attempt_kind": AttemptKind.SEMANTIC_REASK,
+            ATTEMPT_INDEX_FIELD: 2,
+            ATTEMPT_KIND_FIELD: AttemptKind.SEMANTIC_REASK,
         },
     )
     metadata = make_metadata(item_count=1, correct_count=1, accuracy=1.0, call_count=2)
@@ -215,19 +226,19 @@ def test_verify_rejects_changed_vote_after_success(tmp_path: Path) -> None:
         is_correct=True,
     )
     call_ids: list[CallID] = [CALL_ID, SEMANTIC_REASK_CALL_ID]
-    votes = [
+    votes: list[VoteRecord] = [
         prediction.votes[0].model_copy(
-            update={"call_ids": call_ids},
+            update={CALL_IDS_FIELD: call_ids},
         )
     ]
-    prediction = prediction.model_copy(update={"votes": votes})
+    prediction = prediction.model_copy(update={VOTES_FIELD: votes})
     reask_call = success_call(
         raw_output=raw_output_for_sense_index(sense_index=2),
         call_id=SEMANTIC_REASK_CALL_ID,
     ).model_copy(
         update={
-            "attempt_index": 2,
-            "attempt_kind": AttemptKind.SEMANTIC_REASK,
+            ATTEMPT_INDEX_FIELD: 2,
+            ATTEMPT_KIND_FIELD: AttemptKind.SEMANTIC_REASK,
         },
     )
     metadata = make_metadata(item_count=1, correct_count=1, accuracy=1.0, call_count=2)
@@ -465,7 +476,7 @@ def test_verify_v2_run_requires_execution_section(tmp_path: Path) -> None:
         correct_count=1,
         accuracy=1.0,
         call_count=1,
-    ).model_copy(update={"execution": None})
+    ).model_copy(update={EXECUTION_FIELD: None})
     _write_voted_run(run_dir=run_dir, metadata=metadata)
 
     report = verify_run_directory(run_dir=run_dir)
@@ -524,9 +535,9 @@ def test_verify_detects_elapsed_benchmark_mismatch(tmp_path: Path) -> None:
         call_count=1,
     )
     tampered_totals = metadata.totals.model_copy(
-        update={"elapsed_seconds": FIXTURE_BENCHMARK_SECONDS + 1.0},
+        update={ELAPSED_SECONDS_FIELD: FIXTURE_BENCHMARK_SECONDS + 1.0},
     )
-    metadata = metadata.model_copy(update={"totals": tampered_totals})
+    metadata = metadata.model_copy(update={TOTALS_FIELD: tampered_totals})
     _write_voted_run(run_dir=run_dir, metadata=metadata)
 
     report = verify_run_directory(run_dir=run_dir)
@@ -544,7 +555,7 @@ def test_verify_detects_call_latency_exceeding_benchmark(tmp_path: Path) -> None
     )
     slow_call = success_call(
         raw_output=raw_output_for_sense_index(sense_index=2),
-    ).model_copy(update={"latency_seconds": FIXTURE_BENCHMARK_SECONDS * 10})
+    ).model_copy(update={LATENCY_SECONDS_FIELD: FIXTURE_BENCHMARK_SECONDS * 10})
     write_run_artifacts(
         run_dir=run_dir,
         metadata=metadata,
@@ -559,7 +570,7 @@ def test_verify_detects_call_latency_exceeding_benchmark(tmp_path: Path) -> None
 
 def test_verify_self_hosted_run_without_revision_fails(tmp_path: Path) -> None:
     run_dir = tmp_path / RUN_DIR_NAME
-    model = self_hosted_model().model_copy(update={"hf_revision": None})
+    model = self_hosted_model().model_copy(update={HF_REVISION_FIELD: None})
     metadata = make_metadata(
         item_count=1,
         correct_count=1,
@@ -608,7 +619,7 @@ def test_verify_flags_excessive_output_truncation(tmp_path: Path) -> None:
     )
     clipped_call = success_call(
         raw_output=raw_output_for_sense_index(sense_index=2),
-    ).model_copy(update={"usage": TokenUsage(output_tokens=16)})
+    ).model_copy(update={USAGE_FIELD: TokenUsage(output_tokens=16)})
     write_run_artifacts(
         run_dir=run_dir,
         metadata=metadata,
@@ -637,7 +648,7 @@ def test_verify_allows_outputs_below_cap(tmp_path: Path) -> None:
     )
     call = success_call(
         raw_output=raw_output_for_sense_index(sense_index=2),
-    ).model_copy(update={"usage": TokenUsage(output_tokens=12)})
+    ).model_copy(update={USAGE_FIELD: TokenUsage(output_tokens=12)})
     write_run_artifacts(
         run_dir=run_dir,
         metadata=metadata,

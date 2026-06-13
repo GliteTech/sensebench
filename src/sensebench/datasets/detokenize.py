@@ -73,9 +73,7 @@ def detokenize_pieces(*, surfaces: list[str]) -> list[DetokenizedPiece]:
     pieces: list[DetokenizedPiece] = []
     previous_glues_right = False
     for index, surface in enumerate(surfaces):
-        leading_space = not (
-            index == 0 or surface in GLUE_LEFT_TOKENS or previous_glues_right
-        )
+        leading_space = not (index == 0 or surface in GLUE_LEFT_TOKENS or previous_glues_right)
         pieces.append(
             DetokenizedPiece(
                 leading_space=leading_space,

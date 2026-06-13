@@ -11,16 +11,19 @@ from urllib.request import Request, urlopen
 
 from sensebench import __version__
 from sensebench.datasets.loaders import file_content_hash, load_jsonl_dataset
-from sensebench.datasets.models import DatasetBundle, DatasetID
-from sensebench.paths import DEFAULT_LEXEN_RELEASE_ID, LEXEN_DATASET_ID, LEXEN_ITEMS_FILENAME
+from sensebench.datasets.models import ContentHash, DatasetBundle, DatasetID, DatasetVersion
+from sensebench.paths import (
+    DATASET_FILENAME,
+    DATASETS_CACHE_DIRNAME,
+    DEFAULT_CACHE_DIRNAME,
+    DEFAULT_LEXEN_RELEASE_ID,
+    DOWNLOAD_SUFFIX,
+    LEXEN_DATASET_ID,
+    SENSEBENCH_CACHE_DIRNAME,
+)
 
 DATASET_CACHE_ENV_VAR: str = "SENSEBENCH_CACHE_DIR"
 XDG_CACHE_HOME_ENV_VAR: str = "XDG_CACHE_HOME"
-DEFAULT_CACHE_DIRNAME: str = ".cache"
-SENSEBENCH_CACHE_DIRNAME: str = "sensebench"
-DATASETS_CACHE_DIRNAME: str = "datasets"
-DATASET_FILENAME: str = LEXEN_ITEMS_FILENAME
-DOWNLOAD_SUFFIX: str = ".download"
 DOWNLOAD_TIMEOUT_SECONDS: float = 60.0
 DATASET_USER_AGENT_HEADER: str = "User-Agent"
 DATASET_USER_AGENT: str = f"sensebench/{__version__}"
@@ -28,14 +31,14 @@ DATASET_USER_AGENT: str = f"sensebench/{__version__}"
 
 @dataclass(frozen=True, slots=True)
 class DatasetRelease:
-    release_id: str
+    release_id: DatasetVersion
     dataset_id: DatasetID
     url: str
-    content_hash: str
+    content_hash: ContentHash
     item_count: int
 
 
-DATASET_RELEASES: dict[str, DatasetRelease] = {
+DATASET_RELEASES: dict[DatasetVersion, DatasetRelease] = {
     DEFAULT_LEXEN_RELEASE_ID: DatasetRelease(
         release_id=DEFAULT_LEXEN_RELEASE_ID,
         dataset_id=LEXEN_DATASET_ID,
@@ -46,7 +49,7 @@ DATASET_RELEASES: dict[str, DatasetRelease] = {
 }
 
 
-def get_dataset_release(*, release_id: str) -> DatasetRelease:
+def get_dataset_release(*, release_id: DatasetVersion) -> DatasetRelease:
     release = DATASET_RELEASES.get(release_id)
     if release is None:
         known_releases = ", ".join(sorted(DATASET_RELEASES))

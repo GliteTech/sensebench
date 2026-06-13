@@ -950,7 +950,7 @@ def _output_truncation_issues(
     max_tokens = metadata.sampling.max_tokens
     if max_tokens is None:
         return []
-    observed = [
+    observed: list[int] = [
         call.usage.output_tokens
         for call in calls
         if call.status == CallStatus.SUCCESS and call.usage.output_tokens is not None

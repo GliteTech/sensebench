@@ -4,6 +4,7 @@ from sensebench.datasets.context import build_context_window, build_dataset_inde
 from sensebench.datasets.models import (
     DatasetBundle,
     DatasetID,
+    DatasetPos,
     Document,
     DocumentID,
     ItemID,
@@ -23,7 +24,7 @@ NEXT_SENTENCE_ID: SentenceID = "s3"
 ITEM_ID: ItemID = "i1"
 TARGET_TEXT: str = "bank"
 TARGET_LEMMA: str = "bank"
-TARGET_POS: str = "NOUN"
+TARGET_POS: DatasetPos = DatasetPos.NOUN
 GOLD_SENSE_KEY: SenseKey = "bank%1:14:00::"
 PREVIOUS_SENTENCES: int = 1
 NEXT_SENTENCES: int = 1

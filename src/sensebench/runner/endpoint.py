@@ -25,7 +25,7 @@ VERSION_FIELD: str = "version"
 
 @dataclass(frozen=True, slots=True)
 class EndpointProbe:
-    served_model_ids: list[str]
+    served_model_ids: list[ModelID]
     engine_version: str | None
 
 
@@ -42,7 +42,7 @@ def litellm_model_id(*, model: ModelID) -> ModelID:
     return f"{HOSTED_VLLM_PREFIX}{model}"
 
 
-def served_model_id(*, requested_model: ModelID) -> str:
+def served_model_id(*, requested_model: ModelID) -> ModelID:
     for prefix in (HOSTED_VLLM_PREFIX, OPENAI_PREFIX):
         if requested_model.startswith(prefix):
             return requested_model[len(prefix) :]
@@ -54,7 +54,7 @@ def _fetch_json(*, url: str, timeout_seconds: float) -> object:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _served_model_ids(*, base_url: str, timeout_seconds: float) -> list[str]:
+def _served_model_ids(*, base_url: str, timeout_seconds: float) -> list[ModelID]:
     url = f"{base_url.rstrip('/')}{MODELS_ENDPOINT_PATH}"
     try:
         payload = _fetch_json(url=url, timeout_seconds=timeout_seconds)
@@ -65,7 +65,7 @@ def _served_model_ids(*, base_url: str, timeout_seconds: float) -> list[str]:
     data = payload.get(MODELS_DATA_FIELD)
     if not isinstance(data, list):
         raise RuntimeError(f"unexpected response from {url}: missing model list")
-    model_ids: list[str] = []
+    model_ids: list[ModelID] = []
     for entry in data:
         if isinstance(entry, dict):
             model_id = entry.get(MODEL_ID_FIELD)

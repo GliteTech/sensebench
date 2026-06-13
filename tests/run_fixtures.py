@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from sensebench.datasets.models import (
     DatasetBundle,
     DatasetID,
+    DatasetPos,
     Document,
     DocumentID,
     ItemID,
@@ -72,7 +73,7 @@ DOCUMENT_ID: DocumentID = "d1"
 SENTENCE_ID: SentenceID = "s1"
 TARGET_TEXT: str = "bank"
 TARGET_LEMMA: str = "bank"
-TARGET_POS: str = "NOUN"
+TARGET_POS: DatasetPos = DatasetPos.NOUN
 RUN_CREATED_AT: datetime = datetime(2026, 6, 12, tzinfo=UTC)
 GIT_COMMIT: str = "abc"
 RUNNER_GITHUB_HANDLE: str = "tester"

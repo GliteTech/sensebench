@@ -8,7 +8,12 @@ from sensebench.datasets.models import ItemID
 from sensebench.prompts.models import SENSE_INDEX_FIELD, MessageRole
 from sensebench.runner.client import CompletionClient
 from sensebench.runner.models import CompletionRequest, CompletionResult
-from sensebench.runner.run import RunConfig, _model_with_resolved_snapshots, run_benchmark
+from sensebench.runner.run import (
+    WARMUP_CALL_ID_PREFIX,
+    RunConfig,
+    _model_with_resolved_snapshots,
+    run_benchmark,
+)
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
     RUN_SCHEMA_VERSION,
@@ -21,6 +26,7 @@ from sensebench.runs.models import (
     CostSourceKind,
     MachineInfo,
     MessageRecord,
+    ModelID,
     ModelReference,
     ModelSourceKind,
     RunnerIdentity,
@@ -41,11 +47,13 @@ CALL_ID_1: CallID = "call-1"
 CALL_ID_2: CallID = "call-2"
 CALL_ID_3: CallID = "call-3"
 ITEM_ID: ItemID = "item-1"
-REQUESTED_MODEL: str = "gpt-5.5"
+REQUESTED_MODEL: ModelID = "gpt-5.5"
 MODEL_DISPLAY_NAME: str = "GPT-5.5"
-MODEL_SNAPSHOT_A: str = "gpt-5.5-2026-04-23"
-MODEL_SNAPSHOT_B: str = "gpt-5.5-2026-05-01"
+MODEL_SNAPSHOT_A: ModelID = "gpt-5.5-2026-04-23"
+MODEL_SNAPSHOT_B: ModelID = "gpt-5.5-2026-05-01"
 MESSAGE_CONTENT: str = "choose"
+RUN_ID: str = "run-1"
+HOURLY_RATE_USD_FIELD: str = "hourly_rate_usd"
 
 
 def _cloud_reference() -> CloudLlmReference:
@@ -137,7 +145,6 @@ class _CountingFakeClient(CompletionClient):
                 raw_output=dumps({SENSE_INDEX_FIELD: 1}),
                 usage=TokenUsage(input_tokens=1, output_tokens=1),
                 cost=CostBreakdown(source=CostSourceKind.UNAVAILABLE),
-                latency_seconds=0.0,
             )
         )
 
@@ -150,7 +157,7 @@ def _run_config(
     warmup_calls: int,
 ) -> RunConfig:
     return RunConfig(
-        run_id="run-1",
+        run_id=RUN_ID,
         output_root=tmp_path,
         dataset=renderable_dataset(gold_sense_keys=[FIRST_SENSE_KEY]),
         prompt=registered_prompt(),
@@ -188,9 +195,11 @@ def test_run_benchmark_records_execution_and_machine_time_cost(tmp_path: Path) -
     assert timing.benchmark_ended_at >= timing.benchmark_started_at
     assert metadata.totals.elapsed_seconds == timing.benchmark_seconds
     assert metadata.machine == fixture_machine()
-    warmup_ids = [call_id for call_id in client.request_call_ids if call_id.startswith("warmup")]
+    warmup_ids: list[CallID] = [
+        call_id for call_id in client.request_call_ids if call_id.startswith(WARMUP_CALL_ID_PREFIX)
+    ]
     assert len(warmup_ids) == 2
-    recorded_call_ids = {call.call_id for call in completed.calls}
+    recorded_call_ids: set[CallID] = {call.call_id for call in completed.calls}
     assert all(call_id not in recorded_call_ids for call_id in warmup_ids)
     cost = metadata.totals.cost
     assert cost.source == CostSourceKind.MACHINE_TIME_ESTIMATE
@@ -199,7 +208,7 @@ def test_run_benchmark_records_execution_and_machine_time_cost(tmp_path: Path) -
 
 def test_run_benchmark_without_hourly_rate_keeps_call_costs(tmp_path: Path) -> None:
     client = _CountingFakeClient()
-    machine = fixture_machine().model_copy(update={"hourly_rate_usd": None})
+    machine = fixture_machine().model_copy(update={HOURLY_RATE_USD_FIELD: None})
     config = _run_config(
         tmp_path=tmp_path,
         model=self_hosted_model(),

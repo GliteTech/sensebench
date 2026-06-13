@@ -25,6 +25,9 @@ MODEL_REFERENCE_KIND_FIELD: str = "kind"
 USD_CURRENCY_CODE: Literal["USD"] = "USD"
 MIN_HTTP_STATUS_CODE: int = 100
 MAX_HTTP_STATUS_CODE: int = 599
+CREATED_AT_FIELD: str = "created_at"
+BENCHMARK_STARTED_AT_FIELD: str = "benchmark_started_at"
+BENCHMARK_ENDED_AT_FIELD: str = "benchmark_ended_at"
 
 type RunID = str
 type CallID = str
@@ -102,6 +105,9 @@ class InvalidOutputReason(StrEnum):
     SENSE_INDEX_NOT_INT = "sense_index_not_int"
     PLAIN_NOT_INTEGER = "plain_not_integer"
     INDEX_OUT_OF_RANGE = "index_out_of_range"
+
+
+type InvalidOutputReasonValue = InvalidOutputReason | str
 
 
 class DatasetReference(StrictRunModel):
@@ -197,7 +203,7 @@ class RunTiming(StrictRunModel):
     benchmark_seconds: NonNegativeFloat
     setup_seconds: NonNegativeFloat | None = None
 
-    @field_serializer("benchmark_started_at", "benchmark_ended_at")
+    @field_serializer(BENCHMARK_STARTED_AT_FIELD, BENCHMARK_ENDED_AT_FIELD)
     def serialize_timestamps(self, value: datetime) -> str:
         return value.isoformat()
 
@@ -258,7 +264,7 @@ class RunMetadata(StrictRunModel):
     execution: ExecutionInfo | None = None
     totals: RunTotals
 
-    @field_serializer("created_at")
+    @field_serializer(CREATED_AT_FIELD)
     def serialize_created_at(self, value: datetime) -> str:
         return value.isoformat()
 
@@ -275,7 +281,7 @@ class VoteRecord(StrictRunModel):
     chosen_sense_index: PositiveInt | None = None
     chosen_sense_key: SenseKey | None = None
     call_ids: list[CallID] = Field(default_factory=list)
-    invalid_reason: InvalidOutputReason | str | None = None
+    invalid_reason: InvalidOutputReasonValue | None = None
 
 
 class PredictionRecord(StrictRunModel):

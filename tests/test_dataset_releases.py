@@ -4,17 +4,17 @@ from pathlib import Path
 
 from pytest import MonkeyPatch, raises
 
-import sensebench.datasets.releases as releases_module
+from sensebench.datasets import releases
 from sensebench.datasets.loaders import file_content_hash
 from sensebench.datasets.models import DatasetID
 from sensebench.datasets.releases import (
     DATASET_CACHE_ENV_VAR,
-    DATASET_FILENAME,
     DatasetRelease,
     fetch_dataset_release,
     get_dataset_release,
     load_registered_dataset,
 )
+from sensebench.paths import DATASET_FILENAME, SMOKE_ITEMS_PATH
 
 RELEASE_ID: str = "fixture-v1"
 UNKNOWN_RELEASE_ID: str = "no-such-release"
@@ -26,7 +26,6 @@ VALID_PAYLOAD: bytes = b'{"item": 1}\n'
 CORRUPT_PAYLOAD: bytes = b"corrupted bytes"
 UNEXPECTED_PAYLOAD: bytes = b"unexpected content"
 RELEASE_URL: str = "https://invalid.example/items.jsonl"
-SMOKE_ITEMS_PATH: Path = Path(__file__).parent / "data" / "smoke_items.jsonl"
 
 
 def _release_for_payload(
@@ -71,7 +70,7 @@ def test_fetch_uses_hash_verified_cache(
     cached_path = _seed_cache(cache_dir=cache_dir, payload=VALID_PAYLOAD)
     release = _release_for_payload(payload=VALID_PAYLOAD, tmp_path=tmp_path)
     monkeypatch.setattr(
-        target=releases_module,
+        target=releases,
         name=DOWNLOAD_RELEASE_ATTR,
         value=_fail_download,
     )
@@ -92,7 +91,7 @@ def test_fetch_downloads_when_cache_is_corrupt(
         target.write_bytes(VALID_PAYLOAD)
 
     monkeypatch.setattr(
-        target=releases_module,
+        target=releases,
         name=DOWNLOAD_RELEASE_ATTR,
         value=_fake_download,
     )
@@ -114,7 +113,7 @@ def test_fetch_rejects_download_with_wrong_hash(
         target.write_bytes(UNEXPECTED_PAYLOAD)
 
     monkeypatch.setattr(
-        target=releases_module,
+        target=releases,
         name=DOWNLOAD_RELEASE_ATTR,
         value=_fake_download,
     )
@@ -133,7 +132,7 @@ def test_load_registered_dataset_checks_item_count(
     _seed_cache(cache_dir=cache_dir, payload=payload)
     release = _release_for_payload(payload=payload, tmp_path=tmp_path, item_count=2)
     monkeypatch.setattr(
-        target=releases_module,
+        target=releases,
         name=DOWNLOAD_RELEASE_ATTR,
         value=_fail_download,
     )
@@ -152,7 +151,7 @@ def test_load_registered_dataset_records_release_identity(
     _seed_cache(cache_dir=cache_dir, payload=payload)
     release = _release_for_payload(payload=payload, tmp_path=tmp_path, item_count=1)
     monkeypatch.setattr(
-        target=releases_module,
+        target=releases,
         name=DOWNLOAD_RELEASE_ATTR,
         value=_fail_download,
     )
@@ -162,4 +161,4 @@ def test_load_registered_dataset_records_release_identity(
     assert bundle.dataset_id == DATASET_ID_FIXTURE
     assert bundle.dataset_version == RELEASE_ID
     assert bundle.content_hash == release.content_hash
-    assert len(bundle.items) == 1
+    assert len(bundle.items) == 1, "registered dataset loads all fixture items"

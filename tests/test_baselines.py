@@ -1,21 +1,27 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from pytest import raises
 
 from sensebench.datasets.loaders import load_jsonl_dataset
-from sensebench.datasets.models import DatasetBundle, WsdItem
+from sensebench.datasets.models import (
+    DatasetBundle,
+    DatasetPos,
+    DocumentID,
+    ItemID,
+    SentenceID,
+    WsdItem,
+)
 from sensebench.leaderboard.baselines import (
     BASELINE_PREDICTION_SPECS,
     MFS_BASELINE_LABEL,
     BaselineKind,
     score_baselines,
 )
-from sensebench.paths import DEFAULT_LEXEN_RELEASE_ID, LEXEN_DATASET_ID
+from sensebench.paths import DEFAULT_LEXEN_RELEASE_ID, LEXEN_DATASET_ID, SMOKE_ITEMS_PATH
 
-SMOKE_ITEMS_PATH: Path = Path("tests/data/smoke_items.jsonl")
-UNKNOWN_ITEM_ID: str = "i1"
+UNKNOWN_ITEM_ID: ItemID = "i1"
+UNKNOWN_DOCUMENT_ID: DocumentID = "d1"
+UNKNOWN_SENTENCE_ID: SentenceID = "s1"
 UNKNOWN_GOLD_SENSE_KEY: str = "sense-1"
 EXPECTED_BASELINE_COUNT: int = 1 + len(BASELINE_PREDICTION_SPECS)
 
@@ -31,12 +37,12 @@ def _smoke_dataset() -> DatasetBundle:
 def _unknown_item() -> WsdItem:
     return WsdItem(
         item_id=UNKNOWN_ITEM_ID,
-        document_id="d1",
-        sentence_id="s1",
+        document_id=UNKNOWN_DOCUMENT_ID,
+        sentence_id=UNKNOWN_SENTENCE_ID,
         target_token_index=0,
         target_text="bank",
         lemma="bank",
-        pos="NOUN",
+        pos=DatasetPos.NOUN,
         gold_sense_keys=[UNKNOWN_GOLD_SENSE_KEY],
     )
 
@@ -47,7 +53,7 @@ def test_score_baselines_covers_raganato_items() -> None:
     baselines = score_baselines(dataset=dataset)
 
     assert len(baselines) == EXPECTED_BASELINE_COUNT
-    labels = [baseline.label for baseline in baselines]
+    labels: list[str] = [baseline.label for baseline in baselines]
     assert labels[0] == MFS_BASELINE_LABEL
     assert {spec.label for spec in BASELINE_PREDICTION_SPECS} <= set(labels)
     mfs = baselines[0]

@@ -43,9 +43,9 @@ class EvaluationConfig:
 
     def __post_init__(self) -> None:
         assert self.votes_per_item >= 1, "votes_per_item is at least 1"
-        assert (
-            self.semantic_reasks_per_invalid_vote >= 0
-        ), "semantic_reasks_per_invalid_vote is non-negative"
+        assert self.semantic_reasks_per_invalid_vote >= 0, (
+            "semantic_reasks_per_invalid_vote is non-negative"
+        )
 
 
 @dataclass(frozen=True, slots=True)

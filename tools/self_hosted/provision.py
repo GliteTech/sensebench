@@ -5,7 +5,7 @@ Searches vast.ai offers for the requested GPU preset from the manifest, rents th
 cheapest acceptable offer, waits for the instance to start, SSH-verifies the GPU,
 and writes an instance.json consumed by the other tools in this directory.
 
-Stdlib only; runs on the operator's local machine. See docs/self_hosted.md.
+Runs on the operator's local machine. See docs/self_hosted.md.
 """
 
 from __future__ import annotations
@@ -19,16 +19,28 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-DEFAULT_MANIFEST_PATH: Path = Path("tools/self_hosted/manifest.json")
+from tqdm import tqdm
+
+from sensebench.paths import (
+    DEFAULT_SSH_KEY_PATH,
+    INSTANCE_FILENAME,
+    SELF_HOSTED_MANIFEST_PATH,
+    WORK_ROOT,
+)
+from tools.self_hosted.models import (
+    GpuPresetConfig,
+    GpuPresetKey,
+    InstanceRecord,
+    SelfHostedManifest,
+)
+
 DEFAULT_VASTAI_COMMAND: str = "uvx vastai@0.5.0"
 DEFAULT_MAX_ATTEMPTS: int = 3
-DEFAULT_WORK_ROOT: Path = Path("work")
-INSTANCE_FILENAME: str = "instance.json"
 LABEL_PREFIX: str = "sensebench"
 PROVIDER_NAME: str = "vast.ai"
 SSH_USER: str = "root"
-SSH_KEY_PATH: Path = Path.home() / ".ssh" / "id_ed25519"
-SSH_CONNECT_TIMEOUT_SECONDS: int = 20
+SSH_CONNECT_TIMEOUT_SECONDS: float = 20.0
+SSH_CONNECT_TIMEOUT_TEXT: str = f"{SSH_CONNECT_TIMEOUT_SECONDS:g}"
 GPU_NAME_QUERY: list[str] = ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]
 OFFER_ORDER_FIELD: str = "dph"
 OFFER_SEARCH_LIMIT: int = 20
@@ -38,21 +50,14 @@ INSTANCE_POLL_TIMEOUT_SECONDS: float = 600.0
 SSH_VERIFY_ATTEMPTS: int = 5
 SSH_VERIFY_RETRY_SECONDS: float = 30.0
 SSH_AUTH_FAILURE_MARKERS: list[str] = ["Permission denied", "publickey"]
-
-
-@dataclass(frozen=True, slots=True)
-class GpuPreset:
-    key: str
-    gpu_label: str
-    search: str
-    disk_gb: int
-    concurrency: int
-    max_hourly_usd: float
+PROVISION_PROGRESS_DESCRIPTION: str = "Provisioning offers"
+PROVISION_PROGRESS_UNIT: str = "offer"
 
 
 @dataclass(frozen=True, slots=True)
 class ProvisionPlan:
-    preset: GpuPreset
+    preset_key: GpuPresetKey
+    preset: GpuPresetConfig
     image: str
     label: str
 
@@ -83,30 +88,26 @@ def _vastai_json(*, vastai_command: list[str], arguments: list[str]) -> object:
     return json.loads(result.stdout)
 
 
-def _load_plan(*, manifest_path: Path, gpu: str, label: str) -> ProvisionPlan:
-    manifest: object = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert isinstance(manifest, dict), "manifest is a JSON object"
-    presets: object = manifest.get("gpu_presets")
-    assert isinstance(presets, dict), "manifest has a gpu_presets object"
-    raw_preset: object = presets.get(gpu)
-    if raw_preset is None:
-        available = ", ".join(sorted(presets))
+def _load_plan(
+    *,
+    manifest_path: Path,
+    gpu: GpuPresetKey,
+    label: str,
+) -> ProvisionPlan:
+    manifest = SelfHostedManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    preset = manifest.gpu_presets.get(gpu)
+    if preset is None:
+        available = ", ".join(sorted(manifest.gpu_presets))
         raise SystemExit(f"unknown gpu preset {gpu!r}; available presets: {available}")
-    assert isinstance(raw_preset, dict), "gpu preset is a JSON object"
-    image: object = manifest.get("default_image")
-    assert isinstance(image, str), "manifest has a default_image string"
-    preset = GpuPreset(
-        key=gpu,
-        gpu_label=str(raw_preset["gpu_label"]),
-        search=str(raw_preset["search"]),
-        disk_gb=int(raw_preset["disk_gb"]),
-        concurrency=int(raw_preset["concurrency"]),
-        max_hourly_usd=float(raw_preset["max_hourly_usd"]),
+    return ProvisionPlan(
+        preset_key=gpu,
+        preset=preset,
+        image=manifest.default_image,
+        label=label,
     )
-    return ProvisionPlan(preset=preset, image=image, label=label)
 
 
-def _search_offers(*, vastai_command: list[str], preset: GpuPreset) -> list[Offer]:
+def _search_offers(*, vastai_command: list[str], preset: GpuPresetConfig) -> list[Offer]:
     arguments: list[str] = [
         "search",
         "offers",
@@ -222,9 +223,9 @@ def _ssh_command(*, instance: RunningInstance) -> list[str]:
         "-o",
         "StrictHostKeyChecking=no",
         "-o",
-        f"ConnectTimeout={SSH_CONNECT_TIMEOUT_SECONDS}",
+        f"ConnectTimeout={SSH_CONNECT_TIMEOUT_TEXT}",
         "-i",
-        str(SSH_KEY_PATH),
+        str(DEFAULT_SSH_KEY_PATH),
         "-p",
         str(instance.ssh_port),
         f"{SSH_USER}@{instance.ssh_host}",
@@ -250,7 +251,7 @@ def _verify_gpu_over_ssh(*, vastai_command: list[str], instance: RunningInstance
                 message=(
                     "hint: the instance may not have your SSH key; attach it with: "
                     f"{' '.join(vastai_command)} attach ssh {instance.instance_id} "
-                    f'"$(cat {SSH_KEY_PATH}.pub)"'
+                    f'"$(cat {DEFAULT_SSH_KEY_PATH}.pub)"'
                 )
             )
         if attempt < SSH_VERIFY_ATTEMPTS:
@@ -296,23 +297,25 @@ def _write_instance_file(
     offer: Offer,
     instance: RunningInstance,
 ) -> None:
-    record: dict[str, object] = {
-        "provider": PROVIDER_NAME,
-        "instance_id": instance.instance_id,
-        "gpu_preset": plan.preset.key,
-        "gpu_label": plan.preset.gpu_label,
-        "offer_id": offer.offer_id,
-        "image": plan.image,
-        "disk_gb": plan.preset.disk_gb,
-        "ssh_host": instance.ssh_host,
-        "ssh_port": instance.ssh_port,
-        "ssh_user": SSH_USER,
-        "hourly_rate_usd": instance.hourly_rate_usd,
-        "label": plan.label,
-        "created_at": datetime.now(tz=UTC).isoformat(),
-    }
+    record = InstanceRecord(
+        provider=PROVIDER_NAME,
+        instance_id=instance.instance_id,
+        gpu_preset=plan.preset_key,
+        gpu_label=plan.preset.gpu_label,
+        offer_id=offer.offer_id,
+        image=plan.image,
+        disk_gb=plan.preset.disk_gb,
+        ssh_host=instance.ssh_host,
+        ssh_port=instance.ssh_port,
+        ssh_user=SSH_USER,
+        hourly_rate_usd=instance.hourly_rate_usd,
+        label=plan.label,
+        created_at=datetime.now(tz=UTC),
+    )
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    out_path.write_text(
+        record.model_dump_json(indent=2, exclude_none=True) + "\n", encoding="utf-8"
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -320,11 +323,11 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Rent and verify a vast.ai GPU instance for a SenseBench batch."
     )
     parser.add_argument("--gpu", required=True, help="GPU preset key from the manifest.")
-    parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST_PATH))
+    parser.add_argument("--manifest", default=str(SELF_HOSTED_MANIFEST_PATH))
     parser.add_argument(
         "--out",
         default=None,
-        help=f"Output path (default {DEFAULT_WORK_ROOT}/<gpu>/{INSTANCE_FILENAME}).",
+        help=f"Output path (default {WORK_ROOT}/<gpu>/{INSTANCE_FILENAME}).",
     )
     parser.add_argument(
         "--label",
@@ -349,11 +352,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     vastai_command: list[str] = str(args.vastai_cmd).split()
     label = str(args.label) if args.label is not None else f"{LABEL_PREFIX}/{gpu}-batch"
-    out_path = (
-        Path(str(args.out))
-        if args.out is not None
-        else DEFAULT_WORK_ROOT / gpu / INSTANCE_FILENAME
-    )
+    out_path = Path(str(args.out)) if args.out is not None else WORK_ROOT / gpu / INSTANCE_FILENAME
     plan = _load_plan(manifest_path=Path(str(args.manifest)), gpu=gpu, label=label)
     _log(message=f"searching offers for {plan.preset.gpu_label}: {plan.preset.search}")
     try:
@@ -371,7 +370,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     candidates: list[Offer] = offers[:max_attempts]
     _log(message=f"found {len(offers)} acceptable offers; trying up to {len(candidates)}")
-    for offer in candidates:
+    for offer in tqdm(
+        candidates,
+        desc=PROVISION_PROGRESS_DESCRIPTION,
+        unit=PROVISION_PROGRESS_UNIT,
+    ):
         instance = _provision_offer(vastai_command=vastai_command, plan=plan, offer=offer)
         if instance is None:
             continue

@@ -14,6 +14,7 @@ from sensebench.runs.models import (
     CostBreakdown,
     CostSourceKind,
     MessageRecord,
+    ModelID,
     TokenUsage,
 )
 
@@ -110,7 +111,7 @@ def _usage_from_payload(*, payload: dict[str, object]) -> TokenUsage:
     )
 
 
-def _model_from_payload(*, payload: dict[str, object], requested_model: str) -> str:
+def _model_from_payload(*, payload: dict[str, object], requested_model: ModelID) -> ModelID:
     raw_model = payload.get(MODEL_FIELD)
     if isinstance(raw_model, str) and len(raw_model) > 0:
         return raw_model
@@ -163,7 +164,7 @@ def _provider_reported_cost(*, payload: dict[str, object]) -> CostBreakdown | No
     if total_usd is None:
         return None
     cost_details = usage.get(OPENROUTER_COST_DETAILS_FIELD)
-    detail_payload = cost_details if isinstance(cost_details, dict) else {}
+    detail_payload: dict[str, object] = cost_details if isinstance(cost_details, dict) else {}
     return CostBreakdown(
         total_usd=total_usd,
         input_uncached_usd=_numeric_cost_field(
@@ -183,7 +184,7 @@ def _cost_from_response(
     litellm_module: Any,
     payload: dict[str, object],
     response: object,
-    model: str,
+    model: ModelID,
     usage: TokenUsage,
 ) -> CostBreakdown:
     provider_cost = _provider_reported_cost(payload=payload)

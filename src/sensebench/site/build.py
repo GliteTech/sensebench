@@ -20,7 +20,7 @@ from jinja2 import Environment, PackageLoader
 from pydantic import BaseModel, ConfigDict
 
 from sensebench.datasets.context import build_context_window, build_dataset_index
-from sensebench.datasets.detokenize import detokenize_pieces
+from sensebench.datasets.detokenize import DetokenizedPiece, detokenize_pieces
 from sensebench.datasets.models import (
     DatasetBundle,
     DatasetIndex,
@@ -40,20 +40,24 @@ from sensebench.leaderboard.aggregate import (
     LeaderboardEntry,
     collect_leaderboard_entries,
 )
-from sensebench.leaderboard.baselines import Baseline, score_baselines
+from sensebench.leaderboard.baselines import Baseline, BaselineKind, score_baselines
 from sensebench.paths import (
     CALLS_FILENAME,
     DEFAULT_LEXEN_RELEASE_ID,
     INDEX_HTML_FILENAME,
     LEADERBOARD_JSON_PATH,
+    NOT_FOUND_FILENAME,
     P001_PROMPT_PATH,
     PREDICTIONS_FILENAME,
     PROMPT_JSON_SUFFIX,
     PROMPT_REGISTRY_DIR,
+    ROBOTS_FILENAME,
+    RUN_ARTIFACT_ROOT,
     RUN_METADATA_FILENAME,
     SITE_ASSETS_DIRNAME,
     SITE_DATA_DIRNAME,
     SITE_RUNS_DIRNAME,
+    SITEMAP_FILENAME,
     SUBMITTED_RESULTS_DIR,
 )
 from sensebench.prompts.models import MessageRole, PromptDefinition
@@ -63,6 +67,7 @@ from sensebench.runs.models import (
     CallID,
     CallRecord,
     CallStatus,
+    ModelSourceKind,
     PredictionRecord,
     RunID,
     RunMetadata,
@@ -74,7 +79,6 @@ DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
 SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v5"
 RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v5"
-RUN_ARTIFACT_ROOT: Path = Path("artifacts") / "runs"
 MAX_ERROR_EXAMPLES: int = 12
 PACKAGE_NAME: str = "sensebench.site"
 TEMPLATE_PACKAGE_PATH: str = "templates"
@@ -86,16 +90,16 @@ MILLION_TOKEN_PRICE_FILTER_NAME: str = "million_token_price"
 SECONDS_FILTER_NAME: str = "seconds"
 BYTES_FILTER_NAME: str = "bytes"
 SOURCE_LABEL_FILTER_NAME: str = "source_label"
-SOURCE_KIND_LABELS: dict[str, str] = {
-    "open_source": "Open weights",
-    "proprietary": "Proprietary",
+SOURCE_KIND_LABELS: dict[ModelSourceKind, str] = {
+    ModelSourceKind.OPEN_SOURCE: "Open weights",
+    ModelSourceKind.PROPRIETARY: "Proprietary",
 }
 UNKNOWN_SOURCE_LABEL: str = "Unknown source"
 BASELINE_KIND_LABEL_FILTER_NAME: str = "baseline_kind_label"
-BASELINE_KIND_LABELS: dict[str, str] = {
-    "computed_wordnet_mfs": "Computed at build time",
-    "published_predictions": "Published predictions",
-    "reproduced_predictions": "Reproduced predictions",
+BASELINE_KIND_LABELS: dict[BaselineKind, str] = {
+    BaselineKind.COMPUTED_WORDNET_MFS: "Computed at build time",
+    BaselineKind.PUBLISHED_PREDICTIONS: "Published predictions",
+    BaselineKind.REPRODUCED_PREDICTIONS: "Reproduced predictions",
 }
 CORRECT_BIT: str = "1"
 INCORRECT_BIT: str = "0"
@@ -118,9 +122,6 @@ RUNS_ROUTE: str = "runs/"
 DATASETS_ROUTE_PREFIX: str = "datasets"
 PROMPTS_ROUTE_PREFIX: str = "prompts"
 RUNS_ROUTE_PREFIX: str = "runs"
-SITEMAP_FILENAME: str = "sitemap.xml"
-ROBOTS_FILENAME: str = "robots.txt"
-NOT_FOUND_FILENAME: str = "404.html"
 STATIC_PAGE_SLUGS: tuple[str, ...] = (
     "about",
     "methodology",
@@ -341,11 +342,19 @@ def _format_money(value: float | None) -> str:
 def _format_source_label(value: str | None) -> str:
     if value is None:
         return UNKNOWN_SOURCE_LABEL
-    return SOURCE_KIND_LABELS.get(value, UNKNOWN_SOURCE_LABEL)
+    try:
+        source_kind = ModelSourceKind(value)
+    except ValueError:
+        return UNKNOWN_SOURCE_LABEL
+    return SOURCE_KIND_LABELS.get(source_kind, UNKNOWN_SOURCE_LABEL)
 
 
 def _format_baseline_kind(value: str) -> str:
-    return BASELINE_KIND_LABELS.get(value, value)
+    try:
+        baseline_kind = BaselineKind(value)
+    except ValueError:
+        return value
+    return BASELINE_KIND_LABELS.get(baseline_kind, value)
 
 
 def _format_million_token_price(value: float | None) -> str:
@@ -467,12 +476,8 @@ def _site_baselines(
     collection: LeaderboardCollection,
     dataset_cache: dict[str, DatasetBundle],
 ) -> list[Baseline]:
-    versions = sorted(
-        {
-            entry.dataset_version
-            for entry in collection.entries
-            if entry.dataset_version is not None
-        }
+    versions: list[str] = sorted(
+        {entry.dataset_version for entry in collection.entries if entry.dataset_version is not None}
     )
     baselines: list[Baseline] = []
     for version in versions:
@@ -632,9 +637,7 @@ def _context_sentences(
     for sentence_index in range(first_sentence_index, last_sentence_exclusive):
         sentence = document.sentences[sentence_index]
         is_target_sentence = sentence_index == target_sentence_index
-        target_token_index = (
-            item.target_token_index if is_target_sentence else None
-        )
+        target_token_index = item.target_token_index if is_target_sentence else None
         sentence_html = _context_sentence_html(
             sentence=sentence,
             target_token_index=target_token_index,
@@ -659,8 +662,10 @@ def _context_sentence_html(
     target_token_index: int | None,
     detokenize: bool,
 ) -> str:
-    surfaces = [token.text for token in sentence.tokens]
-    pieces = detokenize_pieces(surfaces=surfaces) if detokenize else None
+    surfaces: list[str] = [token.text for token in sentence.tokens]
+    pieces: list[DetokenizedPiece] | None = (
+        detokenize_pieces(surfaces=surfaces) if detokenize else None
+    )
     html = ""
     for token_index, token in enumerate(sentence.tokens):
         rendered = pieces[token_index].text if pieces is not None else token.text
@@ -668,9 +673,7 @@ def _context_sentence_html(
             token_html = f"<mark>{escape(token.text)}</mark>"
         else:
             token_html = escape(rendered)
-        leading_space = (
-            pieces[token_index].leading_space if pieces is not None else token_index > 0
-        )
+        leading_space = pieces[token_index].leading_space if pieces is not None else token_index > 0
         if leading_space and len(html) > 0:
             html += " "
         html += token_html
@@ -1212,9 +1215,7 @@ def _render_prompt_pages(
 
 def _sitemap(*, base_url: str, paths: list[str]) -> str:
     urls = "\n".join(
-        "  <url><loc>"
-        f"{escape(_absolute_url(base_url=base_url, path=path))}"
-        "</loc></url>"
+        f"  <url><loc>{escape(_absolute_url(base_url=base_url, path=path))}</loc></url>"
         for path in paths
     )
     return (
@@ -1225,7 +1226,12 @@ def _sitemap(*, base_url: str, paths: list[str]) -> str:
     )
 
 
-def _render_404(*, env: Environment, output_dir: Path, base_url: str) -> None:
+def _render_404(
+    *,
+    env: Environment,
+    output_dir: Path,
+    base_url: str,
+) -> None:
     html_text = _render(
         env=env,
         template_name="simple_page.html.j2",
@@ -1273,12 +1279,7 @@ def _render_run_pages(
             dataset_cache=dataset_cache,
             artifacts=artifacts,
         )
-        data_path = (
-            output_dir
-            / SITE_DATA_DIRNAME
-            / SITE_RUNS_DIRNAME
-            / f"{entry.run_id}.json"
-        )
+        data_path = output_dir / SITE_DATA_DIRNAME / SITE_RUNS_DIRNAME / f"{entry.run_id}.json"
         _write_json(path=data_path, value=detail)
         path = f"{RUNS_ROUTE_PREFIX}/{entry.run_id}/"
         html_text = _render(
@@ -1381,8 +1382,8 @@ def build_site(
         collection=collection,
         baselines=_site_baselines(collection=collection, dataset_cache=dataset_cache),
     )
-    env.globals[ASSET_VERSION_GLOBAL_KEY] = (
-        site_data.summary.generated_at.replace(":", "").replace("+", "")
+    env.globals[ASSET_VERSION_GLOBAL_KEY] = site_data.summary.generated_at.replace(":", "").replace(
+        "+", ""
     )
     _write_json(
         path=output_dir / SITE_DATA_DIRNAME / LEADERBOARD_JSON_PATH,

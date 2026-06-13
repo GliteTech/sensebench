@@ -10,9 +10,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PROMPT_ID_PATTERN: str = r"^p[0-9]{3,}$"
-TEMPLATE_VARIABLE_PATTERN: Pattern[str] = compile_regex(
-    r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}"
-)
+TEMPLATE_VARIABLE_PATTERN: Pattern[str] = compile_regex(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 TEMPLATE_VARIABLE_CANDIDATE_SENSES: str = "candidate_senses"
 TEMPLATE_VARIABLE_CONTEXT: str = "context"
 TEMPLATE_VARIABLE_ITEM_ID: str = "item_id"
@@ -30,7 +28,7 @@ KNOWN_TEMPLATE_VARIABLES: frozenset[str] = frozenset(
     }
 )
 SENSE_INDEX_FIELD: str = "sense_index"
-TEMPLATE_KIND_FIELD: Final[str] = "template_type"
+TEMPLATE_KIND_FIELD: Final[str] = "template_kind"
 
 type PromptID = str
 

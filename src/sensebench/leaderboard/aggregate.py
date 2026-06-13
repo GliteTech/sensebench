@@ -8,6 +8,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import assert_never
 
 import numpy as np
 from numpy.typing import NDArray
@@ -26,6 +27,7 @@ from sensebench.runs.loaders import LoadedRun, load_run_directory
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
     SELF_HOSTED_LLM_KIND,
+    CloudLlmKind,
     CloudLlmReference,
     ModelHostingKind,
     ModelReference,
@@ -33,6 +35,7 @@ from sensebench.runs.models import (
     PredictionStatus,
     RunID,
     RunPolicy,
+    SelfHostedLlmKind,
     SelfHostedLlmReference,
     TokenUsage,
     VoteStatus,
@@ -47,15 +50,8 @@ LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v5"
 RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
 OFFICIAL_VOTES_PER_ITEM: int = 1
 OFFICIAL_SEMANTIC_REASKS: int = 1
-UNKNOWN_MODEL_HOSTING_KIND: str = "unknown"
 MISSING_DATASET_VERSION_GROUP_VALUE: str = "dataset_version:none"
 RANK_FIELD: str = "rank"
-GPU_LABEL_PATTERNS: tuple[tuple[str, str], ...] = (
-    ("H200", "H200 141GB"),
-    ("H100", "H100 80GB"),
-    ("A100", "A100 80GB"),
-    ("RTX 4090", "RTX 4090"),
-)
 GPU_NAME_PREFIXES_TO_STRIP: tuple[str, ...] = ("NVIDIA ", "GeForce ")
 
 
@@ -137,6 +133,20 @@ class LeaderboardFile(LeaderboardModel):
     schema_version: str
     generated_at: str
     entries: list[LeaderboardEntry]
+
+
+@dataclass(frozen=True, slots=True)
+class GpuLabelPattern:
+    substring: str
+    label: str
+
+
+GPU_LABEL_PATTERNS: tuple[GpuLabelPattern, ...] = (
+    GpuLabelPattern(substring="H200", label="H200 141GB"),
+    GpuLabelPattern(substring="H100", label="H100 80GB"),
+    GpuLabelPattern(substring="A100", label="A100 80GB"),
+    GpuLabelPattern(substring="RTX 4090", label="RTX 4090"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,12 +264,12 @@ def _transport_error_vote_count(*, predictions: list[PredictionRecord]) -> int:
     )
 
 
-def _hosting_kind(*, model_kind: str) -> ModelHostingKind | str:
+def _hosting_kind(*, model_kind: CloudLlmKind | SelfHostedLlmKind) -> ModelHostingKind:
     if model_kind == CLOUD_LLM_KIND:
         return ModelHostingKind.CLOUD_API
     if model_kind == SELF_HOSTED_LLM_KIND:
         return ModelHostingKind.SELF_HOSTED
-    return UNKNOWN_MODEL_HOSTING_KIND
+    assert_never(model_kind)
 
 
 def _api_provider(*, model: ModelReference) -> str | None:
@@ -281,9 +291,9 @@ def _self_hosted_model(*, model: ModelReference) -> SelfHostedLlmReference | Non
 
 
 def _gpu_label(*, name: str) -> str:
-    for substring, label in GPU_LABEL_PATTERNS:
-        if substring in name:
-            return label
+    for pattern in GPU_LABEL_PATTERNS:
+        if pattern.substring in name:
+            return pattern.label
     label = name
     for prefix in GPU_NAME_PREFIXES_TO_STRIP:
         label = label.removeprefix(prefix)
@@ -407,13 +417,11 @@ def _release_for_metadata(*, loaded: LoadedRun) -> DatasetRelease:
     release = get_dataset_release(release_id=release_id)
     if metadata.dataset.dataset_id != release.dataset_id:
         raise ValueError(
-            f"dataset_id {metadata.dataset.dataset_id} does not match release "
-            f"{release.dataset_id}"
+            f"dataset_id {metadata.dataset.dataset_id} does not match release {release.dataset_id}"
         )
     if metadata.dataset.item_count != release.item_count:
         raise ValueError(
-            f"item_count {metadata.dataset.item_count} does not match release "
-            f"{release.item_count}"
+            f"item_count {metadata.dataset.item_count} does not match release {release.item_count}"
         )
     if metadata.dataset.content_hash != release.content_hash:
         raise ValueError(
@@ -555,9 +563,7 @@ def _created_at_timestamp(*, value: str) -> float | None:
 def _sort_key(entry: LeaderboardEntry) -> LeaderboardSortKey:
     accuracy = entry.accuracy if entry.accuracy is not None else -1.0
     cost = (
-        entry.cost_per_million_items
-        if entry.cost_per_million_items is not None
-        else float("inf")
+        entry.cost_per_million_items if entry.cost_per_million_items is not None else float("inf")
     )
     created_at = _created_at_timestamp(value=entry.created_at)
     created_at_sort_value = created_at if created_at is not None else float("-inf")
@@ -573,7 +579,7 @@ def _ranked(*, entries: list[LeaderboardEntry]) -> list[LeaderboardEntry]:
     sorted_entries: list[LeaderboardEntry] = sorted(entries, key=_sort_key)
     return [
         entry.model_copy(update={RANK_FIELD: rank})
-        for rank, entry in enumerate(sorted_entries, 1)
+        for rank, entry in enumerate(sorted_entries, start=1)
     ]
 
 
@@ -642,6 +648,6 @@ def emit_leaderboard(
         print(f"skipping {issue.run_dir}: {issue.message}", file=sys.stderr)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
-        leaderboard_file(entries=collection.entries).model_dump_json(indent=2) + "\n",
+        data=leaderboard_file(entries=collection.entries).model_dump_json(indent=2) + "\n",
         encoding="utf-8",
     )

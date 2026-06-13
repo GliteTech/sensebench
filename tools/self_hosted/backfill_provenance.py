@@ -14,14 +14,18 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
-from typing import Any
 
-DEFAULT_MANIFEST_PATH: Path = Path("tools/self_hosted/manifest.json")
-RUN_METADATA_FILENAME: str = "run.json"
+from sensebench.paths import RUN_METADATA_FILENAME, SELF_HOSTED_MANIFEST_PATH
+from sensebench.runs.models import RunMetadata, SelfHostedLlmReference
+from tools.self_hosted.models import ManifestJob, SelfHostedManifest
+
 RUN_ID_PREFIX: str = "vllm-"
-SELF_HOSTED_KIND: str = "self_hosted_llm"
+HF_REVISION_FIELD: str = "hf_revision"
+SERVE_COMMAND_FIELD: str = "serve_command"
+CONTAINER_IMAGE_FIELD: str = "container_image"
+MODEL_FIELD: str = "model"
+GIT_COMMIT_FIELD: str = "git_commit"
 FIXED_SERVE_FLAGS: tuple[str, ...] = (
     "--port",
     "8000",
@@ -32,83 +36,102 @@ FIXED_SERVE_FLAGS: tuple[str, ...] = (
 )
 
 
-def _load_json(*, path: Path) -> dict[str, Any]:
-    with path.open(encoding="utf-8") as handle:
-        loaded: Any = json.load(handle)
-    assert isinstance(loaded, dict), f"{path} is a JSON object"
-    return loaded
+def _manifest_model(*, manifest: SelfHostedManifest | dict[str, object]) -> SelfHostedManifest:
+    if isinstance(manifest, SelfHostedManifest):
+        return manifest
+    return SelfHostedManifest.model_validate(manifest)
 
 
-def _match_job(*, run_id: str, jobs: list[dict[str, Any]]) -> dict[str, Any] | None:
-    matches = [job for job in jobs if run_id.startswith(f"{RUN_ID_PREFIX}{job['job_id']}-")]
+def _match_job(*, run_id: str, jobs: list[ManifestJob]) -> ManifestJob | None:
+    matches: list[ManifestJob] = [
+        job for job in jobs if run_id.startswith(f"{RUN_ID_PREFIX}{job.job_id}-")
+    ]
     if len(matches) != 1:
         return None
     return matches[0]
 
 
-def _serve_command(*, job: dict[str, Any]) -> str:
-    checkpoint = job.get("served_checkpoint") or job["model"]
-    serve_args = job.get("serve_args") or []
+def _serve_command(*, job: ManifestJob) -> str:
+    checkpoint = (
+        job.served_checkpoint
+        if job.served_checkpoint is not None and len(job.served_checkpoint) > 0
+        else job.model
+    )
+    serve_args: list[str] = list(job.serve_args)
     parts = ["vllm", "serve", checkpoint, *FIXED_SERVE_FLAGS, *serve_args]
     return " ".join(str(part) for part in parts)
 
 
-def _container_image(*, job: dict[str, Any], manifest: dict[str, Any]) -> str:
-    override = job.get("image_override")
-    if isinstance(override, str) and len(override) > 0:
-        return override
-    return str(manifest["default_image"])
+def _container_image(*, job: ManifestJob, manifest: SelfHostedManifest) -> str:
+    if job.image_override is not None and len(job.image_override) > 0:
+        return job.image_override
+    return manifest.default_image
+
+
+def _missing_text(*, value: str | None) -> bool:
+    return value is None or len(value.strip()) == 0
 
 
 def backfill_run(
     *,
     run_dir: Path,
-    manifest: dict[str, Any],
+    manifest: SelfHostedManifest | dict[str, object],
     git_commit: str | None = None,
 ) -> str:
+    manifest_model = _manifest_model(manifest=manifest)
     metadata_path = run_dir / RUN_METADATA_FILENAME
-    metadata = _load_json(path=metadata_path)
-    model = metadata.get("model", {})
-    if model.get("kind") != SELF_HOSTED_KIND:
+    metadata = RunMetadata.model_validate_json(metadata_path.read_text(encoding="utf-8"))
+    model = metadata.model
+    if not isinstance(model, SelfHostedLlmReference):
         return "skip (cloud run)"
-    job = _match_job(run_id=metadata["run_id"], jobs=manifest["jobs"])
+    job = _match_job(run_id=metadata.run_id, jobs=manifest_model.jobs)
     if job is None:
         return "skip (no manifest job matched run_id)"
-    updated = False
-    if not model.get("hf_revision"):
-        model["hf_revision"] = job["hf_revision"]
-        updated = True
-    if not model.get("serve_command"):
-        model["serve_command"] = _serve_command(job=job)
-        updated = True
-    if not model.get("container_image"):
-        model["container_image"] = _container_image(job=job, manifest=manifest)
-        updated = True
+    model_updates: dict[str, object] = {}
+    if _missing_text(value=model.hf_revision):
+        model_updates[HF_REVISION_FIELD] = job.hf_revision
+    if _missing_text(value=model.serve_command):
+        model_updates[SERVE_COMMAND_FIELD] = _serve_command(job=job)
+    if _missing_text(value=model.container_image):
+        model_updates[CONTAINER_IMAGE_FIELD] = _container_image(
+            job=job,
+            manifest=manifest_model,
+        )
+
+    updated_model = model.model_copy(update=model_updates) if len(model_updates) > 0 else model
+    metadata_updates: dict[str, object] = {}
+    if len(model_updates) > 0:
+        metadata_updates[MODEL_FIELD] = updated_model
     # The on-box runner invokes sensebench outside the repo dir, so git_commit is
     # recorded as null; backfill it with the released sensebench commit.
-    if git_commit is not None and not metadata.get("git_commit"):
-        metadata["git_commit"] = git_commit
-        updated = True
-    if not updated:
+    if git_commit is not None and _missing_text(value=metadata.git_commit):
+        metadata_updates[GIT_COMMIT_FIELD] = git_commit
+    if len(metadata_updates) == 0:
         return "ok (already complete)"
-    metadata["model"] = model
-    metadata_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-    return f"backfilled (rev {model['hf_revision'][:12]})"
+    updated_metadata = metadata.model_copy(update=metadata_updates)
+    metadata_path.write_text(
+        updated_metadata.model_dump_json(indent=2) + "\n",
+        encoding="utf-8",
+    )
+    assert updated_model.hf_revision is not None, "backfilled model has a revision"
+    return f"backfilled (rev {updated_model.hf_revision[:12]})"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs-dir", default="runs")
-    parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST_PATH))
+    parser.add_argument("--manifest", default=str(SELF_HOSTED_MANIFEST_PATH))
     parser.add_argument(
         "--git-commit",
         default=None,
         help="Released sensebench commit to record when the run captured none.",
     )
     args = parser.parse_args(argv)
-    manifest = _load_json(path=Path(args.manifest))
+    manifest = SelfHostedManifest.model_validate_json(
+        Path(args.manifest).read_text(encoding="utf-8"),
+    )
     runs_dir = Path(args.runs_dir)
-    run_dirs = sorted(
+    run_dirs: list[Path] = sorted(
         path
         for path in runs_dir.iterdir()
         if path.is_dir() and (path / RUN_METADATA_FILENAME).exists()

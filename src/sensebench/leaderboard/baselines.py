@@ -5,12 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import NamedTuple
 
 from pydantic import BaseModel, ConfigDict
 
-from sensebench.datasets.models import DatasetBundle, ItemID, SenseKey, WsdItem
+from sensebench.datasets.models import (
+    DatasetBundle,
+    DatasetPos,
+    ItemID,
+    LemmaText,
+    SenseKey,
+    WsdItem,
+)
 from sensebench.leaderboard.aggregate import AccuracyInterval, bootstrap_accuracy_ci
-from sensebench.paths import BASELINE_PREDICTIONS_DIR
+from sensebench.paths import BEM_BASELINE_PATH, CONSEC_BASELINE_PATH, ESCHER_BASELINE_PATH
 from sensebench.runner.evaluate import prediction_is_correct
 from sensebench.wordnet import get_candidate_senses, wordnet_version
 
@@ -48,16 +56,21 @@ class Baseline(BaselineModel):
 @dataclass(frozen=True, slots=True)
 class BaselinePredictionSpec:
     label: str
-    filename: str
+    path: Path
     kind: BaselineKind
     source_note: str
     source_url: str | None
 
 
+class FirstSenseCacheKey(NamedTuple):
+    lemma: LemmaText
+    pos: DatasetPos
+
+
 BASELINE_PREDICTION_SPECS: tuple[BaselinePredictionSpec, ...] = (
     BaselinePredictionSpec(
         label="BEM",
-        filename="bem.key.txt",
+        path=BEM_BASELINE_PATH,
         kind=BaselineKind.PUBLISHED_PREDICTIONS,
         source_note=(
             "Bi-Encoder Model (Blevins & Zettlemoyer 2020); per-item predictions released by "
@@ -67,7 +80,7 @@ BASELINE_PREDICTION_SPECS: tuple[BaselinePredictionSpec, ...] = (
     ),
     BaselinePredictionSpec(
         label="ESCHER",
-        filename="escher.key.txt",
+        path=ESCHER_BASELINE_PATH,
         kind=BaselineKind.REPRODUCED_PREDICTIONS,
         source_note=(
             "ESCHER (Barba et al. 2021); predictions reproduced by Glite from the official "
@@ -77,7 +90,7 @@ BASELINE_PREDICTION_SPECS: tuple[BaselinePredictionSpec, ...] = (
     ),
     BaselinePredictionSpec(
         label="ConSeC",
-        filename="consec.key.txt",
+        path=CONSEC_BASELINE_PATH,
         kind=BaselineKind.REPRODUCED_PREDICTIONS,
         source_note=(
             "ConSeC (Barba et al. 2021); predictions reproduced by Glite from the official "
@@ -95,11 +108,14 @@ class BaselineScore:
 
 def _load_key_file(*, path: Path) -> dict[ItemID, SenseKey]:
     predictions: dict[ItemID, SenseKey] = {}
-    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
         line = raw_line.strip()
         if len(line) == 0:
             continue
-        fields = line.split()
+        fields: list[str] = line.split()
         if len(fields) != KEY_FILE_FIELD_COUNT:
             raise ValueError(f"{path}:{line_number}: expected 'instance_id sense_key'")
         instance_id, sense_key = fields
@@ -143,15 +159,13 @@ def _score(
 
 
 def _mfs_predictions(*, dataset: DatasetBundle) -> dict[ItemID, SenseKey]:
-    first_sense_cache: dict[tuple[str, str], SenseKey | None] = {}
+    first_sense_cache: dict[FirstSenseCacheKey, SenseKey | None] = {}
     predictions: dict[ItemID, SenseKey] = {}
     for item in dataset.items:
-        cache_key = (item.lemma, item.pos)
+        cache_key = FirstSenseCacheKey(lemma=item.lemma, pos=item.pos)
         if cache_key not in first_sense_cache:
             candidates = get_candidate_senses(lemma=item.lemma, pos=item.pos)
-            first_sense_cache[cache_key] = (
-                candidates[0].sense_key if len(candidates) > 0 else None
-            )
+            first_sense_cache[cache_key] = candidates[0].sense_key if len(candidates) > 0 else None
         first_sense = first_sense_cache[cache_key]
         if first_sense is not None:
             predictions[item.item_id] = first_sense
@@ -169,6 +183,7 @@ def _baseline(
 ) -> Baseline:
     correct_count = sum(1 for value in correctness if value)
     item_count = len(correctness)
+    assert item_count > 0, "baseline accuracy requires at least one item"
     return Baseline(
         label=label,
         kind=kind,
@@ -209,7 +224,7 @@ def score_baselines(*, dataset: DatasetBundle) -> list[Baseline]:
     wordnet_version()
     baselines: list[Baseline] = [_mfs_baseline(dataset=dataset)]
     for spec in BASELINE_PREDICTION_SPECS:
-        predictions = _load_key_file(path=BASELINE_PREDICTIONS_DIR / spec.filename)
+        predictions = _load_key_file(path=spec.path)
         score = _score(dataset=dataset, predictions=predictions, label=spec.label)
         if score is None:
             continue

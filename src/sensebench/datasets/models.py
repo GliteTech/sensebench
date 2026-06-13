@@ -3,19 +3,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 type DatasetID = str
+type DatasetVersion = str
+type DatasetRevision = str
+type ContentHash = str
 type DocumentID = str
 type SentenceID = str
 type ItemID = str
+type LemmaText = str
 type SenseKey = str
+
+
+class DatasetPos(StrEnum):
+    NOUN = "NOUN"
+    VERB = "VERB"
+    ADJ = "ADJ"
+    ADV = "ADV"
 
 
 @dataclass(frozen=True, slots=True)
 class Token:
     text: str
-    lemma: str | None = None
-    pos: str | None = None
+    lemma: LemmaText | None = None
+    pos: DatasetPos | None = None
     item_id: ItemID | None = None
 
 
@@ -38,8 +50,8 @@ class WsdItem:
     sentence_id: SentenceID
     target_token_index: int
     target_text: str
-    lemma: str
-    pos: str
+    lemma: LemmaText
+    pos: DatasetPos
     gold_sense_keys: list[SenseKey]
     metadata: dict[str, str] = field(default_factory=dict)
 
@@ -47,9 +59,9 @@ class WsdItem:
 @dataclass(frozen=True, slots=True)
 class DatasetBundle:
     dataset_id: DatasetID
-    dataset_version: str | None
-    dataset_revision: str | None
-    content_hash: str | None
+    dataset_version: DatasetVersion | None
+    dataset_revision: DatasetRevision | None
+    content_hash: ContentHash | None
     documents: list[Document]
     items: list[WsdItem]
 
