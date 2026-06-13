@@ -9,6 +9,7 @@
   const gpuFilter = document.getElementById("gpu-filter");
   const quantFilter = document.getElementById("quant-filter");
   const xMetricSelect = document.getElementById("x-metric-select");
+  const xScaleSelect = document.getElementById("x-scale-select");
   const maxCostFilter = document.getElementById("max-cost-filter");
   const viewFilter = document.getElementById("view-filter");
   const frontierOnly = document.getElementById("frontier-only");
@@ -57,6 +58,15 @@
 
   function activeXMetric() {
     return X_METRICS[xMetricSelect?.value] || X_METRICS.cost_per_million_items;
+  }
+
+  function activeXScale() {
+    return xScaleSelect?.value === "linear" ? "linear" : "log";
+  }
+
+  // A log axis cannot plot non-positive x; drop those points (and report them).
+  function plottablePoints(points, scale) {
+    return scale === "log" ? points.filter((point) => point.x > 0) : points;
   }
 
   const sourceLabels = {
@@ -497,12 +507,13 @@
     return baseline.label.split(" (")[0];
   }
 
-  function renderMainChart(entries, frontierPoints, metric) {
+  function renderMainChart(entries, frontierPoints, metric, scale) {
     if (!chartElement || !window.echarts) {
       return;
     }
-    const points = chartPoints(entries, metric);
-    const frontier = [...frontierPoints].sort((a, b) => a.x - b.x);
+    const allPoints = chartPoints(entries, metric);
+    const points = plottablePoints(allPoints, scale);
+    const frontier = plottablePoints([...frontierPoints], scale).sort((a, b) => a.x - b.x);
     const visible = frontierOnly?.checked ? frontier : points;
     const baselines = visibleBaselines();
     if (!mainChart) {
@@ -552,10 +563,10 @@
           }
         },
         xAxis: {
-          name: metric.axisLabel,
+          name: scale === "log" ? `${metric.axisLabel} (log scale)` : metric.axisLabel,
           nameLocation: "middle",
           nameGap: 42,
-          type: "value"
+          type: scale === "log" ? "log" : "value"
         },
         yAxis: {
           name: "Accuracy %",
@@ -611,14 +622,19 @@
       },
       { notMerge: true }
     );
-    const missing = entries.length - points.length;
+    const unavailable = entries.length - allPoints.length;
+    const droppedByLog = allPoints.length - points.length;
     if (chartNote) {
       const baselineNote =
         baselines.length > 0
           ? ` Dashed lines mark reference baselines scored on the same items.`
           : "";
-      const missingNote = missing > 0 ? metric.missingNote : "";
-      chartNote.textContent = `${points.length} rows plotted. ${missing} rows have unavailable values for this chart.${missingNote}${baselineNote}`;
+      const missingNote = unavailable > 0 ? metric.missingNote : "";
+      const logNote =
+        droppedByLog > 0
+          ? ` ${droppedByLog} row${droppedByLog === 1 ? "" : "s"} with a zero value omitted on the log scale.`
+          : "";
+      chartNote.textContent = `${points.length} rows plotted. ${unavailable} rows have unavailable values for this chart.${missingNote}${logNote}${baselineNote}`;
     }
   }
 
@@ -990,13 +1006,14 @@
   function render() {
     const entries = filteredEntries();
     const metric = activeXMetric();
+    const scale = activeXScale();
     const points = chartPoints(entries, metric);
     const frontierPoints = paretoFrontier(points);
     const frontierIds = new Set(frontierPoints.map((point) => point.entry.run_id));
     const rows = sortRows(decorateRows(entries, frontierIds));
     renderTable(rows);
     updateSortIndicators();
-    renderMainChart(entries, frontierPoints, metric);
+    renderMainChart(entries, frontierPoints, metric, scale);
     renderCompareCharts();
     renderPairwise();
   }
@@ -1011,6 +1028,7 @@
       gpuFilter,
       quantFilter,
       xMetricSelect,
+      xScaleSelect,
       maxCostFilter,
       viewFilter,
       frontierOnly
