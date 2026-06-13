@@ -72,6 +72,7 @@ from tests.run_fixtures import (
     FIXTURE_GPU_NAME,
     FIXTURE_INFERENCE_ENGINE,
     FIXTURE_PROVIDER,
+    FIXTURE_QUANTIZATION,
     SELF_HOSTED_MODEL_NAME,
     fixture_machine,
     self_hosted_model,
@@ -107,7 +108,7 @@ LATENCY_SECONDS: float = 0.5
 TEST_CONCURRENCY: int = 8
 EXPECTED_COST_PER_MILLION_ITEMS: float = 20_000.0
 EXPECTED_TOKENS_PER_ITEM: float = 110.0
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v4"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v5"
 RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v5"
 TARGET_ART_TEXT: str = "art"
 TARGET_LEMMA_TEXT: str = "Target lemma: art"
@@ -124,6 +125,7 @@ MAX_COST_FILTER_ID: str = "max-cost-filter"
 SOURCE_FILTER_ID: str = "source-filter"
 HOSTING_FILTER_ID: str = "hosting-filter"
 GPU_FILTER_ID: str = "gpu-filter"
+QUANT_FILTER_ID: str = "quant-filter"
 X_METRIC_SELECT_ID: str = "x-metric-select"
 MACHINE_TIMING_HEADING_TEXT: str = "Machine &amp; Timing"
 MACHINE_SECONDS_PER_ITEM_TEXT: str = "Machine seconds / item"
@@ -387,6 +389,7 @@ def test_build_site_emits_static_pages_and_data(
     assert site_data.schema_version == SITE_DATA_SCHEMA_VERSION
     assert site_data.summary.verified_run_count == 1
     assert site_data.summary.gpus == []
+    assert site_data.summary.quantizations == []
     entry = site_data.entries[0]
     assert entry.accuracy == 0.0
     assert entry.cost_per_million_items == EXPECTED_COST_PER_MILLION_ITEMS
@@ -465,6 +468,7 @@ def test_build_site_emits_static_pages_and_data(
     assert HOSTING_FILTER_ID in index_html
     assert X_METRIC_SELECT_ID in index_html
     assert GPU_FILTER_ID not in index_html
+    assert QUANT_FILTER_ID not in index_html
     assert BUILT_BY_GLITE_TEXT in index_html
 
 
@@ -501,11 +505,13 @@ def test_build_site_self_hosted_run(
     )
     assert site_data.summary.verified_run_count == 2
     assert site_data.summary.gpus == [EXPECTED_GPU_LABEL]
+    assert site_data.summary.quantizations == [FIXTURE_QUANTIZATION]
     self_hosted_entry = next(
         entry for entry in site_data.entries if entry.run_id == SELF_HOSTED_RUN_ID
     )
     assert self_hosted_entry.hosting_kind == ModelHostingKind.SELF_HOSTED
     assert self_hosted_entry.gpu == EXPECTED_GPU_LABEL
+    assert self_hosted_entry.quantization == FIXTURE_QUANTIZATION
     assert self_hosted_entry.seconds_per_item == LATENCY_SECONDS
     cloud_entry = next(entry for entry in site_data.entries if entry.run_id == TEST_RUN_ID)
     assert cloud_entry.seconds_per_item is None
@@ -513,6 +519,8 @@ def test_build_site_self_hosted_run(
     index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
     assert GPU_FILTER_ID in index_html
     assert EXPECTED_GPU_LABEL in index_html
+    assert QUANT_FILTER_ID in index_html
+    assert FIXTURE_QUANTIZATION in index_html
     assert MACHINE_SECONDS_PER_ITEM_TEXT in index_html
 
     self_hosted_run_html = (

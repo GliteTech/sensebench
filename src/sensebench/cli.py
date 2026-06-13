@@ -413,6 +413,8 @@ def _self_hosted_model_reference(*, args: argparse.Namespace) -> SelfHostedLlmRe
         quantization=args.quantization,
         inference_engine=args.inference_engine,
         inference_engine_version=args.inference_engine_version,
+        container_image=args.container_image,
+        serve_command=args.serve_command,
         endpoint_base_url=endpoint_base_url,
     )
 
@@ -694,6 +696,14 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--quantization")
     run_parser.add_argument("--inference-engine")
     run_parser.add_argument("--inference-engine-version")
+    run_parser.add_argument(
+        "--container-image",
+        help="Serving container image (with digest if known), e.g. vllm/vllm-openai:v0.22.1.",
+    )
+    run_parser.add_argument(
+        "--serve-command",
+        help="Exact inference server launch command, recorded for reproducibility.",
+    )
     run_parser.add_argument("--endpoint-base-url")
     run_parser.add_argument(
         "--machine-info-json",

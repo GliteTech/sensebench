@@ -179,6 +179,7 @@ def make_metadata(
     model: ModelReference | None = None,
     machine: MachineInfo | None = None,
     cost: CostBreakdown | None = None,
+    sampling: SamplingParameters | None = None,
 ) -> RunMetadata:
     is_v1 = schema_version == RUN_SCHEMA_VERSION_V1
     return RunMetadata(
@@ -202,7 +203,7 @@ def make_metadata(
             requested_model=MODEL_NAME,
             source_kind=ModelSourceKind.UNKNOWN,
         ),
-        sampling=SamplingParameters(),
+        sampling=sampling if sampling is not None else SamplingParameters(),
         policy=RunPolicy(
             votes_per_item=VOTES_PER_ITEM,
             semantic_reasks_per_invalid_vote=SEMANTIC_REASKS_PER_INVALID_VOTE,

@@ -64,6 +64,10 @@
       <dt>Quantization</dt><dd>{{ metadata.model.quantization or "n/a" }}</dd>
       <dt>Inference engine</dt><dd>{{ metadata.model.inference_engine or "n/a" }}</dd>
       <dt>Engine version</dt><dd>{{ metadata.model.inference_engine_version or "n/a" }}</dd>
+      <dt>Container image</dt><dd>{{ metadata.model.container_image or "n/a" }}</dd>
+      {% if metadata.model.serve_command %}
+      <dt>Serve command</dt><dd><code class="serve-command">{{ metadata.model.serve_command }}</code></dd>
+      {% endif %}
       {% endif %}
     </dl>
   </div>

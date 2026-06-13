@@ -14,6 +14,8 @@ from sensebench.runs.models import (
     CostSourceKind,
     RunID,
     RunMetadata,
+    SamplingParameters,
+    TokenUsage,
 )
 from sensebench.verify.runs import (
     CALLS_AFTER_SUCCESS_MESSAGE,
@@ -553,3 +555,96 @@ def test_verify_detects_call_latency_exceeding_benchmark(tmp_path: Path) -> None
     report = verify_run_directory(run_dir=run_dir)
 
     assert RunValidationRule.EXECUTION_TIMING in issue_rules(report=report)
+
+
+def test_verify_self_hosted_run_without_revision_fails(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    model = self_hosted_model().model_copy(update={"hf_revision": None})
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        model=model,
+        machine=fixture_machine(),
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.MODEL_PROVENANCE in issue_rules(report=report)
+
+
+def test_verify_self_hosted_run_with_revision_passes_provenance(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        model=self_hosted_model(),
+        machine=fixture_machine(),
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.MODEL_PROVENANCE not in issue_rules(report=report)
+
+
+def test_verify_flags_excessive_output_truncation(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        sampling=SamplingParameters(max_tokens=16),
+    )
+    prediction = voted_prediction(
+        chosen_index=2,
+        gold_sense_keys=[SECOND_SENSE_KEY],
+        is_correct=True,
+    )
+    clipped_call = success_call(
+        raw_output=raw_output_for_sense_index(sense_index=2),
+    ).model_copy(update={"usage": TokenUsage(output_tokens=16)})
+    write_run_artifacts(
+        run_dir=run_dir,
+        metadata=metadata,
+        predictions=[prediction],
+        calls=[clipped_call],
+    )
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.OUTPUT_TRUNCATION in issue_rules(report=report)
+
+
+def test_verify_allows_outputs_below_cap(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        sampling=SamplingParameters(max_tokens=256),
+    )
+    prediction = voted_prediction(
+        chosen_index=2,
+        gold_sense_keys=[SECOND_SENSE_KEY],
+        is_correct=True,
+    )
+    call = success_call(
+        raw_output=raw_output_for_sense_index(sense_index=2),
+    ).model_copy(update={"usage": TokenUsage(output_tokens=12)})
+    write_run_artifacts(
+        run_dir=run_dir,
+        metadata=metadata,
+        predictions=[prediction],
+        calls=[call],
+    )
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.OUTPUT_TRUNCATION not in issue_rules(report=report)

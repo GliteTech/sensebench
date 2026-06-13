@@ -146,6 +146,8 @@ class SelfHostedLlmReference(StrictRunModel):
     quantization: str | None = None
     inference_engine: str | None = None
     inference_engine_version: str | None = None
+    container_image: str | None = None
+    serve_command: str | None = None
     endpoint_base_url: str
 
 
