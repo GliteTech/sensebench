@@ -72,8 +72,8 @@ from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v3"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v4"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v4"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v5"
 RUN_ARTIFACT_ROOT: Path = Path("artifacts") / "runs"
 MAX_ERROR_EXAMPLES: int = 12
 PACKAGE_NAME: str = "sensebench.site"
@@ -150,6 +150,7 @@ class SiteSummary(SiteModel):
     model_count: int
     dataset_versions: list[str]
     prompt_ids: list[str]
+    gpus: list[str]
     top_accuracy: float | None
     generated_at: str
 
@@ -442,6 +443,7 @@ def _site_summary(*, collection: LeaderboardCollection) -> SiteSummary:
             {entry.dataset_version for entry in entries if entry.dataset_version is not None}
         ),
         prompt_ids=sorted({entry.prompt_id for entry in entries}),
+        gpus=sorted({entry.gpu for entry in entries if entry.gpu is not None}),
         top_accuracy=top_accuracy,
         generated_at=datetime.now(tz=UTC).isoformat(),
     )
@@ -1019,6 +1021,21 @@ def _static_pages() -> list[StaticPage]:
                         "The default leaderboard view lists every verified run; the "
                         "collapsed view keeps only the best verified run per model and "
                         "dataset version, across prompts and reasoning efforts.",
+                    ),
+                ),
+                PageSection(
+                    title="Self-Hosted Runs",
+                    paragraphs=(
+                        "Self-hosted runs record the GPU machine they ran on and a "
+                        "benchmark time that covers only the per-item evaluation loop, "
+                        "excluding model download, weight loading, and inference engine "
+                        "startup.",
+                        "Machine seconds per item is the benchmark time divided by the "
+                        "item count at the recorded concurrency; it is comparable only "
+                        "across runs on the same GPU configuration.",
+                        "When the machine's hourly rate is known, run cost is estimated "
+                        "as machine time multiplied by that rate (cost source "
+                        "machine_time_estimate); otherwise cost is unavailable.",
                     ),
                 ),
             ),

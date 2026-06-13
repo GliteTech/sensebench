@@ -5,6 +5,9 @@
   const datasetFilter = document.getElementById("dataset-filter");
   const promptFilter = document.getElementById("prompt-filter");
   const sourceFilter = document.getElementById("source-filter");
+  const hostingFilter = document.getElementById("hosting-filter");
+  const gpuFilter = document.getElementById("gpu-filter");
+  const xMetricSelect = document.getElementById("x-metric-select");
   const maxCostFilter = document.getElementById("max-cost-filter");
   const viewFilter = document.getElementById("view-filter");
   const frontierOnly = document.getElementById("frontier-only");
@@ -36,8 +39,24 @@
   const EXACT_MCNEMAR_MAX_DISCORDANT = 25;
   const Z_95 = 1.959963984540054;
 
-  const COST_METRIC = "cost_per_million_items";
-  const COST_AXIS_LABEL = "Cost per million items, USD";
+  const X_METRICS = {
+    cost_per_million_items: {
+      axisLabel: "Cost per million items, USD",
+      value: (entry) => entry.cost_per_million_items,
+      format: formatMoney,
+      missingNote: ""
+    },
+    seconds_per_item: {
+      axisLabel: "Machine seconds per item",
+      value: (entry) => entry.seconds_per_item,
+      format: formatSeconds,
+      missingNote: " Cloud API runs record no machine time and are not plotted."
+    }
+  };
+
+  function activeXMetric() {
+    return X_METRICS[xMetricSelect?.value] || X_METRICS.cost_per_million_items;
+  }
 
   const sourceLabels = {
     open_source: "Open weights",
@@ -62,6 +81,12 @@
       title: "Tokens / item",
       value: (entry) => entry.tokens_per_item,
       format: (value) => formatNumber(value, 1)
+    },
+    {
+      key: "seconds_per_item",
+      title: "Machine s / item",
+      value: (entry) => entry.seconds_per_item,
+      format: formatSeconds
     }
   ];
 
@@ -105,6 +130,27 @@
     return `$${amount.toFixed(decimals)}`;
   }
 
+  function formatSeconds(value) {
+    if (value == null) {
+      return "n/a";
+    }
+    const seconds = Number(value);
+    if (seconds < 60) {
+      return `${seconds.toFixed(2)}s`;
+    }
+    return `${(seconds / 60).toFixed(2)}m`;
+  }
+
+  function gpuLabel(entry) {
+    if (!entry.gpu) {
+      return null;
+    }
+    if (entry.gpu_count != null && entry.gpu_count > 1) {
+      return `${entry.gpu_count}×${entry.gpu}`;
+    }
+    return entry.gpu;
+  }
+
   function modelLabel(entry) {
     if (entry.reasoning_effort) {
       return `${entry.model} (${entry.reasoning_effort})`;
@@ -139,6 +185,9 @@
       entry.resolved_model,
       entry.llm_vendor,
       entry.api_provider,
+      entry.gpu,
+      entry.inference_engine,
+      entry.quantization,
       entry.runner_github_handle,
       entry.runner_name,
       entry.source_kind,
@@ -175,6 +224,8 @@
     const dataset = datasetFilter?.value || "";
     const prompt = promptFilter?.value || "";
     const source = sourceFilter?.value || "";
+    const hosting = hostingFilter?.value || "";
+    const gpu = gpuFilter?.value || "";
     const maxCost = activeMaxCost();
     let entries = state.entries.filter((entry) => {
       if (dataset && entry.dataset_version !== dataset) {
@@ -184,6 +235,12 @@
         return false;
       }
       if (source && entry.source_kind !== source) {
+        return false;
+      }
+      if (hosting && entry.hosting_kind !== hosting) {
+        return false;
+      }
+      if (gpu && entry.gpu !== gpu) {
         return false;
       }
       if (maxCost != null) {
@@ -323,6 +380,10 @@
           vendorParts.push(escapeHtml(entry.llm_vendor));
         }
         vendorParts.push(escapeHtml(sourceLabel(entry)));
+        const gpu = gpuLabel(entry);
+        if (gpu != null) {
+          vendorParts.push(escapeHtml(gpu));
+        }
         const frontierHtml = row.onFrontier
           ? '<span class="badge badge-frontier" title="On the accuracy-cost Pareto frontier">★</span>'
           : "";
@@ -335,6 +396,7 @@
           </td>
           <td><div class="cell-primary">${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
           <td>${formatMoney(entry.cost_per_million_items)}</td>
+          <td>${formatSeconds(entry.seconds_per_item)}</td>
           <td>${escapeHtml(entry.prompt_id)}</td>
           <td>${escapeHtml(entry.dataset_version)}</td>
           <td><a href="${basePath}${escapeHtml(entry.run_url)}">${escapeHtml(entry.run_id)}</a></td>
@@ -370,11 +432,11 @@
     });
   }
 
-  function chartPoints(entries) {
+  function chartPoints(entries, metric) {
     return entries
-      .filter((entry) => entry.accuracy != null && entry[COST_METRIC] != null)
+      .filter((entry) => entry.accuracy != null && metric.value(entry) != null)
       .map((entry) => ({
-        x: entry[COST_METRIC],
+        x: metric.value(entry),
         y: entry.accuracy * 100,
         entry
       }));
@@ -392,11 +454,11 @@
     return baseline.label.split(" (")[0];
   }
 
-  function renderMainChart(entries, frontierPoints) {
+  function renderMainChart(entries, frontierPoints, metric) {
     if (!chartElement || !window.echarts) {
       return;
     }
-    const points = chartPoints(entries);
+    const points = chartPoints(entries, metric);
     const frontier = [...frontierPoints].sort((a, b) => a.x - b.x);
     const visible = frontierOnly?.checked ? frontier : points;
     const baselines = visibleBaselines();
@@ -428,12 +490,12 @@
               `<strong>${escapeHtml(modelLabel(entry))}</strong>`,
               `Prompt: ${escapeHtml(promptLabel(entry))}`,
               accuracyText,
-              `${COST_AXIS_LABEL}: ${formatMoney(entry[COST_METRIC])}`
+              `${metric.axisLabel}: ${metric.format(metric.value(entry))}`
             ].join("<br>");
           }
         },
         xAxis: {
-          name: COST_AXIS_LABEL,
+          name: metric.axisLabel,
           nameLocation: "middle",
           nameGap: 42,
           type: "value"
@@ -498,7 +560,8 @@
         baselines.length > 0
           ? ` Dashed lines mark reference baselines scored on the same items.`
           : "";
-      chartNote.textContent = `${points.length} rows plotted. ${missing} rows have unavailable values for this chart.${baselineNote}`;
+      const missingNote = missing > 0 ? metric.missingNote : "";
+      chartNote.textContent = `${points.length} rows plotted. ${missing} rows have unavailable values for this chart.${missingNote}${baselineNote}`;
     }
   }
 
@@ -646,6 +709,7 @@
           <th>Accuracy</th>
           <th>Cost / M items</th>
           <th>Tokens / item</th>
+          <th>Machine s / item</th>
           <th>Run</th>
         </tr>
       </thead>
@@ -665,6 +729,7 @@
               <td><div class="cell-primary">${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
               <td>${formatMoney(entry.cost_per_million_items)}</td>
               <td>${formatNumber(entry.tokens_per_item, 1)}</td>
+              <td>${formatSeconds(entry.seconds_per_item)}</td>
               <td><a href="${basePath}${escapeHtml(entry.run_url)}">${escapeHtml(entry.run_id)}</a></td>
             </tr>`;
           })
@@ -856,12 +921,13 @@
 
   function render() {
     const entries = filteredEntries();
-    const points = chartPoints(entries);
+    const metric = activeXMetric();
+    const points = chartPoints(entries, metric);
     const frontierPoints = paretoFrontier(points);
     const frontierIds = new Set(frontierPoints.map((point) => point.entry.run_id));
     const rows = sortRows(decorateRows(entries, frontierIds));
     renderTable(rows);
-    renderMainChart(entries, frontierPoints);
+    renderMainChart(entries, frontierPoints, metric);
     renderCompareCharts();
     renderPairwise();
   }
@@ -872,6 +938,9 @@
       datasetFilter,
       promptFilter,
       sourceFilter,
+      hostingFilter,
+      gpuFilter,
+      xMetricSelect,
       maxCostFilter,
       viewFilter,
       frontierOnly
