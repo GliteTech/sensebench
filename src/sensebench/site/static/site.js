@@ -589,7 +589,6 @@
     const scatterPoints = frontierOnly?.checked ? frontier : points;
     const baselines = visibleBaselines();
     const { colorOf, display, legendFamilies } = familyAssignments(scatterPoints);
-    const frontierIds = new Set(frontier.map((point) => point.entry.run_id));
     const byFamily = new Map();
     for (const point of scatterPoints) {
       const family = display(point.entry);
@@ -598,23 +597,8 @@
       }
       byFamily.get(family).push(point);
     }
-    // Declutter: the frontier is labelled below; additionally label the best
-    // (highest-accuracy) non-frontier point per family. The rest are hover-only.
-    const labelIds = new Set();
-    for (const familyPoints of byFamily.values()) {
-      let best = null;
-      for (const point of familyPoints) {
-        if (frontierIds.has(point.entry.run_id)) {
-          continue;
-        }
-        if (best === null || point.y > best.y) {
-          best = point;
-        }
-      }
-      if (best !== null) {
-        labelIds.add(best.entry.run_id);
-      }
-    }
+    // Only the Pareto frontier is labelled (below); all other points are
+    // hover-only to keep the dense cluster readable.
     const familySeries = legendFamilies
       .filter((family) => byFamily.has(family))
       .map((family) => ({
@@ -623,19 +607,10 @@
         symbolSize: 11,
         itemStyle: { color: colorOf.get(family) },
         emphasis: { focus: "series" },
-        labelLayout: { hideOverlap: true },
         data: byFamily.get(family).map((point) => ({
           value: [point.x, point.y],
           entry: point.entry,
-          symbol: pointSymbol(point.entry),
-          label: labelIds.has(point.entry.run_id)
-            ? {
-                show: true,
-                position: "top",
-                fontSize: 11,
-                formatter: () => shortModelLabel(point.entry)
-              }
-            : { show: false }
+          symbol: pointSymbol(point.entry)
         }))
       }));
     if (!mainChart) {
