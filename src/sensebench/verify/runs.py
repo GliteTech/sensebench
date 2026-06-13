@@ -15,14 +15,18 @@ from sensebench.paths import CALLS_FILENAME, PREDICTIONS_FILENAME, RUN_METADATA_
 from sensebench.prompts.models import OutputMode, PromptDefinition, PromptID
 from sensebench.prompts.registry import registered_prompt_paths
 from sensebench.prompts.render import ChatMessage, RenderedTask, render_task
+from sensebench.runner.costs import SECONDS_PER_HOUR
 from sensebench.runner.evaluate import choose_prediction, prediction_is_correct
 from sensebench.runner.extract import ValidSenseIndexExtraction, extract_sense_index
 from sensebench.runs.loaders import load_run_directory
 from sensebench.runs.models import (
+    RUN_SCHEMA_VERSION_V1,
+    SELF_HOSTED_LLM_KIND,
     AttemptKind,
     CallID,
     CallRecord,
     CallStatus,
+    CostSourceKind,
     InvalidOutputReason,
     MessageRecord,
     PredictionRecord,
@@ -36,6 +40,9 @@ from sensebench.runs.models import (
 from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses, wordnet_version
 
 ACCURACY_TOLERANCE: float = 1e-12
+TIMING_TOLERANCE_SECONDS: float = 1e-9
+CALL_LATENCY_TOLERANCE_SECONDS: float = 0.05
+MACHINE_COST_RELATIVE_TOLERANCE: float = 1e-9
 MESSAGE_ROLE_FIELD: str = "role"
 MESSAGE_CONTENT_FIELD: str = "content"
 DATASET_ITEM_DIFF_SAMPLE_LIMIT: int = 10
@@ -64,6 +71,10 @@ class RunValidationRule(StrEnum):
     DATASET_CONTENT_HASH = "dataset_content_hash"
     CANDIDATE_SET = "candidate_set"
     PROMPT_RENDERING = "prompt_rendering"
+    SCHEMA_SECTIONS = "schema_sections"
+    EXECUTION_TIMING = "execution_timing"
+    MACHINE_INFO = "machine_info"
+    MACHINE_COST = "machine_cost"
 
 
 @dataclass(frozen=True, slots=True)
@@ -795,6 +806,121 @@ def _prompt_rendering_issues(
     return issues
 
 
+def _schema_section_issues(*, metadata: RunMetadata) -> list[RunValidationIssue]:
+    messages: list[str] = []
+    if metadata.schema_version == RUN_SCHEMA_VERSION_V1:
+        if metadata.machine is not None:
+            messages.append("schema v1 runs must not record a machine section")
+        if metadata.execution is not None:
+            messages.append("schema v1 runs must not record an execution section")
+    elif metadata.execution is None:
+        messages.append("schema v2 runs must record an execution section")
+    return [
+        RunValidationIssue(
+            rule=RunValidationRule.SCHEMA_SECTIONS,
+            location=RUN_METADATA_FILENAME,
+            message=message,
+        )
+        for message in messages
+    ]
+
+
+def _execution_timing_issues(
+    *,
+    metadata: RunMetadata,
+    calls: list[CallRecord],
+) -> list[RunValidationIssue]:
+    execution = metadata.execution
+    if execution is None:
+        return []
+    timing = execution.timing
+    messages: list[str] = []
+    if timing.benchmark_ended_at < timing.benchmark_started_at:
+        messages.append("benchmark_ended_at is before benchmark_started_at")
+    if metadata.totals.call_count > 0 and timing.benchmark_seconds <= 0:
+        messages.append("benchmark_seconds must be positive when calls were made")
+    elapsed = metadata.totals.elapsed_seconds
+    if elapsed is None or abs(elapsed - timing.benchmark_seconds) > TIMING_TOLERANCE_SECONDS:
+        messages.append(
+            f"totals.elapsed_seconds {elapsed} does not match "
+            f"benchmark_seconds {timing.benchmark_seconds}"
+        )
+    latencies: list[float] = [
+        call.latency_seconds for call in calls if call.latency_seconds is not None
+    ]
+    if len(latencies) > 0:
+        max_latency = max(latencies)
+        if max_latency > timing.benchmark_seconds + CALL_LATENCY_TOLERANCE_SECONDS:
+            messages.append(
+                f"max call latency {max_latency} exceeds benchmark_seconds "
+                f"{timing.benchmark_seconds}"
+            )
+    return [
+        RunValidationIssue(
+            rule=RunValidationRule.EXECUTION_TIMING,
+            location=RUN_METADATA_FILENAME,
+            message=message,
+        )
+        for message in messages
+    ]
+
+
+def _machine_info_issues(*, metadata: RunMetadata) -> list[RunValidationIssue]:
+    if metadata.schema_version == RUN_SCHEMA_VERSION_V1:
+        return []
+    if metadata.model.kind != SELF_HOSTED_LLM_KIND:
+        return []
+    messages: list[str] = []
+    machine = metadata.machine
+    if machine is None:
+        messages.append("self-hosted runs must record a machine section")
+    elif machine.gpu is None:
+        messages.append("self-hosted runs must record machine GPU details")
+    elif len(machine.gpu.name.strip()) == 0:
+        messages.append("self-hosted runs must record a non-empty machine GPU name")
+    return [
+        RunValidationIssue(
+            rule=RunValidationRule.MACHINE_INFO,
+            location=RUN_METADATA_FILENAME,
+            message=message,
+        )
+        for message in messages
+    ]
+
+
+def _machine_cost_issues(*, metadata: RunMetadata) -> list[RunValidationIssue]:
+    cost = metadata.totals.cost
+    if cost.source != CostSourceKind.MACHINE_TIME_ESTIMATE:
+        return []
+    messages: list[str] = []
+    if metadata.model.kind != SELF_HOSTED_LLM_KIND:
+        messages.append("machine-time cost requires a self-hosted model")
+    machine = metadata.machine
+    hourly_rate = machine.hourly_rate_usd if machine is not None else None
+    if hourly_rate is None:
+        messages.append("machine-time cost requires machine.hourly_rate_usd")
+    execution = metadata.execution
+    if execution is None:
+        messages.append("machine-time cost requires an execution section")
+    if hourly_rate is not None and execution is not None:
+        expected = execution.timing.benchmark_seconds * hourly_rate / SECONDS_PER_HOUR
+        recorded = cost.total_usd
+        tolerance = max(abs(expected), 1.0) * MACHINE_COST_RELATIVE_TOLERANCE
+        if recorded is None or abs(recorded - expected) > tolerance:
+            messages.append(
+                f"machine-time cost {recorded} does not match "
+                f"benchmark_seconds x hourly rate ({expected})"
+            )
+    return [
+        RunValidationIssue(
+            rule=RunValidationRule.MACHINE_COST,
+            location=RUN_METADATA_FILENAME,
+            message=message,
+        )
+        for message in messages
+    ]
+
+
 def verify_run_directory(
     *,
     run_dir: Path,
@@ -828,6 +954,10 @@ def verify_run_directory(
     issues.extend(_duplicate_item_issues(predictions=loaded.predictions))
     issues.extend(_call_set_issues(predictions=loaded.predictions, calls=loaded.calls))
     issues.extend(_prompt_reference_issues(metadata=loaded.metadata, prompt=prompt))
+    issues.extend(_schema_section_issues(metadata=loaded.metadata))
+    issues.extend(_execution_timing_issues(metadata=loaded.metadata, calls=loaded.calls))
+    issues.extend(_machine_info_issues(metadata=loaded.metadata))
+    issues.extend(_machine_cost_issues(metadata=loaded.metadata))
     verification_prompt: PromptDefinition | None = None
     if prompt is not None and prompt.id == loaded.metadata.prompt.id:
         verification_prompt = prompt

@@ -18,17 +18,21 @@ from sensebench.datasets.models import DatasetBundle, DatasetIndex, WsdItem
 from sensebench.prompts.models import MessageRole, PromptDefinition
 from sensebench.prompts.render import ChatMessage, render_task
 from sensebench.runner.client import CompletionClient
-from sensebench.runner.costs import sum_costs
+from sensebench.runner.costs import machine_time_cost, sum_costs
 from sensebench.runner.evaluate import EvaluationConfig, evaluate_item
 from sensebench.runner.models import CompletionRequest, ItemEvaluation
 from sensebench.runner.writer import write_run_artifacts
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
     RUN_SCHEMA_VERSION,
+    SELF_HOSTED_LLM_KIND,
     AttemptKind,
     CallRecord,
     CallStatus,
+    CostBreakdown,
     DatasetReference,
+    ExecutionInfo,
+    MachineInfo,
     ModelID,
     ModelReference,
     MonosemousPolicyKind,
@@ -38,6 +42,7 @@ from sensebench.runs.models import (
     RunMetadata,
     RunnerIdentity,
     RunPolicy,
+    RunTiming,
     RunTotals,
     SamplingParameters,
     TieBreakKind,
@@ -50,6 +55,7 @@ PROGRESS_DESCRIPTION: str = "Evaluating items"
 PROGRESS_UNIT: str = "item"
 PREFLIGHT_CALL_ID: str = "preflight"
 PREFLIGHT_PROMPT: str = "Reply with the number 1."
+WARMUP_CALL_ID_PREFIX: str = "warmup"
 LLM_TEMPERATURE_PARAMETER: str = "temperature"
 LLM_TOP_P_PARAMETER: str = "top_p"
 LLM_MAX_TOKENS_PARAMETER: str = "max_tokens"
@@ -70,6 +76,8 @@ class RunConfig:
     votes_per_item: int
     semantic_reasks_per_invalid_vote: int
     concurrency: int
+    machine: MachineInfo | None = None
+    warmup_calls: int = 0
     show_progress: bool = True
 
 
@@ -173,17 +181,23 @@ def _totals(
     predictions: list[PredictionRecord],
     calls: list[CallRecord],
     elapsed_seconds: float,
+    cost_override: CostBreakdown | None = None,
 ) -> RunTotals:
     item_count = len(predictions)
     correct_count = sum(1 for prediction in predictions if prediction.is_correct is True)
     accuracy = correct_count / item_count if item_count > 0 else None
+    cost = (
+        cost_override
+        if cost_override is not None
+        else sum_costs(costs=[prediction.cost for prediction in predictions])
+    )
     return RunTotals(
         item_count=item_count,
         correct_count=correct_count,
         accuracy=accuracy,
         call_count=len(calls),
         usage=_sum_usage(predictions=predictions),
-        cost=sum_costs(costs=[prediction.cost for prediction in predictions]),
+        cost=cost,
         elapsed_seconds=elapsed_seconds,
     )
 
@@ -334,10 +348,10 @@ async def _evaluate_items(
     return evaluations
 
 
-async def preflight_model(*, config: RunConfig, client: CompletionClient) -> None:
-    request = CompletionRequest(
-        call_id=PREFLIGHT_CALL_ID,
-        item_id=PREFLIGHT_CALL_ID,
+def _preflight_request(*, config: RunConfig, call_id: str) -> CompletionRequest:
+    return CompletionRequest(
+        call_id=call_id,
+        item_id=call_id,
         vote_index=1,
         attempt_index=1,
         attempt_kind=AttemptKind.INITIAL,
@@ -345,6 +359,10 @@ async def preflight_model(*, config: RunConfig, client: CompletionClient) -> Non
         messages=[ChatMessage(role=MessageRole.USER, content=PREFLIGHT_PROMPT)],
         parameters=_completion_parameters(config=config),
     )
+
+
+async def preflight_model(*, config: RunConfig, client: CompletionClient) -> None:
+    request = _preflight_request(config=config, call_id=PREFLIGHT_CALL_ID)
     completion = await client.complete(request=request)
     if completion.call.status != CallStatus.SUCCESS:
         raise RuntimeError(
@@ -353,21 +371,71 @@ async def preflight_model(*, config: RunConfig, client: CompletionClient) -> Non
         )
 
 
+def _prewarm_assets(*, config: RunConfig, dataset_index: DatasetIndex) -> None:
+    wordnet_version()
+    if len(config.dataset.items) == 0:
+        return
+    first_item = config.dataset.items[0]
+    candidates: list[SenseCandidate] = get_candidate_senses(
+        lemma=first_item.lemma,
+        pos=first_item.pos,
+    )
+    render_task(
+        prompt=config.prompt,
+        item=first_item,
+        dataset_index=dataset_index,
+        candidates=candidates,
+    )
+
+
+async def _run_warmup_calls(*, config: RunConfig, client: CompletionClient) -> None:
+    if config.warmup_calls <= 0:
+        return
+    requests = [
+        _preflight_request(config=config, call_id=f"{WARMUP_CALL_ID_PREFIX}-{index}")
+        for index in range(1, config.warmup_calls + 1)
+    ]
+    await asyncio.gather(
+        *[client.complete(request=request) for request in requests],
+        return_exceptions=True,
+    )
+
+
+def _machine_time_cost_override(
+    *,
+    config: RunConfig,
+    benchmark_seconds: float,
+) -> CostBreakdown | None:
+    if config.model.kind != SELF_HOSTED_LLM_KIND:
+        return None
+    if config.machine is None or config.machine.hourly_rate_usd is None:
+        return None
+    return machine_time_cost(
+        benchmark_seconds=benchmark_seconds,
+        hourly_rate_usd=config.machine.hourly_rate_usd,
+    )
+
+
 async def run_benchmark(*, config: RunConfig, client: CompletionClient) -> CompletedRun:
     run_dir = config.output_root / config.run_id
     if run_dir.exists():
         raise FileExistsError(f"run directory already exists: {run_dir}")
-    wordnet_version()
-    started = time.monotonic()
     semaphore = asyncio.Semaphore(config.concurrency)
+    setup_started = time.monotonic()
     dataset_index = build_dataset_index(bundle=config.dataset)
+    _prewarm_assets(config=config, dataset_index=dataset_index)
+    await _run_warmup_calls(config=config, client=client)
+    setup_seconds = time.monotonic() - setup_started
+    benchmark_started_at = datetime.now(tz=UTC)
+    benchmark_started = time.monotonic()
     evaluations: list[ItemEvaluation] = await _evaluate_items(
         dataset_index=dataset_index,
         config=config,
         client=client,
         semaphore=semaphore,
     )
-    elapsed_seconds = time.monotonic() - started
+    benchmark_seconds = time.monotonic() - benchmark_started
+    benchmark_ended_at = datetime.now(tz=UTC)
     predictions: list[PredictionRecord] = [evaluation.prediction for evaluation in evaluations]
     calls: list[CallRecord] = [call for evaluation in evaluations for call in evaluation.calls]
     metadata = RunMetadata(
@@ -392,7 +460,26 @@ async def run_benchmark(*, config: RunConfig, client: CompletionClient) -> Compl
             tie_break=TieBreakKind.EARLIEST_VOTE,
             monosemous_policy=MonosemousPolicyKind.SHORT_CIRCUIT,
         ),
-        totals=_totals(predictions=predictions, calls=calls, elapsed_seconds=elapsed_seconds),
+        machine=config.machine,
+        execution=ExecutionInfo(
+            concurrency=config.concurrency,
+            warmup_call_count=config.warmup_calls,
+            timing=RunTiming(
+                benchmark_started_at=benchmark_started_at,
+                benchmark_ended_at=benchmark_ended_at,
+                benchmark_seconds=benchmark_seconds,
+                setup_seconds=setup_seconds,
+            ),
+        ),
+        totals=_totals(
+            predictions=predictions,
+            calls=calls,
+            elapsed_seconds=benchmark_seconds,
+            cost_override=_machine_time_cost_override(
+                config=config,
+                benchmark_seconds=benchmark_seconds,
+            ),
+        ),
     )
     write_run_artifacts(
         run_dir=run_dir,

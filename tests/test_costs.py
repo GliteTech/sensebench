@@ -2,8 +2,17 @@ from __future__ import annotations
 
 from pytest import approx
 
-from sensebench.runner.costs import sum_costs
+from sensebench.runner.costs import machine_time_cost, sum_costs
 from sensebench.runs.models import CostBreakdown, CostSourceKind
+
+
+def test_machine_time_cost_uses_hourly_rate() -> None:
+    cost = machine_time_cost(benchmark_seconds=360.0, hourly_rate_usd=2.5)
+
+    assert cost.source == CostSourceKind.MACHINE_TIME_ESTIMATE
+    assert cost.total_usd == approx(0.25)
+    assert cost.input_uncached_usd is None
+    assert cost.output_usd is None
 
 
 def test_sum_costs_preserves_shared_unit_prices() -> None:

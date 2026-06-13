@@ -4,9 +4,18 @@ from __future__ import annotations
 
 from sensebench.runs.models import CostBreakdown, CostSourceKind
 
+SECONDS_PER_HOUR: float = 3600.0
+
 
 def unavailable_cost() -> CostBreakdown:
     return CostBreakdown(source=CostSourceKind.UNAVAILABLE)
+
+
+def machine_time_cost(*, benchmark_seconds: float, hourly_rate_usd: float) -> CostBreakdown:
+    return CostBreakdown(
+        total_usd=benchmark_seconds * hourly_rate_usd / SECONDS_PER_HOUR,
+        source=CostSourceKind.MACHINE_TIME_ESTIMATE,
+    )
 
 
 def no_call_cost() -> CostBreakdown:
