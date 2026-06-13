@@ -69,6 +69,78 @@
     return scale === "log" ? points.filter((point) => point.x > 0) : points;
   }
 
+  // Colorblind-aware categorical palette (Tableau 10, minus the frontier green).
+  const FAMILY_PALETTE = [
+    "#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F",
+    "#EDC948", "#B07AA1", "#FF9DA7", "#9C755F", "#499894"
+  ];
+  const MAX_FAMILY_COLORS = 10;
+  const OTHER_FAMILY_LABEL = "Other";
+  const OTHER_FAMILY_COLOR = "#9aa0a6";
+  // Model name -> family. Order matters; first match wins.
+  const FAMILY_PATTERNS = [
+    [/gemma/, "Gemma"],
+    [/qwen/, "Qwen"],
+    [/glm/, "GLM"],
+    [/llama|maverick|scout/, "Llama"],
+    [/mistral|mixtral|magistral|ministral|pixtral/, "Mistral"],
+    [/nemotron/, "Nemotron"],
+    [/deepseek/, "DeepSeek"],
+    [/granite/, "Granite"],
+    [/phi-?\d/, "Phi"],
+    [/hunyuan/, "Hunyuan"],
+    [/olmo/, "OLMo"],
+    [/command|c4ai/, "Command"],
+    [/gpt|davinci/, "GPT"],
+    [/claude/, "Claude"],
+    [/minimax/, "MiniMax"]
+  ];
+
+  function familyOf(entry) {
+    const name = String(entry.model || entry.requested_model || "").toLowerCase();
+    for (const [pattern, label] of FAMILY_PATTERNS) {
+      if (pattern.test(name)) {
+        return label;
+      }
+    }
+    return entry.llm_vendor || OTHER_FAMILY_LABEL;
+  }
+
+  function isSelfHosted(entry) {
+    return entry.hosting_kind === "self_hosted";
+  }
+
+  // Shape encodes where the run executed (and thus how its cost is derived).
+  function pointSymbol(entry) {
+    return isSelfHosted(entry) ? "triangle" : "circle";
+  }
+
+  // Assign palette colors to the most common families; collapse the tail to "Other".
+  function familyAssignments(points) {
+    const counts = new Map();
+    for (const point of points) {
+      const family = familyOf(point.entry);
+      counts.set(family, (counts.get(family) || 0) + 1);
+    }
+    const ordered = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map((entry) => entry[0]);
+    const top = ordered.slice(0, MAX_FAMILY_COLORS);
+    const topSet = new Set(top);
+    const colorOf = new Map();
+    top.forEach((family, index) => colorOf.set(family, FAMILY_PALETTE[index % FAMILY_PALETTE.length]));
+    const hasOther = ordered.length > top.length;
+    if (hasOther) {
+      colorOf.set(OTHER_FAMILY_LABEL, OTHER_FAMILY_COLOR);
+    }
+    const legendFamilies = hasOther ? [...top, OTHER_FAMILY_LABEL] : [...top];
+    const display = (entry) => {
+      const family = familyOf(entry);
+      return topSet.has(family) ? family : OTHER_FAMILY_LABEL;
+    };
+    return { colorOf, display, legendFamilies };
+  }
+
   const sourceLabels = {
     open_source: "Open weights",
     proprietary: "Proprietary"
@@ -514,8 +586,58 @@
     const allPoints = chartPoints(entries, metric);
     const points = plottablePoints(allPoints, scale);
     const frontier = plottablePoints([...frontierPoints], scale).sort((a, b) => a.x - b.x);
-    const visible = frontierOnly?.checked ? frontier : points;
+    const scatterPoints = frontierOnly?.checked ? frontier : points;
     const baselines = visibleBaselines();
+    const { colorOf, display, legendFamilies } = familyAssignments(scatterPoints);
+    const frontierIds = new Set(frontier.map((point) => point.entry.run_id));
+    const byFamily = new Map();
+    for (const point of scatterPoints) {
+      const family = display(point.entry);
+      if (!byFamily.has(family)) {
+        byFamily.set(family, []);
+      }
+      byFamily.get(family).push(point);
+    }
+    // Declutter: the frontier is labelled below; additionally label the best
+    // (highest-accuracy) non-frontier point per family. The rest are hover-only.
+    const labelIds = new Set();
+    for (const familyPoints of byFamily.values()) {
+      let best = null;
+      for (const point of familyPoints) {
+        if (frontierIds.has(point.entry.run_id)) {
+          continue;
+        }
+        if (best === null || point.y > best.y) {
+          best = point;
+        }
+      }
+      if (best !== null) {
+        labelIds.add(best.entry.run_id);
+      }
+    }
+    const familySeries = legendFamilies
+      .filter((family) => byFamily.has(family))
+      .map((family) => ({
+        name: family,
+        type: "scatter",
+        symbolSize: 11,
+        itemStyle: { color: colorOf.get(family) },
+        emphasis: { focus: "series" },
+        labelLayout: { hideOverlap: true },
+        data: byFamily.get(family).map((point) => ({
+          value: [point.x, point.y],
+          entry: point.entry,
+          symbol: pointSymbol(point.entry),
+          label: labelIds.has(point.entry.run_id)
+            ? {
+                show: true,
+                position: "top",
+                fontSize: 11,
+                formatter: () => shortModelLabel(point.entry)
+              }
+            : { show: false }
+        }))
+      }));
     if (!mainChart) {
       mainChart = window.echarts.init(chartElement);
       mainChart.on("click", (params) => {
@@ -526,14 +648,20 @@
       });
     }
     const yValues = [
-      ...visible.map((point) => point.y),
+      ...scatterPoints.map((point) => point.y),
       ...baselines.map((baseline) => baseline.accuracy * 100)
     ];
     const yMin = yValues.length > 0 ? Math.max(0, Math.floor(Math.min(...yValues)) - 1) : 0;
     mainChart.setOption(
       {
         animation: false,
-        grid: { left: 58, right: 24, top: 28, bottom: 62 },
+        grid: { left: 58, right: 24, top: 52, bottom: 62 },
+        legend: {
+          type: "scroll",
+          top: 0,
+          data: legendFamilies,
+          textStyle: { fontSize: 11 }
+        },
         tooltip: {
           trigger: "item",
           formatter: (params) => {
@@ -548,6 +676,7 @@
                 : `Accuracy: ${formatPercent(entry.accuracy)} ±${formatPercent(half)}`;
             const lines = [
               `<strong>${escapeHtml(shortModelLabel(entry))}</strong>`,
+              `Family: ${escapeHtml(familyOf(entry))} · ${isSelfHosted(entry) ? "self-hosted" : "cloud API"}`,
               `Prompt: ${escapeHtml(promptLabel(entry))}`,
               accuracyText,
               `${metric.axisLabel}: ${metric.format(metric.value(entry))}`
@@ -574,14 +703,36 @@
           min: yMin
         },
         series: [
+          ...familySeries,
           {
-            name: "Runs",
-            type: "scatter",
-            symbolSize: 10,
-            data: visible.map((point) => ({
+            name: "Pareto frontier",
+            type: "line",
+            showSymbol: true,
+            symbol: "emptyCircle",
+            symbolSize: 12,
+            itemStyle: { color: "#7cb342" },
+            lineStyle: { width: 2, color: "#7cb342" },
+            emphasis: { disabled: true },
+            blur: { lineStyle: { opacity: 0.9 }, itemStyle: { opacity: 0.9 } },
+            z: 5,
+            label: {
+              show: true,
+              position: "top",
+              fontSize: 11,
+              formatter: (params) =>
+                params.data.entry ? shortModelLabel(params.data.entry) : ""
+            },
+            labelLayout: { hideOverlap: true },
+            data: frontier.map((point) => ({
               value: [point.x, point.y],
               entry: point.entry
-            })),
+            }))
+          },
+          {
+            name: "_baselines",
+            type: "line",
+            data: [],
+            silent: true,
             markLine: {
               silent: true,
               symbol: "none",
@@ -598,25 +749,6 @@
                 label: { position: index % 2 === 0 ? "insideStartTop" : "insideEndTop" }
               }))
             }
-          },
-          {
-            name: "Pareto frontier",
-            type: "line",
-            showSymbol: true,
-            symbolSize: 12,
-            lineStyle: { width: 2 },
-            label: {
-              show: true,
-              position: "top",
-              fontSize: 11,
-              formatter: (params) =>
-                params.data.entry ? shortModelLabel(params.data.entry) : ""
-            },
-            labelLayout: { hideOverlap: true },
-            data: frontier.map((point) => ({
-              value: [point.x, point.y],
-              entry: point.entry
-            }))
           }
         ]
       },
@@ -634,7 +766,13 @@
         droppedByLog > 0
           ? ` ${droppedByLog} row${droppedByLog === 1 ? "" : "s"} with a zero value omitted on the log scale.`
           : "";
-      chartNote.textContent = `${points.length} rows plotted. ${unavailable} rows have unavailable values for this chart.${missingNote}${logNote}${baselineNote}`;
+      const shapeNote =
+        " Colour = model family; ● = cloud API, ▲ = self-hosted. Hover a point or legend to highlight its family.";
+      const costCaveat =
+        metric === X_METRICS.cost_per_million_items
+          ? " Self-hosted cost is estimated machine time; cloud cost is API list price, so the two are not directly comparable."
+          : "";
+      chartNote.textContent = `${points.length} rows plotted. ${unavailable} rows have unavailable values for this chart.${missingNote}${logNote}${shapeNote}${costCaveat}${baselineNote}`;
     }
   }
 
