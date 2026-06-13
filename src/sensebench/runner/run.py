@@ -62,6 +62,8 @@ LLM_MAX_TOKENS_PARAMETER: str = "max_tokens"
 LLM_SEED_PARAMETER: str = "seed"
 LLM_API_BASE_PARAMETER: str = "api_base"
 LLM_REASONING_EFFORT_PARAMETER: str = "reasoning_effort"
+RESOLVED_MODEL_FIELD: str = "resolved_model"
+RESOLVED_MODEL_COUNTS_FIELD: str = "resolved_model_counts"
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,10 +226,10 @@ def _model_with_resolved_snapshots(
     resolved_model_counts: dict[str, int] = _resolved_model_counts(calls=calls)
     return model.model_copy(
         update={
-            "resolved_model": _single_resolved_model(
+            RESOLVED_MODEL_FIELD: _single_resolved_model(
                 resolved_model_counts=resolved_model_counts,
             ),
-            "resolved_model_counts": resolved_model_counts,
+            RESOLVED_MODEL_COUNTS_FIELD: resolved_model_counts,
         },
     )
 
@@ -366,8 +368,7 @@ async def preflight_model(*, config: RunConfig, client: CompletionClient) -> Non
     completion = await client.complete(request=request)
     if completion.call.status != CallStatus.SUCCESS:
         raise RuntimeError(
-            "model preflight failed: "
-            f"{completion.call.error_kind}: {completion.call.error_message}"
+            f"model preflight failed: {completion.call.error_kind}: {completion.call.error_message}"
         )
 
 
@@ -391,7 +392,7 @@ def _prewarm_assets(*, config: RunConfig, dataset_index: DatasetIndex) -> None:
 async def _run_warmup_calls(*, config: RunConfig, client: CompletionClient) -> None:
     if config.warmup_calls <= 0:
         return
-    requests = [
+    requests: list[CompletionRequest] = [
         _preflight_request(config=config, call_id=f"{WARMUP_CALL_ID_PREFIX}-{index}")
         for index in range(1, config.warmup_calls + 1)
     ]

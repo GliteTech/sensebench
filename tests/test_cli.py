@@ -22,15 +22,45 @@ from sensebench.paths import (
 from sensebench.runs.models import MachineInfo, ModelHostingKind, RunMetadata
 from tests.run_fixtures import fixture_machine, make_metadata
 
-RUN_ARGS: list[str] = ["run", "--prompt", "p001", "--model", "fake", "--run-id", "run-1"]
+RUN_COMMAND: str = "run"
+RENDER_COMMAND: str = "render"
+SITE_COMMAND: str = "site"
+BUILD_COMMAND: str = "build"
+SET_RUNNER_COMMAND: str = "set-runner"
+MACHINE_INFO_COMMAND: str = "machine-info"
+PROMPT_ARG: str = "--prompt"
+MODEL_ARG: str = "--model"
+RUN_ID_ARG: str = "--run-id"
+PROMPT_ID: str = "p001"
+FAKE_MODEL_ID: str = "fake"
+RUN_ID: str = "run-1"
+RUN_ARGS: list[str] = [
+    RUN_COMMAND,
+    PROMPT_ARG,
+    PROMPT_ID,
+    MODEL_ARG,
+    FAKE_MODEL_ID,
+    RUN_ID_ARG,
+    RUN_ID,
+]
 SET_RUNNER_HANDLE: str = "octocat"
 SET_RUNNER_NAME: str = "Octo Cat"
+SELF_HOSTED_KIND_VALUE: str = "self_hosted"
+LOCAL_ENDPOINT_BASE_URL: str = "http://localhost:8000/v1"
+REMOTE_ENDPOINT_BASE_URL: str = "https://gpu-box.example.com/v1"
+
+
+def _run_args(*, extra: list[str] | None = None, include_run_id: bool = True) -> list[str]:
+    args = list(RUN_ARGS if include_run_id else RUN_ARGS[:5])
+    if extra is not None:
+        args.extend(extra)
+    return args
 
 
 def test_cli_uses_registered_dataset_default() -> None:
     parser = _build_parser()
 
-    args = parser.parse_args(["render", "--prompt", "p001", "--limit", "1"])
+    args = parser.parse_args([RENDER_COMMAND, PROMPT_ARG, PROMPT_ID, "--limit", "1"])
 
     assert args.dataset == DEFAULT_LEXEN_RELEASE_ID
     assert args.dataset_jsonl is None
@@ -39,7 +69,7 @@ def test_cli_uses_registered_dataset_default() -> None:
 def test_run_cli_resolves_concurrency_by_hosting_kind() -> None:
     parser = _build_parser()
 
-    args = parser.parse_args(["run", "--prompt", "p001", "--model", "fake", "--run-id", "run-1"])
+    args = parser.parse_args(_run_args())
 
     assert args.concurrency is None
     assert args.no_progress is False
@@ -53,16 +83,14 @@ def test_run_cli_resolves_concurrency_by_hosting_kind() -> None:
         _resolved_concurrency(args=args, hosting_kind=ModelHostingKind.SELF_HOSTED)
         == DEFAULT_SELF_HOSTED_CONCURRENCY
     )
-    explicit = parser.parse_args([*RUN_ARGS, "--concurrency", "7"])
-    assert (
-        _resolved_concurrency(args=explicit, hosting_kind=ModelHostingKind.SELF_HOSTED) == 7
-    )
+    explicit = parser.parse_args(_run_args(extra=["--concurrency", "7"]))
+    assert _resolved_concurrency(args=explicit, hosting_kind=ModelHostingKind.SELF_HOSTED) == 7
 
 
 def test_run_cli_run_id_is_optional() -> None:
     parser = _build_parser()
 
-    args = parser.parse_args(["run", "--prompt", "p001", "--model", "fake"])
+    args = parser.parse_args(_run_args(include_run_id=False))
 
     assert args.run_id is None
     assert args.skip_preflight is False
@@ -71,9 +99,7 @@ def test_run_cli_run_id_is_optional() -> None:
 def test_run_cli_can_disable_progress() -> None:
     parser = _build_parser()
 
-    args = parser.parse_args(
-        ["run", "--prompt", "p001", "--model", "fake", "--run-id", "run-1", "--no-progress"]
-    )
+    args = parser.parse_args(_run_args(extra=["--no-progress"]))
 
     assert args.no_progress is True
 
@@ -82,27 +108,27 @@ def test_run_cli_rejects_non_positive_votes() -> None:
     parser = _build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args([*RUN_ARGS, "--votes", "0"])
+        parser.parse_args(_run_args(extra=["--votes", "0"]))
 
 
 def test_run_cli_rejects_non_positive_concurrency() -> None:
     parser = _build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args([*RUN_ARGS, "--concurrency", "0"])
+        parser.parse_args(_run_args(extra=["--concurrency", "0"]))
 
 
 def test_run_cli_rejects_unknown_source_kind() -> None:
     parser = _build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args([*RUN_ARGS, "--source-kind", "bogus"])
+        parser.parse_args(_run_args(extra=["--source-kind", "bogus"]))
 
 
 def test_site_build_cli_defaults() -> None:
     parser = _build_parser()
 
-    args = parser.parse_args(["site", "build"])
+    args = parser.parse_args([SITE_COMMAND, BUILD_COMMAND])
 
     assert args.results_dir == str(SUBMITTED_RESULTS_DIR)
     assert args.output_dir == str(SITE_OUTPUT_DIR)
@@ -113,7 +139,7 @@ def test_set_runner_requires_github_handle() -> None:
     parser = _build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args(["set-runner", "runs/run-1"])
+        parser.parse_args([SET_RUNNER_COMMAND, "runs/run-1"])
 
 
 def test_set_runner_rewrites_runner_identity(tmp_path: Path) -> None:
@@ -131,7 +157,7 @@ def test_set_runner_rewrites_runner_identity(tmp_path: Path) -> None:
 
     exit_code = main(
         [
-            "set-runner",
+            SET_RUNNER_COMMAND,
             str(run_dir),
             "--github-handle",
             SET_RUNNER_HANDLE,
@@ -155,9 +181,9 @@ def test_run_cli_parses_self_hosted_flags() -> None:
         [
             *RUN_ARGS,
             "--hosting-kind",
-            "self_hosted",
+            SELF_HOSTED_KIND_VALUE,
             "--endpoint-base-url",
-            "http://localhost:8000/v1",
+            LOCAL_ENDPOINT_BASE_URL,
             "--hourly-rate-usd",
             "2.49",
             "--provider",
@@ -182,29 +208,29 @@ def test_run_cli_rejects_negative_warmup_calls() -> None:
     parser = _build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args([*RUN_ARGS, "--warmup-calls", "-1"])
+        parser.parse_args(_run_args(extra=["--warmup-calls", "-1"]))
 
 
 def test_run_cli_rejects_negative_hourly_rate() -> None:
     parser = _build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args([*RUN_ARGS, "--hourly-rate-usd", "-1"])
+        parser.parse_args(_run_args(extra=["--hourly-rate-usd", "-1"]))
 
 
 def test_self_hosted_model_reference_prefixes_requested_model() -> None:
     parser = _build_parser()
     args = parser.parse_args(
         [
-            "run",
-            "--prompt",
-            "p001",
-            "--model",
+            RUN_COMMAND,
+            PROMPT_ARG,
+            PROMPT_ID,
+            MODEL_ARG,
             "Qwen/Qwen3.6-27B-FP8",
             "--hosting-kind",
-            "self_hosted",
+            SELF_HOSTED_KIND_VALUE,
             "--endpoint-base-url",
-            "http://localhost:8000/v1",
+            LOCAL_ENDPOINT_BASE_URL,
         ]
     )
 
@@ -215,7 +241,7 @@ def test_self_hosted_model_reference_prefixes_requested_model() -> None:
 
 
 def test_machine_info_command_emits_machine_json(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = main(["machine-info", "--provider", "vast.ai", "--hourly-rate-usd", "2.5"])
+    exit_code = main([MACHINE_INFO_COMMAND, "--provider", "vast.ai", "--hourly-rate-usd", "2.5"])
 
     assert exit_code == 0
     machine = MachineInfo.model_validate_json(capsys.readouterr().out)
@@ -231,9 +257,9 @@ def test_machine_info_helper_merges_overrides(tmp_path: Path) -> None:
         [
             *RUN_ARGS,
             "--hosting-kind",
-            "self_hosted",
+            SELF_HOSTED_KIND_VALUE,
             "--endpoint-base-url",
-            "https://gpu-box.example.com/v1",
+            REMOTE_ENDPOINT_BASE_URL,
             "--machine-info-json",
             str(machine_path),
             "--hourly-rate-usd",
@@ -241,7 +267,7 @@ def test_machine_info_helper_merges_overrides(tmp_path: Path) -> None:
         ]
     )
 
-    machine = _machine_info(args=args, endpoint_base_url="https://gpu-box.example.com/v1")
+    machine = _machine_info(args=args, endpoint_base_url=REMOTE_ENDPOINT_BASE_URL)
 
     assert machine is not None
     assert machine.gpu == fixture_machine().gpu
@@ -255,12 +281,12 @@ def test_machine_info_helper_remote_endpoint_without_json_is_none() -> None:
         [
             *RUN_ARGS,
             "--hosting-kind",
-            "self_hosted",
+            SELF_HOSTED_KIND_VALUE,
             "--endpoint-base-url",
-            "https://gpu-box.example.com/v1",
+            REMOTE_ENDPOINT_BASE_URL,
         ]
     )
 
-    machine = _machine_info(args=args, endpoint_base_url="https://gpu-box.example.com/v1")
+    machine = _machine_info(args=args, endpoint_base_url=REMOTE_ENDPOINT_BASE_URL)
 
     assert machine is None

@@ -9,7 +9,14 @@ from sensebench.datasets.loaders import (
     JsonDatasetRecord,
     load_jsonl_dataset,
 )
-from sensebench.datasets.models import DatasetID, DocumentID, ItemID, SenseKey, SentenceID
+from sensebench.datasets.models import (
+    DatasetID,
+    DatasetPos,
+    DocumentID,
+    ItemID,
+    SenseKey,
+    SentenceID,
+)
 
 DATASET_ID_FIXTURE: DatasetID = "fixture"
 ITEMS_JSONL_FILENAME: str = "items.jsonl"
@@ -20,7 +27,7 @@ FIRST_SENTENCE_ID: SentenceID = "d1.s1"
 SECOND_SENTENCE_ID: SentenceID = "d1.s2"
 FIRST_WORD: str = "alpha"
 SECOND_WORD: str = "beta"
-NOUN_POS: str = "NOUN"
+NOUN_POS: DatasetPos = DatasetPos.NOUN
 FIRST_SENSE_KEY: SenseKey = "alpha%1:00:00::"
 SECOND_SENSE_KEY: SenseKey = "beta%1:00:00::"
 

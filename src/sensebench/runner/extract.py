@@ -5,7 +5,7 @@ from __future__ import annotations
 from ast import literal_eval
 from dataclasses import dataclass
 from json import JSONDecodeError, loads
-from re import DOTALL, IGNORECASE, Pattern, compile
+from re import DOTALL, IGNORECASE, Match, Pattern, compile
 from typing import assert_never
 
 from sensebench.prompts.models import SENSE_INDEX_FIELD, OutputMode
@@ -142,7 +142,7 @@ def _candidate_json_texts(*, text: str) -> list[str]:
     full_fence_match = FULL_FENCED_BLOCK_PATTERN.fullmatch(text)
     if full_fence_match is not None:
         _append_unique_text(values=candidates, value=full_fence_match.group("body"))
-    fence_matches = list(FENCED_BLOCK_PATTERN.finditer(text))
+    fence_matches: list[Match[str]] = list(FENCED_BLOCK_PATTERN.finditer(text))
     if len(fence_matches) == 1:
         _append_unique_text(values=candidates, value=fence_matches[0].group("body"))
     json_substrings = _json_object_substrings(text=text)

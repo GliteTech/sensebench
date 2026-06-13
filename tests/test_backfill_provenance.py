@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 from types import ModuleType
 
+from sensebench.prompts.models import SENSE_INDEX_FIELD
 from sensebench.runner.writer import write_run_artifacts
-from sensebench.runs.models import RunMetadata
+from sensebench.runs.models import RunMetadata, SelfHostedLlmReference
 from sensebench.verify.runs import RunValidationRule, verify_run_directory
 from tests.run_fixtures import (
     SECOND_SENSE_KEY,
@@ -26,6 +27,8 @@ CHECKPOINT: str = "ibm-granite/granite-4.1-8b-fp8"
 PINNED_REVISION: str = "070021b3608433b6107a00733d561c9779b9937e"
 DEFAULT_IMAGE: str = "vllm/vllm-openai:v0.22.1"
 RELEASE_COMMIT: str = "947a5470000000000000000000000000deadbeef"
+HF_REVISION_FIELD: str = "hf_revision"
+GIT_COMMIT_FIELD: str = "git_commit"
 
 
 def _load_backfill_module() -> ModuleType:
@@ -55,7 +58,7 @@ def _manifest() -> dict[str, object]:
 
 def _write_self_hosted_run(*, run_dir: Path) -> None:
     model = self_hosted_model(model_name=CHECKPOINT).model_copy(
-        update={"hf_revision": None},
+        update={HF_REVISION_FIELD: None},
     )
     metadata = make_metadata(
         item_count=1,
@@ -65,7 +68,7 @@ def _write_self_hosted_run(*, run_dir: Path) -> None:
         run_id=RUN_ID,
         model=model,
         machine=fixture_machine(),
-    ).model_copy(update={"git_commit": None})
+    ).model_copy(update={GIT_COMMIT_FIELD: None})
     prediction = voted_prediction(
         chosen_index=2,
         gold_sense_keys=[SECOND_SENSE_KEY],
@@ -75,7 +78,7 @@ def _write_self_hosted_run(*, run_dir: Path) -> None:
         run_dir=run_dir,
         metadata=metadata,
         predictions=[prediction],
-        calls=[success_call(raw_output=json.dumps({"sense_index": 2}))],
+        calls=[success_call(raw_output=json.dumps({SENSE_INDEX_FIELD: 2}))],
     )
 
 
@@ -98,6 +101,7 @@ def test_backfill_enriches_self_hosted_run(tmp_path: Path) -> None:
     metadata = RunMetadata.model_validate_json(
         (run_dir / "run.json").read_text(encoding="utf-8"),
     )
+    assert isinstance(metadata.model, SelfHostedLlmReference)
     assert metadata.model.hf_revision == PINNED_REVISION
     assert metadata.model.container_image == DEFAULT_IMAGE
     assert metadata.git_commit == RELEASE_COMMIT

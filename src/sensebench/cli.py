@@ -65,7 +65,8 @@ from sensebench.site.build import DEFAULT_SITE_BASE_URL, build_site
 from sensebench.verify.runs import RunValidationReport, verify_run_directory
 from sensebench.wordnet import SenseCandidate, get_candidate_senses, wordnet_version
 
-CommandHandler = Callable[..., int]
+type CommandHandler = Callable[..., int]
+
 DEFAULT_RUN_CONCURRENCY: int = 512
 DEFAULT_SELF_HOSTED_CONCURRENCY: int = 256
 DEFAULT_MAX_TOKENS: int = 512
@@ -78,6 +79,20 @@ RUN_ID_DATE_FORMAT: str = "%Y%m%d"
 RUN_ID_COLLISION_TIME_FORMAT: str = "%H%M%S"
 RUN_ID_SLUG_KEEP_CHARACTERS: str = "._-"
 SENSEBENCH_REPO_URL: str = "https://github.com/GliteTech/sensebench"
+RENDER_ITEM_ID_FIELD: str = "item_id"
+RENDER_MESSAGES_FIELD: str = "messages"
+RENDER_ROLE_FIELD: str = "role"
+RENDER_CONTENT_FIELD: str = "content"
+RENDER_CANDIDATES_FIELD: str = "candidates"
+RENDER_INDEX_FIELD: str = "index"
+RENDER_SENSE_KEY_FIELD: str = "sense_key"
+RENDER_SYNSET_ID_FIELD: str = "synset_id"
+RUNNER_FIELD: str = "runner"
+MACHINE_PROVIDER_FIELD: str = "provider"
+MACHINE_INSTANCE_ID_FIELD: str = "instance_id"
+MACHINE_HOURLY_RATE_USD_FIELD: str = "hourly_rate_usd"
+INFERENCE_ENGINE_FIELD: str = "inference_engine"
+INFERENCE_ENGINE_VERSION_FIELD: str = "inference_engine_version"
 MISSING_HANDLE_WARNING: str = (
     "warning: --github-handle not set; this run will not be leaderboard-eligible "
     "(fix later with: sensebench set-runner <run-dir> --github-handle <handle>)"
@@ -174,7 +189,7 @@ def _resolve_dataset(*, args: argparse.Namespace) -> DatasetBundle | None:
 
 
 def _slugify(*, value: str) -> str:
-    slug_characters = [
+    slug_characters: list[str] = [
         character if character.isalnum() or character in RUN_ID_SLUG_KEEP_CHARACTERS else "-"
         for character in value.lower()
     ]
@@ -192,9 +207,7 @@ def _default_run_id(
     output_root: Path,
 ) -> str:
     now = datetime.now(tz=UTC)
-    base = (
-        f"{_slugify(value=model)}-{prompt_id}-{dataset_label}-{now.strftime(RUN_ID_DATE_FORMAT)}"
-    )
+    base = f"{_slugify(value=model)}-{prompt_id}-{dataset_label}-{now.strftime(RUN_ID_DATE_FORMAT)}"
     if not (output_root / base).exists():
         return base
     return f"{base}-{now.strftime(RUN_ID_COLLISION_TIME_FORMAT)}"
@@ -296,7 +309,7 @@ def _print_submission_guidance(*, completed: CompletedRun) -> None:
     )
     print(
         f"  2. Fork {SENSEBENCH_REPO_URL} and copy the run directory "
-        f"to results/{metadata.run_id}/"
+        f"to {SUBMITTED_RESULTS_DIR / metadata.run_id}/"
     )
     print(f"  3. Open a pull request titled submit-{metadata.run_id}")
     print(
@@ -356,19 +369,19 @@ def _cmd_render(*, args: argparse.Namespace) -> int:
         print(
             json.dumps(
                 {
-                    "item_id": item.item_id,
-                    "messages": [
+                    RENDER_ITEM_ID_FIELD: item.item_id,
+                    RENDER_MESSAGES_FIELD: [
                         {
-                            "role": message.role.value,
-                            "content": message.content,
+                            RENDER_ROLE_FIELD: message.role.value,
+                            RENDER_CONTENT_FIELD: message.content,
                         }
                         for message in rendered.messages
                     ],
-                    "candidates": [
+                    RENDER_CANDIDATES_FIELD: [
                         {
-                            "index": candidate.index,
-                            "sense_key": candidate.sense_key,
-                            "synset_id": candidate.synset_id,
+                            RENDER_INDEX_FIELD: candidate.index,
+                            RENDER_SENSE_KEY_FIELD: candidate.sense_key,
+                            RENDER_SYNSET_ID_FIELD: candidate.synset_id,
                         }
                         for candidate in rendered.candidates
                     ],
@@ -440,11 +453,11 @@ def _sampling(*, args: argparse.Namespace) -> SamplingParameters:
 def _machine_overrides(*, args: argparse.Namespace) -> dict[str, object]:
     overrides: dict[str, object] = {}
     if args.provider is not None:
-        overrides["provider"] = str(args.provider)
+        overrides[MACHINE_PROVIDER_FIELD] = str(args.provider)
     if args.instance_id is not None:
-        overrides["instance_id"] = str(args.instance_id)
+        overrides[MACHINE_INSTANCE_ID_FIELD] = str(args.instance_id)
     if args.hourly_rate_usd is not None:
-        overrides["hourly_rate_usd"] = float(args.hourly_rate_usd)
+        overrides[MACHINE_HOURLY_RATE_USD_FIELD] = float(args.hourly_rate_usd)
     return overrides
 
 
@@ -484,8 +497,8 @@ def _probe_self_hosted_endpoint(*, model: SelfHostedLlmReference) -> SelfHostedL
     if model.inference_engine is None and probe.engine_version is not None:
         return model.model_copy(
             update={
-                "inference_engine": VLLM_ENGINE_NAME,
-                "inference_engine_version": probe.engine_version,
+                INFERENCE_ENGINE_FIELD: VLLM_ENGINE_NAME,
+                INFERENCE_ENGINE_VERSION_FIELD: probe.engine_version,
             }
         )
     return model
@@ -569,7 +582,7 @@ def _cmd_set_runner(*, args: argparse.Namespace) -> int:
         name=args.runner_name if args.runner_name is not None else metadata.runner.name,
         contact=args.runner_contact if args.runner_contact is not None else metadata.runner.contact,
     )
-    updated = metadata.model_copy(update={"runner": updated_runner})
+    updated = metadata.model_copy(update={RUNNER_FIELD: updated_runner})
     metadata_path.write_text(updated.model_dump_json(indent=2) + "\n", encoding="utf-8")
     print(f"{metadata_path}: runner github_handle={updated_runner.github_handle}")
     return 0

@@ -4,6 +4,7 @@ from sensebench.datasets.context import build_dataset_index
 from sensebench.datasets.models import (
     DatasetBundle,
     DatasetID,
+    DatasetPos,
     Document,
     DocumentID,
     ItemID,
@@ -13,13 +14,12 @@ from sensebench.datasets.models import (
     Token,
     WsdItem,
 )
-from sensebench.paths import P001_PROMPT_PATH, PROMPT_JSON_SUFFIX, PROMPT_REGISTRY_DIR
+from sensebench.paths import P001_PROMPT_PATH, P003_PROMPT_PATH
 from sensebench.prompts.models import TEMPLATE_VARIABLE_CONTEXT
 from sensebench.prompts.registry import load_prompt_definition
 from sensebench.prompts.render import _render_template, render_task
 from sensebench.wordnet import SenseCandidate, SynsetID, WordNetPos
 
-P003_PROMPT_PATH = PROMPT_REGISTRY_DIR / f"p003{PROMPT_JSON_SUFFIX}"
 DETOKENIZED_ITEM_ID: ItemID = "i2"
 DETOKENIZED_SENTENCE_ID: SentenceID = "s2"
 
@@ -30,7 +30,7 @@ SENTENCE_ID: SentenceID = "s1"
 ITEM_ID: ItemID = "i1"
 TARGET_TEXT: str = "bank"
 TARGET_LEMMA: str = "bank"
-TARGET_POS: str = "NOUN"
+TARGET_POS: DatasetPos = DatasetPos.NOUN
 SENSE_KEY: SenseKey = "bank%1:17:00::"
 SYNSET_ID: SynsetID = "bank.n.01"
 DEFINITION: str = "sloping land"

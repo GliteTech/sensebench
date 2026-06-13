@@ -4,15 +4,22 @@ from dataclasses import dataclass, field
 
 from sensebench.datasets.models import ItemID
 from sensebench.prompts.render import ChatMessage, RenderedTask
-from sensebench.runs.models import AttemptKind, CallID, CallRecord, ModelID, PredictionRecord
+from sensebench.runs.models import (
+    AttemptKind,
+    CallID,
+    CallRecord,
+    ModelID,
+    PositiveInt,
+    PredictionRecord,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class CompletionRequest:
     call_id: CallID
     item_id: ItemID
-    vote_index: int
-    attempt_index: int
+    vote_index: PositiveInt
+    attempt_index: PositiveInt
     attempt_kind: AttemptKind
     model: ModelID
     messages: list[ChatMessage]

@@ -8,6 +8,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from sensebench.paths import PROC_CPUINFO_PATH, PROC_MEMINFO_PATH
 from sensebench.runs.models import MachineGpuInfo, MachineInfo
 
 SUBPROCESS_TIMEOUT_SECONDS: float = 10.0
@@ -21,8 +22,7 @@ GPU_NAME_JOIN_SEPARATOR: str = " + "
 CUDA_VERSION_PATTERN: re.Pattern[str] = re.compile(r"CUDA Version:\s*([0-9.]+)")
 CPU_MODEL_PATTERN: re.Pattern[str] = re.compile(r"^model name\s*:\s*(.+)$", re.MULTILINE)
 MEM_TOTAL_PATTERN: re.Pattern[str] = re.compile(r"^MemTotal:\s*(\d+)\s*kB$", re.MULTILINE)
-PROC_CPUINFO_PATH: Path = Path("/proc/cpuinfo")
-PROC_MEMINFO_PATH: Path = Path("/proc/meminfo")
+CUDA_VERSION_FIELD: str = "cuda_version"
 MACOS_CPU_MODEL_COMMAND: list[str] = ["sysctl", "-n", "machdep.cpu.brand_string"]
 MACOS_MEM_BYTES_COMMAND: list[str] = ["sysctl", "-n", "hw.memsize"]
 KIB_PER_GIB: float = 1024.0 * 1024.0
@@ -111,7 +111,7 @@ def _collect_gpu_info() -> MachineGpuInfo | None:
     banner = _run_command(args=[NVIDIA_SMI_COMMAND])
     if banner is None:
         return gpu
-    return gpu.model_copy(update={"cuda_version": parse_cuda_version(banner=banner)})
+    return gpu.model_copy(update={CUDA_VERSION_FIELD: parse_cuda_version(banner=banner)})
 
 
 def _collect_cpu_model() -> str | None:

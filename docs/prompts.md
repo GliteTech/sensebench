@@ -71,7 +71,7 @@ Minimal example:
   "id": "p003",
   "name": "Definition + Examples + POS, Frequency Order",
   "description": "Shows WordNet ID, POS, definition, examples; frequency-ordered senses.",
-  "template_type": "chat_messages",
+  "template_kind": "chat_messages",
   "template": {
     "messages": [
       {
@@ -139,7 +139,7 @@ only describe project history.
 Short explanation of what the prompt renders in NLP terms. It should be understandable without
 knowing SenseBench implementation history or earlier experiments.
 
-`template_type`
+`template_kind`
 
 For v1, must be:
 
@@ -394,9 +394,10 @@ Maximum number of synonyms or lemma names to include for each candidate sense. M
 
 Optional boolean, default `false`. When `true`, the renderer detokenizes the Penn-Treebank-style
 source tokens of the context into natural English (attaching punctuation, joining contractions, and
-restoring `` `` ''` `` quotes to `"`) before marking the target. When omitted or `false`, the context
-is the space-joined tokens exactly as stored in the dataset. Because this changes the literal text
-the model receives, it is benchmark-relevant: a detokenized variant must be a new prompt ID.
+restoring PTB quote tokens to double quotes) before marking the target. When omitted or `false`, the
+context is the space-joined tokens exactly as stored in the dataset. Because this changes the
+literal text the model receives, it is benchmark-relevant: a detokenized variant must be a new
+prompt ID.
 
 ## Candidate Sense Indexing
 
@@ -491,7 +492,7 @@ The prompt validator must check:
 * no duplicate prompt ID exists
 * required fields are present
 * no unknown top-level fields exist, except explicitly allowed optional fields
-* `template_type` is supported
+* `template_kind` is supported
 * all template messages have valid roles and non-empty content
 * all template variables are known
 * required `params` fields are present and valid

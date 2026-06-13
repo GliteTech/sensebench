@@ -43,6 +43,7 @@ SINGLE_GPU_DRIVER: str = "565.57.01"
 MULTI_GPU_COUNT: int = 4
 EXPECTED_CUDA_VERSION: str = "12.7"
 EXPECTED_CPU_MODEL: str = "AMD EPYC 9554 64-Core Processor"
+SUBPROCESS_RUN_ATTR: str = "run"
 
 
 def test_parse_gpu_query_output_single_gpu() -> None:
@@ -96,7 +97,7 @@ def test_collect_machine_info_degrades_without_probes(monkeypatch: MonkeyPatch) 
     def raising_run(*args: object, **kwargs: object) -> None:
         raise FileNotFoundError("command not found")
 
-    monkeypatch.setattr(subprocess, "run", raising_run)
+    monkeypatch.setattr(target=subprocess, name=SUBPROCESS_RUN_ATTR, value=raising_run)
 
     machine = collect_machine_info(provider="vast.ai", instance_id="123", hourly_rate_usd=2.5)
 

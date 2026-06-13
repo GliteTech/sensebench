@@ -50,6 +50,8 @@ SELF_HOSTED_RUN_ID: RunID = "run-self-hosted"
 SECOND_PROMPT_ID: PromptID = "p002"
 PLAIN_SENSE_OUTPUT: str = "2"
 GITHUB_HANDLE_ISSUE_TEXT: str = "runner.github_handle"
+VOTES_PER_ITEM_ISSUE_TEXT: str = "votes_per_item"
+SEMANTIC_REASKS_ISSUE_TEXT: str = "semantic_reasks"
 EXPECTED_GPU_LABEL: str = "H100 80GB"
 
 
@@ -206,7 +208,7 @@ def test_best_group_key_collapses_prompts_and_runs(tmp_path: Path) -> None:
     collection = collect_leaderboard_entries(results_dir=results_dir, official=False)
 
     assert len(collection.entries) == 2
-    group_keys = {entry.best_group_key for entry in collection.entries}
+    group_keys: set[str] = {entry.best_group_key for entry in collection.entries}
     assert len(group_keys) == 1, "same model and dataset share one best-view group"
 
 
@@ -220,7 +222,7 @@ def _policy(*, votes: int, reasks: int) -> RunPolicy:
 
 
 def test_protocol_issues_accepts_canonical_single_vote() -> None:
-    issues = _protocol_issues(
+    issues: list[str] = _protocol_issues(
         policy=_policy(votes=OFFICIAL_VOTES_PER_ITEM, reasks=OFFICIAL_SEMANTIC_REASKS),
     )
 
@@ -228,14 +230,14 @@ def test_protocol_issues_accepts_canonical_single_vote() -> None:
 
 
 def test_protocol_issues_rejects_self_consistency_voting() -> None:
-    issues = _protocol_issues(policy=_policy(votes=3, reasks=OFFICIAL_SEMANTIC_REASKS))
+    issues: list[str] = _protocol_issues(policy=_policy(votes=3, reasks=OFFICIAL_SEMANTIC_REASKS))
 
     assert len(issues) == 1
-    assert "votes_per_item" in issues[0]
+    assert VOTES_PER_ITEM_ISSUE_TEXT in issues[0]
 
 
 def test_protocol_issues_rejects_extra_reasks() -> None:
-    issues = _protocol_issues(policy=_policy(votes=OFFICIAL_VOTES_PER_ITEM, reasks=2))
+    issues: list[str] = _protocol_issues(policy=_policy(votes=OFFICIAL_VOTES_PER_ITEM, reasks=2))
 
     assert len(issues) == 1
-    assert "semantic_reasks" in issues[0]
+    assert SEMANTIC_REASKS_ISSUE_TEXT in issues[0]

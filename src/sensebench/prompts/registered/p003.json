@@ -4,7 +4,7 @@
   "name": "5+1 Context (Detokenized), Frequency-Ordered WordNet Glosses",
   "description": "Identical to p001 but the context is detokenized from the Penn-Treebank-style source tokens into natural English (punctuation, contractions, and quotation marks restored) before the target is marked. English fine-grained WSD prompt using the target sentence with 5 preceding and 1 following sentence, <t>...</t> target marking, WordNet sense keys, definitions, synonyms, and usage examples. Candidate senses are ordered by WordNet frequency; the model returns JSON with sense_index.",
   "supersedes": "p001",
-  "template_type": "chat_messages",
+  "template_kind": "chat_messages",
   "template": {
     "messages": [
       {

@@ -8,11 +8,16 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from sensebench.datasets.models import (
+    ContentHash,
     DatasetBundle,
     DatasetID,
+    DatasetPos,
+    DatasetRevision,
+    DatasetVersion,
     Document,
     DocumentID,
     ItemID,
+    LemmaText,
     SenseKey,
     Sentence,
     SentenceID,
@@ -22,6 +27,7 @@ from sensebench.datasets.models import (
 
 DEFAULT_DATASET_VERSION: str | None = None
 HASH_CHUNK_SIZE_BYTES: int = 1024 * 1024
+CONTENT_HASH_PREFIX: str = "sha256:"
 CONTEXT_DOCUMENT_ID_SUFFIX: str = "::context"
 ORIGINAL_DOCUMENT_ID_METADATA_KEY: str = "original_document_id"
 ORIGINAL_SENTENCE_ID_METADATA_KEY: str = "original_sentence_id"
@@ -37,8 +43,8 @@ class JsonDatasetRecord(BaseModel):
     sentence_index: int = Field(ge=0)
     target_token_index: int = Field(ge=0)
     target_text: str = Field(min_length=1)
-    lemma: str = Field(min_length=1)
-    pos: str = Field(min_length=1)
+    lemma: LemmaText = Field(min_length=1)
+    pos: DatasetPos
     gold_sense_keys: list[SenseKey] = Field(min_length=1)
     sentences: list[list[str]] = Field(min_length=1)
     metadata: dict[str, str] = Field(default_factory=dict)
@@ -53,7 +59,7 @@ class JsonDatasetRecord(BaseModel):
         return self
 
 
-def file_content_hash(*, path: Path) -> str:
+def file_content_hash(*, path: Path) -> ContentHash:
     digest = sha256()
     with path.open(mode="rb") as handle:
         while True:
@@ -61,7 +67,7 @@ def file_content_hash(*, path: Path) -> str:
             if len(chunk) == 0:
                 break
             digest.update(chunk)
-    return f"sha256:{digest.hexdigest()}"
+    return f"{CONTENT_HASH_PREFIX}{digest.hexdigest()}"
 
 
 def _tokens_from_sentence(
@@ -104,9 +110,9 @@ def _bundle_from_records(
     *,
     records: list[JsonDatasetRecord],
     dataset_id: DatasetID,
-    dataset_version: str | None,
-    dataset_revision: str | None,
-    content_hash: str | None,
+    dataset_version: DatasetVersion | None,
+    dataset_revision: DatasetRevision | None,
+    content_hash: ContentHash | None,
 ) -> DatasetBundle:
     documents: list[Document] = []
     items: list[WsdItem] = []
@@ -167,8 +173,8 @@ def load_jsonl_dataset(
     *,
     path: Path,
     dataset_id: DatasetID,
-    dataset_version: str | None = DEFAULT_DATASET_VERSION,
-    dataset_revision: str | None = None,
+    dataset_version: DatasetVersion | None = DEFAULT_DATASET_VERSION,
+    dataset_revision: DatasetRevision | None = None,
 ) -> DatasetBundle:
     records: list[JsonDatasetRecord] = []
     with path.open(encoding="utf-8") as handle:

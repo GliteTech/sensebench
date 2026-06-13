@@ -6,8 +6,6 @@ from pathlib import Path
 
 from pytest import MonkeyPatch, raises
 
-import sensebench.leaderboard.aggregate as aggregate_module
-import sensebench.site.build as site_build_module
 from sensebench.datasets.context import build_dataset_index
 from sensebench.datasets.loaders import load_jsonl_dataset
 from sensebench.datasets.models import DatasetBundle, DatasetID
@@ -27,6 +25,7 @@ from sensebench.paths import (
     SITE_DATA_DIRNAME,
     SITE_OUTPUT_DIR,
     SITE_RUNS_DIRNAME,
+    SMOKE_ITEMS_PATH,
     SUBMITTED_RESULTS_DIR,
 )
 from sensebench.prompts.models import SENSE_INDEX_FIELD, MessageRole
@@ -67,6 +66,7 @@ from sensebench.runs.models import (
     VoteRecord,
     VoteStatus,
 )
+from sensebench.site.build import RunDetail, SiteData, _format_money, build_site
 from sensebench.wordnet import get_candidate_senses
 from tests.run_fixtures import (
     FIXTURE_GPU_NAME,
@@ -78,7 +78,6 @@ from tests.run_fixtures import (
     self_hosted_model,
 )
 
-SMOKE_ITEMS_PATH: Path = Path("tests/data/smoke_items.jsonl")
 TEST_RELEASE_ID: str = DEFAULT_LEXEN_RELEASE_ID
 TEST_DATASET_ID: DatasetID = LEXEN_DATASET_ID
 TEST_RELEASE_URL: str = "https://example.com/items.jsonl"
@@ -141,6 +140,13 @@ BAD_CONTENT_HASH: str = "sha256:bad"
 GET_DATASET_RELEASE_ATTR: str = "get_dataset_release"
 LOAD_REGISTERED_DATASET_ATTR: str = "load_registered_dataset"
 DATASET_RELEASES_ATTR: str = "DATASET_RELEASES"
+AGGREGATE_GET_DATASET_RELEASE_TARGET: str = "sensebench.leaderboard.aggregate.get_dataset_release"
+AGGREGATE_LOAD_REGISTERED_DATASET_TARGET: str = (
+    "sensebench.leaderboard.aggregate.load_registered_dataset"
+)
+SITE_GET_DATASET_RELEASE_TARGET: str = "sensebench.site.build.get_dataset_release"
+SITE_LOAD_REGISTERED_DATASET_TARGET: str = "sensebench.site.build.load_registered_dataset"
+SITE_DATASET_RELEASES_TARGET: str = "sensebench.site.build.DATASET_RELEASES"
 
 
 def raw_output_for_sense_index(*, sense_index: int) -> str:
@@ -176,31 +182,11 @@ def _patch_registered_dataset(
     def fake_load_registered_dataset(*, release: DatasetRelease) -> DatasetBundle:
         return dataset
 
-    monkeypatch.setattr(
-        target=aggregate_module,
-        name=GET_DATASET_RELEASE_ATTR,
-        value=fake_get_dataset_release,
-    )
-    monkeypatch.setattr(
-        target=aggregate_module,
-        name=LOAD_REGISTERED_DATASET_ATTR,
-        value=fake_load_registered_dataset,
-    )
-    monkeypatch.setattr(
-        target=site_build_module,
-        name=GET_DATASET_RELEASE_ATTR,
-        value=fake_get_dataset_release,
-    )
-    monkeypatch.setattr(
-        target=site_build_module,
-        name=LOAD_REGISTERED_DATASET_ATTR,
-        value=fake_load_registered_dataset,
-    )
-    monkeypatch.setattr(
-        target=site_build_module,
-        name=DATASET_RELEASES_ATTR,
-        value={release.release_id: release},
-    )
+    monkeypatch.setattr(AGGREGATE_GET_DATASET_RELEASE_TARGET, fake_get_dataset_release)
+    monkeypatch.setattr(AGGREGATE_LOAD_REGISTERED_DATASET_TARGET, fake_load_registered_dataset)
+    monkeypatch.setattr(SITE_GET_DATASET_RELEASE_TARGET, fake_get_dataset_release)
+    monkeypatch.setattr(SITE_LOAD_REGISTERED_DATASET_TARGET, fake_load_registered_dataset)
+    monkeypatch.setattr(SITE_DATASET_RELEASES_TARGET, {release.release_id: release})
     return release
 
 
@@ -371,7 +357,7 @@ def test_build_site_emits_static_pages_and_data(
         choose_gold=False,
     )
 
-    site_build_module.build_site(
+    build_site(
         results_dir=results_dir,
         output_dir=output_dir,
         base_url=TEST_BASE_URL,
@@ -387,7 +373,7 @@ def test_build_site_emits_static_pages_and_data(
     assert (output_dir / SITE_ASSETS_DIRNAME / ECHARTS_VENDOR_PATH).exists()
     assert run_id in (output_dir / "sitemap.xml").read_text(encoding="utf-8")
 
-    site_data = site_build_module.SiteData.model_validate_json(
+    site_data = SiteData.model_validate_json(
         (output_dir / SITE_DATA_DIRNAME / LEADERBOARD_JSON_PATH).read_text(encoding="utf-8")
     )
     assert site_data.schema_version == SITE_DATA_SCHEMA_VERSION
@@ -411,18 +397,12 @@ def test_build_site_emits_static_pages_and_data(
     assert "latency_per_item" not in entry.model_dump()
 
     assert len(site_data.baselines) == EXPECTED_BASELINE_COUNT
-    mfs = next(
-        baseline
-        for baseline in site_data.baselines
-        if baseline.label == MFS_BASELINE_LABEL
-    )
+    mfs = next(baseline for baseline in site_data.baselines if baseline.label == MFS_BASELINE_LABEL)
     assert mfs.kind == BaselineKind.COMPUTED_WORDNET_MFS
     assert mfs.accuracy == 0.0
-    assert all(
-        baseline.dataset_version == TEST_RELEASE_ID for baseline in site_data.baselines
-    )
+    assert all(baseline.dataset_version == TEST_RELEASE_ID for baseline in site_data.baselines)
 
-    run_detail = site_build_module.RunDetail.model_validate_json(
+    run_detail = RunDetail.model_validate_json(
         (output_dir / SITE_DATA_DIRNAME / SITE_RUNS_DIRNAME / f"{run_id}.json").read_text(
             encoding="utf-8"
         )
@@ -439,8 +419,7 @@ def test_build_site_emits_static_pages_and_data(
     example = run_detail.worst_examples[0]
     assert len(example.context_sentences) == 2
     assert any(
-        f"<mark>{TARGET_ART_TEXT}</mark>" in sentence.html
-        for sentence in example.context_sentences
+        f"<mark>{TARGET_ART_TEXT}</mark>" in sentence.html for sentence in example.context_sentences
     )
     assert len(example.candidates) > 0
     assert any(candidate.is_gold for candidate in example.candidates)
@@ -479,7 +458,7 @@ def test_build_site_emits_static_pages_and_data(
     assert SORT_ARROW_TEXT in index_html
     assert RANK_SORT_BUTTON_TEXT in index_html
     assert f'title="{run_id}">view</a>' in index_html
-    assert f'>{run_id}</a>' not in index_html
+    assert f">{run_id}</a>" not in index_html
 
 
 def test_build_site_self_hosted_run(
@@ -503,14 +482,14 @@ def test_build_site_self_hosted_run(
         self_hosted=True,
     )
 
-    site_build_module.build_site(
+    build_site(
         results_dir=results_dir,
         output_dir=output_dir,
         base_url=TEST_BASE_URL,
         strict=True,
     )
 
-    site_data = site_build_module.SiteData.model_validate_json(
+    site_data = SiteData.model_validate_json(
         (output_dir / SITE_DATA_DIRNAME / LEADERBOARD_JSON_PATH).read_text(encoding="utf-8")
     )
     assert site_data.summary.verified_run_count == 2
@@ -541,12 +520,12 @@ def test_build_site_self_hosted_run(
     assert FIXTURE_PROVIDER in self_hosted_run_html
     assert FIXTURE_INFERENCE_ENGINE in self_hosted_run_html
 
-    cloud_run_html = (
-        output_dir / SITE_RUNS_DIRNAME / TEST_RUN_ID / INDEX_HTML_FILENAME
-    ).read_text(encoding="utf-8")
+    cloud_run_html = (output_dir / SITE_RUNS_DIRNAME / TEST_RUN_ID / INDEX_HTML_FILENAME).read_text(
+        encoding="utf-8"
+    )
     assert MACHINE_TIMING_HEADING_TEXT not in cloud_run_html
 
-    run_detail = site_build_module.RunDetail.model_validate_json(
+    run_detail = RunDetail.model_validate_json(
         (
             output_dir / SITE_DATA_DIRNAME / SITE_RUNS_DIRNAME / f"{SELF_HOSTED_RUN_ID}.json"
         ).read_text(encoding="utf-8")
@@ -558,14 +537,14 @@ def test_build_site_self_hosted_run(
 
 
 def test_format_money_rounds_by_magnitude() -> None:
-    assert site_build_module._format_money(None) == "n/a"
-    assert site_build_module._format_money(20_000.0) == "$20,000"
-    assert site_build_module._format_money(791.0716) == "$791"
-    assert site_build_module._format_money(100.0) == "$100"
-    assert site_build_module._format_money(7.929) == "$7.93"
-    assert site_build_module._format_money(0.5) == "$0.500"
-    assert site_build_module._format_money(0.0042) == "$0.00420"
-    assert site_build_module._format_money(0.0) == "$0.00"
+    assert _format_money(None) == "n/a"
+    assert _format_money(20_000.0) == "$20,000"
+    assert _format_money(791.0716) == "$791"
+    assert _format_money(100.0) == "$100"
+    assert _format_money(7.929) == "$7.93"
+    assert _format_money(0.5) == "$0.500"
+    assert _format_money(0.0042) == "$0.00420"
+    assert _format_money(0.0) == "$0.00"
 
 
 def test_build_site_strict_rejects_wrong_dataset_hash(
@@ -584,7 +563,7 @@ def test_build_site_strict_rejects_wrong_dataset_hash(
     )
 
     with raises(LeaderboardBuildError):
-        site_build_module.build_site(
+        build_site(
             results_dir=results_dir,
             output_dir=tmp_path / SITE_OUTPUT_DIR,
             base_url=TEST_BASE_URL,

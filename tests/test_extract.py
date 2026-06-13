@@ -14,15 +14,16 @@ VALID_SENSE_INDEX: int = 2
 INVALID_SENSE_INDEX_TEXT: str = "2"
 OUT_OF_RANGE_SENSE_INDEX: int = 4
 CANDIDATE_COUNT: int = 3
-FENCED_JSON_OUTPUT: str = '```json\n{"sense_index": 2}\n```'
-PROSE_WITH_JSON_OUTPUT: str = 'The best answer is {"sense_index": 2}.'
-JSON_WITH_EXTRA_KEY_OUTPUT: str = '{"sense_index": 2, "reason": "context"}'
-SINGLE_QUOTED_JSON_OUTPUT: str = "{'sense_index': 2}"
-LABELED_INDEX_OUTPUT: str = "sense_index: 2"
-FENCED_LABELED_INDEX_OUTPUT: str = "```\nsense_index: 2\n```"
+JSON_SENSE_OUTPUT: str = dumps({SENSE_INDEX_FIELD: VALID_SENSE_INDEX})
+FENCED_JSON_OUTPUT: str = f"```json\n{JSON_SENSE_OUTPUT}\n```"
+PROSE_WITH_JSON_OUTPUT: str = f"The best answer is {JSON_SENSE_OUTPUT}."
+JSON_WITH_EXTRA_KEY_OUTPUT: str = dumps({SENSE_INDEX_FIELD: VALID_SENSE_INDEX, "reason": "context"})
+SINGLE_QUOTED_JSON_OUTPUT: str = f"{{'{SENSE_INDEX_FIELD}': {VALID_SENSE_INDEX}}}"
+LABELED_INDEX_OUTPUT: str = f"{SENSE_INDEX_FIELD}: {VALID_SENSE_INDEX}"
+FENCED_LABELED_INDEX_OUTPUT: str = f"```\n{LABELED_INDEX_OUTPUT}\n```"
 FENCED_PLAIN_OUTPUT: str = "```\n2\n```"
-MULTIPLE_JSON_OBJECTS_OUTPUT: str = '{"sense_index": 2} then {"sense_index": 1}'
-BOOLEAN_SENSE_INDEX_OUTPUT: str = '{"sense_index": true}'
+MULTIPLE_JSON_OBJECTS_OUTPUT: str = f"{JSON_SENSE_OUTPUT} then {dumps({SENSE_INDEX_FIELD: 1})}"
+BOOLEAN_SENSE_INDEX_OUTPUT: str = dumps({SENSE_INDEX_FIELD: True})
 
 
 def test_extract_json_sense_index() -> None:
@@ -132,9 +133,9 @@ def test_extract_rejects_ambiguous_json_objects() -> None:
     )
 
     assert isinstance(extracted, InvalidSenseIndexExtraction), "ambiguous extraction fails"
-    assert (
-        extracted.invalid_reason == InvalidOutputReason.INVALID_JSON
-    ), "ambiguous JSON is rejected"
+    assert extracted.invalid_reason == InvalidOutputReason.INVALID_JSON, (
+        "ambiguous JSON is rejected"
+    )
 
 
 def test_extract_rejects_boolean_sense_index() -> None:
@@ -145,9 +146,9 @@ def test_extract_rejects_boolean_sense_index() -> None:
     )
 
     assert isinstance(extracted, InvalidSenseIndexExtraction), "boolean extraction fails"
-    assert (
-        extracted.invalid_reason == InvalidOutputReason.SENSE_INDEX_NOT_INT
-    ), "boolean sense index is rejected"
+    assert extracted.invalid_reason == InvalidOutputReason.SENSE_INDEX_NOT_INT, (
+        "boolean sense index is rejected"
+    )
 
 
 def test_extract_rejects_out_of_range_index() -> None:
@@ -158,6 +159,6 @@ def test_extract_rejects_out_of_range_index() -> None:
     )
 
     assert isinstance(extracted, InvalidSenseIndexExtraction), "extraction fails"
-    assert (
-        extracted.invalid_reason == InvalidOutputReason.INDEX_OUT_OF_RANGE
-    ), "out-of-range sense index is rejected"
+    assert extracted.invalid_reason == InvalidOutputReason.INDEX_OUT_OF_RANGE, (
+        "out-of-range sense index is rejected"
+    )
