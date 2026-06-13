@@ -2,7 +2,7 @@
   "schema_version": "sensebench-run-v2",
   "run_id": "vllm-granite-4.1-8b-fp8-h200-p003-lexen-v0.1.0-20260613",
   "created_at": "2026-06-13T09:40:46.936476+00:00",
-  "git_commit": null,
+  "git_commit": "947a547",
   "runner": {
     "github_handle": "vassiliphilippov",
     "name": null,

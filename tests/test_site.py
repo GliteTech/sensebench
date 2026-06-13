@@ -129,6 +129,10 @@ QUANT_FILTER_ID: str = "quant-filter"
 X_METRIC_SELECT_ID: str = "x-metric-select"
 MACHINE_TIMING_HEADING_TEXT: str = "Machine &amp; Timing"
 MACHINE_SECONDS_PER_ITEM_TEXT: str = "Machine seconds / item"
+SPEED_COLUMN_HEADER_TEXT: str = "Speed (s / item)"
+SPEED_SORT_BUTTON_TEXT: str = 'data-sort="seconds_per_item"'
+SORT_ARROW_TEXT: str = '<span class="sort-arrow"'
+RANK_SORT_BUTTON_TEXT: str = 'data-sort="rank"'
 EXPECTED_GPU_LABEL: str = "H100 80GB"
 BUILT_BY_GLITE_TEXT: str = "Built by Glite"
 EXPECTED_BASELINE_COUNT: int = 4
@@ -470,6 +474,12 @@ def test_build_site_emits_static_pages_and_data(
     assert GPU_FILTER_ID not in index_html
     assert QUANT_FILTER_ID not in index_html
     assert BUILT_BY_GLITE_TEXT in index_html
+    assert SPEED_COLUMN_HEADER_TEXT not in index_html
+    assert SPEED_SORT_BUTTON_TEXT not in index_html
+    assert SORT_ARROW_TEXT in index_html
+    assert RANK_SORT_BUTTON_TEXT in index_html
+    assert f'title="{run_id}">view</a>' in index_html
+    assert f'>{run_id}</a>' not in index_html
 
 
 def test_build_site_self_hosted_run(
