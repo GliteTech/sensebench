@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,7 +17,7 @@ from sensebench import __version__
 from sensebench.datasets.context import build_dataset_index
 from sensebench.datasets.models import DatasetBundle, DatasetIndex, WsdItem
 from sensebench.prompts.models import MessageRole, PromptDefinition
-from sensebench.prompts.render import ChatMessage, render_task
+from sensebench.prompts.render import ChatMessage, RenderedTask, render_task, vote_shuffle_seed
 from sensebench.runner.client import CompletionClient
 from sensebench.runner.costs import machine_time_cost, sum_costs
 from sensebench.runner.evaluate import EvaluationConfig, evaluate_item
@@ -78,6 +79,7 @@ class RunConfig:
     votes_per_item: int
     semantic_reasks_per_invalid_vote: int
     concurrency: int
+    shuffle_senses_per_vote: bool = False
     machine: MachineInfo | None = None
     warmup_calls: int = 0
     show_progress: bool = True
@@ -255,12 +257,31 @@ async def _evaluate_one(
         semantic_reasks_per_invalid_vote=config.semantic_reasks_per_invalid_vote,
         llm_parameters=_completion_parameters(config=config),
     )
+    render_for_vote: Callable[[int], RenderedTask] | None = None
+    if config.shuffle_senses_per_vote:
+
+        def _render_for_vote(vote_index: int) -> RenderedTask:
+            return render_task(
+                prompt=config.prompt,
+                item=item,
+                dataset_index=dataset_index,
+                candidates=candidates,
+                shuffle_seed=vote_shuffle_seed(
+                    prompt_id=config.prompt.id,
+                    item_id=item.item_id,
+                    vote_index=vote_index,
+                ),
+            )
+
+        render_for_vote = _render_for_vote
+
     async with semaphore:
         return await evaluate_item(
             rendered=rendered,
             gold_sense_keys=item.gold_sense_keys,
             client=client,
             config=evaluation_config,
+            render_for_vote=render_for_vote,
         )
 
 
@@ -460,6 +481,7 @@ async def run_benchmark(*, config: RunConfig, client: CompletionClient) -> Compl
             semantic_reasks_per_invalid_vote=config.semantic_reasks_per_invalid_vote,
             tie_break=TieBreakKind.EARLIEST_VOTE,
             monosemous_policy=MonosemousPolicyKind.SHORT_CIRCUIT,
+            shuffle_senses_per_vote=config.shuffle_senses_per_vote,
         ),
         machine=config.machine,
         execution=ExecutionInfo(

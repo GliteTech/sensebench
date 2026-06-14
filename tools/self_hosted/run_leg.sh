@@ -32,6 +32,10 @@ RUNNER_CONTACT=""
 RUN_DATE="$(date -u +%Y%m%d)"
 LIMIT=""
 PORT=8000
+VOTES=""
+TEMPERATURE_OVERRIDE=""
+SHUFFLE_SENSES=0
+RUN_SUFFIX=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,6 +49,10 @@ while [ $# -gt 0 ]; do
     --date) RUN_DATE="$2"; shift 2 ;;
     --limit) LIMIT="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
+    --votes) VOTES="$2"; shift 2 ;;
+    --temperature) TEMPERATURE_OVERRIDE="$2"; shift 2 ;;
+    --shuffle-senses) SHUFFLE_SENSES=1; shift 1 ;;
+    --run-suffix) RUN_SUFFIX="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -125,6 +133,7 @@ fi
 CONCURRENCY=$(jq -r --arg gpu "$GPU_PRESET" '.gpu_presets[$gpu].concurrency' "$MANIFEST")
 DATASET=$(jq -r '.dataset' "$MANIFEST")
 TEMPERATURE=$(jq -r '.sampling.temperature' "$MANIFEST")
+[ -n "$TEMPERATURE_OVERRIDE" ] && TEMPERATURE="$TEMPERATURE_OVERRIDE"
 WARMUP_CALLS=$(jq -r '.warmup_calls' "$MANIFEST")
 PROMPTS=$(jq -r '.prompts[]' "$MANIFEST")
 
@@ -190,9 +199,18 @@ if [ -n "$RUNNER_CONTACT" ]; then
   RUNNER_ARGS+=(--runner-contact "$RUNNER_CONTACT")
 fi
 
+# Optional self-consistency knobs (votes / per-vote sense shuffle).
+EXTRA_RUN_ARGS=()
+if [ -n "$VOTES" ]; then
+  EXTRA_RUN_ARGS+=(--votes "$VOTES")
+fi
+if [ "$SHUFFLE_SENSES" = "1" ]; then
+  EXTRA_RUN_ARGS+=(--shuffle-senses)
+fi
+
 for PROMPT in $PROMPTS; do
   MAX_TOKENS=$(jq -r --arg prompt "$PROMPT" '.prompt_max_tokens[$prompt]' "$MANIFEST")
-  RUN_ID="vllm-$JOB-$GPU_PRESET-$PROMPT-$DATASET-$RUN_DATE"
+  RUN_ID="vllm-$JOB-$GPU_PRESET-$PROMPT-$DATASET-$RUN_DATE${RUN_SUFFIX:+-$RUN_SUFFIX}"
   HF_REVISION_ARGS=()
   if [ -n "$HF_REVISION" ]; then
     HF_REVISION_ARGS=(--hf-revision "$HF_REVISION")
@@ -232,6 +250,7 @@ for PROMPT in $PROMPTS; do
     --run-id "$RUN_ID" \
     --github-handle "$GITHUB_HANDLE" \
     "${RUNNER_ARGS[@]}" \
+    "${EXTRA_RUN_ARGS[@]}" \
     --output-root "$RUNS_DIR" \
     "${LIMIT_ARGS[@]}"; then
     fail "run:$PROMPT"

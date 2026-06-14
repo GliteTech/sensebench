@@ -102,12 +102,25 @@ def _shuffle_seed(*, prompt_id: PromptID, item_id: ItemID) -> int:
     return int.from_bytes(bytes=digest[:RANDOM_SEED_BYTES], byteorder="big", signed=False)
 
 
+def vote_shuffle_seed(*, prompt_id: PromptID, item_id: ItemID, vote_index: int) -> int:
+    """A reproducible shuffle seed that varies per vote (permutation self-consistency)."""
+    digest = sha256(
+        f"{prompt_id}|{item_id}|{SHUFFLE_SEED_CONTEXT}|vote{vote_index}".encode()
+    ).digest()
+    return int.from_bytes(bytes=digest[:RANDOM_SEED_BYTES], byteorder="big", signed=False)
+
+
 def _ordered_candidates(
     *,
     prompt: PromptDefinition,
     item: WsdItem,
     candidates: list[SenseCandidate],
+    shuffle_seed_override: int | None = None,
 ) -> OrderedCandidates:
+    if shuffle_seed_override is not None:
+        shuffled: list[SenseCandidate] = list(candidates)
+        Random(shuffle_seed_override).shuffle(shuffled)
+        return OrderedCandidates(candidates=shuffled, shuffle_seed=shuffle_seed_override)
     order = prompt.params.sense_order
     match order:
         case SenseOrder.FREQUENCY | SenseOrder.DATASET:
@@ -220,6 +233,7 @@ def render_task(
     item: WsdItem,
     dataset_index: DatasetIndex,
     candidates: list[SenseCandidate],
+    shuffle_seed: int | None = None,
 ) -> RenderedTask:
     context = build_context_window(
         index=dataset_index,
@@ -232,6 +246,7 @@ def render_task(
         prompt=prompt,
         item=item,
         candidates=candidates,
+        shuffle_seed_override=shuffle_seed,
     )
     candidate_block = _candidate_block(prompt=prompt, ordered_candidates=ordered.candidates)
     variables: dict[str, str] = {

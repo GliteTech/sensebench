@@ -176,6 +176,7 @@ class RunPolicy(StrictRunModel):
     semantic_reasks_per_invalid_vote: NonNegativeInt
     tie_break: TieBreakKind
     monosemous_policy: MonosemousPolicyKind
+    shuffle_senses_per_vote: bool = False
 
 
 class MachineGpuInfo(StrictRunModel):

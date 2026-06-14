@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import assert_never
 
@@ -267,6 +268,41 @@ def choose_prediction(*, votes: list[VoteRecord]) -> int | None:
     return None
 
 
+def _index_for_sense_key(
+    *,
+    rendered: RenderedTask,
+    sense_key: SenseKey | None,
+) -> int | None:
+    if sense_key is None:
+        return None
+    for candidate in rendered.candidates:
+        if candidate.sense_key == sense_key:
+            return candidate.index
+    return None
+
+
+def _choose_prediction_key(*, votes: list[VoteRecord]) -> SenseKey | None:
+    """Majority over sense keys.
+
+    Used when each vote shuffles the candidate order independently, so the
+    per-vote indices are not comparable; the sense key is the stable identity.
+    """
+    valid_keys: list[SenseKey] = [
+        vote.chosen_sense_key
+        for vote in votes
+        if vote.status == VoteStatus.SUCCESS and vote.chosen_sense_key is not None
+    ]
+    if len(valid_keys) == 0:
+        return None
+    counts: Counter[SenseKey] = Counter(valid_keys)
+    highest_count = max(counts.values())
+    tied: set[SenseKey] = {key for key, count in counts.items() if count == highest_count}
+    for key in valid_keys:
+        if key in tied:
+            return key
+    return None
+
+
 def _monosemous_evaluation(
     *,
     rendered: RenderedTask,
@@ -319,6 +355,7 @@ async def evaluate_item(
     gold_sense_keys: list[SenseKey],
     client: CompletionClient,
     config: EvaluationConfig,
+    render_for_vote: Callable[[int], RenderedTask] | None = None,
 ) -> ItemEvaluation:
     if len(rendered.candidates) == 0:
         return _no_candidates_evaluation(rendered=rendered, gold_sense_keys=gold_sense_keys)
@@ -327,9 +364,10 @@ async def evaluate_item(
 
     outcomes: list[VoteOutcome] = []
     for vote_index in range(1, config.votes_per_item + 1):
+        vote_rendered = rendered if render_for_vote is None else render_for_vote(vote_index)
         outcomes.append(
             await _run_one_vote(
-                rendered=rendered,
+                rendered=vote_rendered,
                 client=client,
                 config=config,
                 vote_index=vote_index,
@@ -337,8 +375,16 @@ async def evaluate_item(
         )
     votes: list[VoteRecord] = [outcome.vote for outcome in outcomes]
     calls: list[CallRecord] = [call for outcome in outcomes for call in outcome.calls]
-    chosen_index = choose_prediction(votes=votes)
-    chosen_key = _sense_key_for_index(rendered=rendered, sense_index=chosen_index)
+    if render_for_vote is None:
+        # Default path: all votes share one render, so the indices are comparable.
+        chosen_index = choose_prediction(votes=votes)
+        chosen_key = _sense_key_for_index(rendered=rendered, sense_index=chosen_index)
+    else:
+        # Per-vote shuffle: each vote uses its own candidate order, so indices are
+        # not comparable across votes; aggregate by sense key and report the index
+        # in the canonical (base) candidate order.
+        chosen_key = _choose_prediction_key(votes=votes)
+        chosen_index = _index_for_sense_key(rendered=rendered, sense_key=chosen_key)
     status = PredictionStatus.SUCCESS if chosen_key is not None else PredictionStatus.NO_VALID_VOTE
     prediction = PredictionRecord(
         item_id=rendered.item_id,
