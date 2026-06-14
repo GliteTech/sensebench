@@ -254,6 +254,7 @@ class LiteLlmClient:
                 response = await litellm.acompletion(
                     model=request.model,
                     messages=_messages_payload(request=request),
+                    allowed_openai_params=["reasoning_effort"],
                     **request.parameters,
                 )
                 payload = _response_to_dict(response=response)
