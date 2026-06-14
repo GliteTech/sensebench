@@ -37,40 +37,39 @@ Use `/Users/vassiliphilippov/lexen/` as the source for dataset facts.
 
 Key facts for the paper:
 
-* The release is derived from Maru2022 ALL_NEW and contains **4,917** English WSD instances.
-* The final release to use for the paper is `lexen-v1.0`, after the third lexicographer data has
-  been incorporated and the adjudication rule is frozen.
-* `lexen-v0.2.0` is the current interim evidence release for planning; `v0.1.0` is a deprecated
-  mixed-protocol draft.
+* The release is derived from Maru2022 ALL_NEW (**4,917** source instances) and contains **4,861**
+  English WSD instances after the consensus review removes 56 unresolvable items.
+* The published release for the paper is `lexen-v1`, with all three professional lexicographers
+  (RF, PW, PH) incorporated and the adjudication rule frozen.
+* `lexen-v1` is the published benchmark release; `lexen-v0.2.0` (interim two-reviewer evidence) and
+  `lexen-v0.1.0` (mixed-protocol draft) are deprecated.
 * The audit selected **363** suspicious items for review and kept **4,554** unreviewed Maru2022
   labels.
-* `lexen-v0.2.0` uses two same-protocol professional lexicographers: RF and PW2. `lexen-v1.0` will
-  add the third lexicographer result.
-* The conservative gold rule accepts a changed label only when RF and PW2 make the same non-empty
-  sense selection in the current interim release. The paper should describe the final `lexen-v1.0`
-  adjudication rule once it is fixed.
-* If both lexicographers mark an item as unanswerable, `lexen_gold` is empty and
-  `lexen_primary_scorable` falls back to the Maru2022 label for legacy single-label scorers.
-* `lexen-v0.2.0` changes **136** canonical labels and **122** scorable labels relative to Maru2022;
-  these counts should be replaced with final `lexen-v1.0` counts.
-* RF/PW2 exact agreement on reviewed items is **208/363 = 57.3%**, including **14** cases where both
-  marked the item unanswerable.
-* Among the **299** reviewed items where both lexicographers committed to a sense, **105** have
-  fine-grained disagreement.
-* Coarse Glite mapping raises agreement substantially, with coarse kappa **0.748**.
+* The three-annotator gold rule retains a reviewed item when at least two of RF/PW/PH select the
+  same non-empty sense set, and removes it when at least two mark it cannot-answer or no fine-grained
+  sense receives two-reviewer support.
+* Relative to Maru2022, `lexen-v1` changes **211** gold labels and removes **56** items. Reviewed
+  decisions: **124** three-way exact agreement, **183** two-of-three sense agreement (**307**
+  retained); **29** three-way no-consensus and **27** two-of-three cannot-answer removed.
+* The pairwise lexicographer-agreement statistics later in this document (the RF/PW2 figures) come
+  from the interim two-reviewer `lexen-v0.2.0` analysis; refresh them from
+  `reports/rf-pw-ph-2026-06-13/metrics.json` for the final three-annotator (RF/PW/PH) numbers before
+  publishing.
+* Coarse Glite mapping raises agreement substantially, with coarse kappa **0.748** (interim).
 
 Recommended dataset table:
 
 | Quantity | Count | Paper use |
 | --- | ---: | --- |
-| Maru2022 ALL_NEW / lexEN items | 4,917 | Main benchmark size |
+| Maru2022 ALL_NEW source instances | 4,917 | Source corpus size |
+| lexEN v1 benchmark items | 4,861 | Main benchmark size (after 56 removed) |
 | Model-triaged suspicious items | 363 | Human review subset |
 | Unreviewed labels kept from Maru2022 | 4,554 | Conservative coverage statement |
-| RF/PW2 exact non-empty consensus | 194 | Corrected label source |
-| RF/PW2 both cannot answer | 14 | Unanswerable source-text cases |
-| RF/PW2 no consensus, Maru2022 kept | 155 | Conservative non-change cases |
-| Canonical labels changed | 136 | Label-quality headline |
-| Scorable labels changed | 122 | Main metric impact |
+| Reviewed items retained | 307 | Three-annotator consensus kept |
+| Three-way exact agreement | 124 | Strongest consensus subset |
+| Two-of-three sense agreement | 183 | Majority consensus subset |
+| Reviewed items removed | 56 | No consensus or cannot-answer |
+| lexEN gold labels changed from Maru2022 | 211 | Label-quality headline |
 
 Correction yield by selection bucket:
 
@@ -104,8 +103,7 @@ Key facts for the paper:
 * Each run records `run.json`, `predictions.jsonl`, and `calls.jsonl.gz`.
 * The leaderboard aggregator supports strict validation and confidence intervals.
 * Public leaderboard artifacts can be hosted through GitHub Pages.
-* The current repository still registers `lexen-v0.1.0`; the paper should update the registry and
-  official runs to `lexen-v1.0`.
+* The repository registers `lexen-v1` as the default dataset release; official runs use `lexen-v1`.
 
 Paper protocol to specify:
 
@@ -150,9 +148,10 @@ Related-work table to build in the paper:
 
 ## Provisional Results To Replace With Final Runs
 
-These numbers are useful for paper planning, but the final paper should rerun or officially rescore
-against `lexen-v1.0`. Current LLM predictions were produced for `lexen-v0.1.0` and retrospectively
-rescored against Maru2022 and the interim `lexen-v0.2.0` release.
+These numbers are useful for paper planning, but the final paper should use the official `lexen-v1`
+runs (now being produced for the public leaderboard). The numbers below were produced for the
+deprecated `lexen-v0.1.0` draft and retrospectively rescored against Maru2022 and the interim
+`lexen-v0.2.0` release.
 
 | System | Prompt | Maru2022 | lexEN v0.2 primary | Delta |
 | --- | --- | ---: | ---: | ---: |
@@ -177,7 +176,7 @@ Interpretation for the results section:
 * This supports the central measurement claim: a few percent of label noise becomes material once
   systems exceed **90%** accuracy.
 * `lexen-v0.1.0` gave even higher LLM scores, but `lexen-v0.2.0` is more defensible because it
-  removes mixed-protocol review. Final headline claims should use `lexen-v1.0`.
+  removes mixed-protocol review. Final headline claims should use `lexen-v1`.
 
 ## Correction Examples
 
@@ -236,7 +235,7 @@ Required details:
 * Suspicious-item selection: 10-model panel with eight GPT-5.5 variants plus supervised systems.
 * Bucket definitions S1-S6 and the waterfall counts.
 * Lexicographer protocol, evidence shown, allowed decisions, and note handling.
-* Final adjudication rule in `lexen-v1.0`, with the interim `lexen-v0.2.0` consensus rule described
+* Final adjudication rule in `lexen-v1`, with the interim `lexen-v0.2.0` consensus rule described
   only as background if needed.
 * Difference between `lexen_gold` and `lexen_primary_scorable`.
 
@@ -266,7 +265,7 @@ External model-list references to freeze near submission:
 
 Primary tables:
 
-* Final `lexen-v1.0` leaderboard with all rerun top public and proprietary models.
+* Final `lexen-v1` leaderboard with all rerun top public and proprietary models.
 * Classic WSD baselines on the same release.
 * Prompt and cost ablations.
 * Maru2022 versus lexEN score deltas.
@@ -292,7 +291,7 @@ Useful subsections:
 
 Must include:
 
-* Until `lexen-v1.0` is frozen, all `lexen-v0.2.0` numbers are interim because the third
+* Until `lexen-v1` is frozen, all `lexen-v0.2.0` numbers are interim because the third
   lexicographer result is pending.
 * The audited subset was selected by a model panel and is therefore enriched for model-Maru2022
   disagreements.
@@ -306,10 +305,10 @@ Must include:
 
 Implementation and release work:
 
-* Register `lexen-v1.0` in SenseBench.
+* Register `lexen-v1` in SenseBench.
 * Decide whether the main metric is `lexen_primary_scorable`, strict non-empty `lexen_gold`, or
   both.
-* Rerun all headline LLMs on the final `lexen-v1.0` release.
+* Rerun all headline LLMs on the final `lexen-v1` release.
 * Add SANDWiCH predictions as a baseline if licensing and provenance allow.
 * Add paired significance testing for top model comparisons.
 * Publish release hashes for dataset, prompt files, and result artifacts.
@@ -325,9 +324,9 @@ Writing work:
 
 Decision points:
 
-* How the third-lexicographer adjudication rule should be represented in `lexen-v1.0`.
+* How the third-lexicographer adjudication rule should be represented in `lexen-v1`.
 * Whether to keep the `lexen-v0.2.0` score-shift analysis as an appendix or replace it entirely with
-  `lexen-v1.0` results.
+  `lexen-v1` results.
 * Whether unanswerable items should be excluded from a secondary strict metric.
 * Which public leaderboard sources define "top models" at the final model-freeze date.
 * Whether to submit as an ACL/EMNLP main paper, findings paper, or benchmark/resource paper.
@@ -347,6 +346,6 @@ Avoid or qualify:
 
 * Do not claim a full corpus-wide Maru2022 error rate from the reviewed subset.
 * Do not claim WSD is solved; the agreement and defective-text analysis argues the opposite.
-* Do not call `v0.1.0` or `v0.2.0` headline SOTA after `v1.0` supersedes them.
+* Do not call `v0.1.0` or `v0.2.0` headline SOTA; `lexen-v1` supersedes them.
 * Do not treat model-assisted triage as independent evidence of gold correctness.
-* Do not claim final model rankings until official `lexen-v1.0` runs are complete.
+* Do not claim final model rankings until official `lexen-v1` runs are complete.

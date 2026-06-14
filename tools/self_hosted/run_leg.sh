@@ -4,7 +4,8 @@
 #
 # Runs ON the box (launch it inside tmux so it survives SSH disconnects):
 #   bash run_leg.sh --job <job_id> --gpu <preset> --hourly-rate-usd <rate> \
-#     --instance-id <id> --github-handle <handle> [--date YYYYMMDD] [--limit N] [--port 8000]
+#     --instance-id <id> --github-handle <handle> [--runner-name <name>] \
+#     [--runner-contact <contact>] [--date YYYYMMDD] [--limit N] [--port 8000]
 #
 # Status is written to /workspace/sensebench/status/<job_id>: DONE or FAILED:<reason>.
 set -euo pipefail
@@ -26,6 +27,8 @@ GPU_PRESET=""
 HOURLY_RATE_USD=""
 INSTANCE_ID=""
 GITHUB_HANDLE=""
+RUNNER_NAME=""
+RUNNER_CONTACT=""
 RUN_DATE="$(date -u +%Y%m%d)"
 LIMIT=""
 PORT=8000
@@ -37,6 +40,8 @@ while [ $# -gt 0 ]; do
     --hourly-rate-usd) HOURLY_RATE_USD="$2"; shift 2 ;;
     --instance-id) INSTANCE_ID="$2"; shift 2 ;;
     --github-handle) GITHUB_HANDLE="$2"; shift 2 ;;
+    --runner-name) RUNNER_NAME="$2"; shift 2 ;;
+    --runner-contact) RUNNER_CONTACT="$2"; shift 2 ;;
     --date) RUN_DATE="$2"; shift 2 ;;
     --limit) LIMIT="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
@@ -177,6 +182,14 @@ until curl -sf "http://localhost:$PORT/v1/models" 2>/dev/null | grep -qF "\"$MOD
 done
 echo "server healthy and serving $MODEL" >&2
 
+RUNNER_ARGS=()
+if [ -n "$RUNNER_NAME" ]; then
+  RUNNER_ARGS+=(--runner-name "$RUNNER_NAME")
+fi
+if [ -n "$RUNNER_CONTACT" ]; then
+  RUNNER_ARGS+=(--runner-contact "$RUNNER_CONTACT")
+fi
+
 for PROMPT in $PROMPTS; do
   MAX_TOKENS=$(jq -r --arg prompt "$PROMPT" '.prompt_max_tokens[$prompt]' "$MANIFEST")
   RUN_ID="vllm-$JOB-$GPU_PRESET-$PROMPT-$DATASET-$RUN_DATE"
@@ -218,6 +231,7 @@ for PROMPT in $PROMPTS; do
     --instance-id "$INSTANCE_ID" \
     --run-id "$RUN_ID" \
     --github-handle "$GITHUB_HANDLE" \
+    "${RUNNER_ARGS[@]}" \
     --output-root "$RUNS_DIR" \
     "${LIMIT_ARGS[@]}"; then
     fail "run:$PROMPT"

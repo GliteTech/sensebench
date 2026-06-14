@@ -13,8 +13,6 @@ src/sensebench/prompts/
   registered/
     p001.json
     p002.json
-    p003.json
-    p004.json
 ```
 
 The `registered/` directory is the immutable prompt registry. The surrounding
@@ -48,13 +46,12 @@ Prompt identity is intentionally simple:
 ```text
 p001
 p002
-p003
-p004
 ```
 
-`p004` is the minimal single-sentence prompt `p002` with `detokenize: true`: it keeps the short,
-plain-integer form of `p002` but renders the context as natural English like `p003`, giving a clean
-A/B on whether detokenized input helps the minimal prompt.
+Both registered prompts render the context as detokenized natural English (`detokenize: true`).
+`p001` is the 5+1-context prompt with WordNet sense keys, definitions, synonyms, and examples that
+returns JSON `sense_index`; `p002` is the minimal single-sentence prompt that returns a plain
+integer.
 
 SenseBench does not use prompt versions. If a prompt changes, it receives a new ID. A prompt may
 optionally point to an older prompt with `supersedes`.
@@ -64,7 +61,7 @@ optionally point to an older prompt with `supersedes`.
 Each prompt is stored as one JSON file:
 
 ```text
-src/sensebench/prompts/registered/p003.json
+src/sensebench/prompts/registered/p125.json
 ```
 
 The filename must match the prompt ID.
@@ -74,7 +71,7 @@ Minimal example:
 ```json
 {
   "schema_version": "sensebench-prompt-v1",
-  "id": "p003",
+  "id": "p125",
   "name": "Definition + Examples + POS, Frequency Order",
   "description": "Shows WordNet ID, POS, definition, examples; frequency-ordered senses.",
   "template_kind": "chat_messages",
@@ -195,7 +192,7 @@ An older prompt ID that this prompt replaces or revises.
 Example:
 
 ```json
-"supersedes": "p003"
+"supersedes": "p125"
 ```
 
 This is metadata only. It does not make two prompts equivalent.
@@ -492,7 +489,7 @@ The prompt validator must check:
 
 * file is valid JSON
 * file is under `src/sensebench/prompts/registered/`
-* filename matches `id`, for example `src/sensebench/prompts/registered/p003.json`
+* filename matches `id`, for example `src/sensebench/prompts/registered/p125.json`
 * `schema_version` is supported by `PromptDefinition`
 * `id` matches the required pattern
 * no duplicate prompt ID exists
@@ -513,7 +510,7 @@ A completed run references a registered prompt by ID:
 ```json
 {
   "prompt": {
-    "id": "p003"
+    "id": "p001"
   }
 }
 ```
@@ -523,25 +520,24 @@ The run validator must confirm that:
 * the prompt ID exists in the registry
 * the run was produced with the output mode declared by that prompt
 
-## Recommended First Prompts
+## Registered Prompts
 
-The initial registry should be small. A useful starting set:
+The registry is intentionally small. The current set:
 
 `p001`
 
 5+1 context prompt with `<t>...</t>` target marking, WordNet sense keys, definitions, synonyms,
-examples, frequency-ordered candidates, and JSON `sense_index` output.
+examples, frequency-ordered candidates, and JSON `sense_index` output. The context is detokenized
+into natural English (`detokenize: true`).
 
 `p002`
 
-Minimal single-sentence context, definitions and at most one usage example per sense, frequency
-order, plain integer output. Registered.
+Minimal single-sentence context with `<t>...</t>` target marking, definitions and at most one usage
+example per sense, frequency order, and plain integer output. The context is detokenized into
+natural English (`detokenize: true`).
 
-`p003`
-
-Identical to `p001` but with `detokenize: true`, so the context is rendered as natural English
-instead of Penn-Treebank-style tokens. Registered. Pairing it with `p001` on the same models gives a
-clean A/B on whether detokenized input changes accuracy.
+Both prompts share the same detokenized input; `p001` and `p002` together give a clean comparison of
+a rich JSON prompt against a minimal plain-integer prompt on identical context.
 
 Further prompts (for example a deterministic shuffled sense order, or a POS-augmented variant) can
 follow as new IDs to study output-format and sense-order effects without making any single release

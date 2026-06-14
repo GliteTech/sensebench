@@ -66,7 +66,7 @@ SSH=(ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 -p "$PORT" "root@$HOST
 
 ### 2. Bootstrap the box
 
-`setup_host.sh` clones this repository on the box (branch `self-hosted-vllm-support`, override
+`setup_host.sh` clones this repository on the box (branch `lexen-v1-rebuild`, override
 with `SENSEBENCH_BRANCH`), so only the bootstrap script and the HF token need copying:
 
 ```bash
@@ -94,7 +94,7 @@ JOB=granite-4.1-8b-fp8
 "${SSH[@]}" "tmux new-session -d -s leg-$JOB \
   \"bash /workspace/sensebench/repo/tools/self_hosted/run_leg.sh \
     --job $JOB --gpu h100 --hourly-rate-usd $RATE --instance-id $ID \
-    --github-handle <your-handle> \
+    --github-handle <your-handle> --runner-name \\\"<Your Name>\\\" \
     >> /workspace/sensebench/logs/leg-$JOB.log 2>&1\""
 ```
 
@@ -108,7 +108,7 @@ Monitor:
 
 Each leg downloads the checkpoint, serves it in the `vllm` tmux session, waits for `/health`,
 then runs every manifest prompt with run id `vllm-<job>-<gpu>-<prompt>-<dataset>-<YYYYMMDD>`
-(e.g. `vllm-qwen3.6-27b-fp8-h100-p003-lexen-v0.1.0-20260613`) and verifies it on the box. Runs
+(e.g. `vllm-qwen3.6-27b-fp8-h100-p001-lexen-v1-20260614`) and verifies it on the box. Runs
 that already have a `run.json` are skipped, so re-launching a failed leg resumes where it left
 off. Add `--limit N` for a smoke leg: the run id gets a `-smoke` suffix, and verification is
 skipped (partial runs can never pass full-dataset verification and are not leaderboard-eligible).
@@ -119,12 +119,14 @@ image and the Mistral job may need vLLM 0.9.x.
 
 ```bash
 bash tools/self_hosted/fetch_runs.sh work/h100/instance.json runs
-for run_dir in runs/vllm-*-h100-p003-*; do
-  uv run sensebench verify "$run_dir" --dataset lexen-v0.1.0 --prompt p003
+for run_dir in runs/vllm-*-h100-*; do
+  prompt=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]+'/run.json'))['prompt']['id'])" "$run_dir")
+  uv run sensebench verify "$run_dir" --dataset lexen-v1 --prompt "$prompt"
 done
 ```
 
-Match the `--prompt` to the prompt id embedded in each run id when the manifest lists several.
+Each leg now runs both registered prompts (`p001`, `p002`); the loop reads each run's prompt id
+from its `run.json` so verification matches the prompt the run actually used.
 
 ### 5. Destroy the instance
 
@@ -154,11 +156,11 @@ are not required:
 vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000 --max-model-len 8192
 export HOSTED_VLLM_API_KEY=dummy
 sensebench run \
-  --prompt p003 --model meta-llama/Llama-3.1-8B-Instruct \
+  --prompt p001 --model meta-llama/Llama-3.1-8B-Instruct \
   --hosting-kind self_hosted --endpoint-base-url http://localhost:8000/v1 \
   --quantization bf16 --source-kind open_source --vendor Meta --license llama3.1 \
   --model-url https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct \
-  --temperature 0 --max-tokens 64 --warmup-calls 8 \
+  --temperature 0 --max-tokens 2048 --warmup-calls 8 \
   --hourly-rate-usd <your-rate> --github-handle <your-handle>
 ```
 

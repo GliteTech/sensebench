@@ -1,12 +1,12 @@
 {
-  "dataset": "lexen-v0.1.0",
+  "dataset": "lexen-v1",
   "prompts": [
-    "p003"
+    "p001",
+    "p002"
   ],
   "prompt_max_tokens": {
-    "p001": 1024,
-    "p002": 64,
-    "p003": 2048
+    "p001": 2048,
+    "p002": 128
   },
   "sampling": {
     "temperature": 0.0
@@ -30,10 +30,17 @@
     },
     "h200": {
       "gpu_label": "H200 141GB",
-      "search": "gpu_name=H200 num_gpus=1 gpu_ram>=140 cpu_ram>=64 disk_space>=250 reliability>0.98 rentable=true verified=true",
-      "disk_gb": 250,
-      "concurrency": 128,
-      "max_hourly_usd": 3.8
+      "search": "gpu_name=H200 num_gpus=1 gpu_ram>=140 cpu_ram>=64 disk_space>=1200 reliability>0.98 rentable=true verified=true",
+      "disk_gb": 1500,
+      "concurrency": 64,
+      "max_hourly_usd": 4.0
+    },
+    "b300": {
+      "gpu_label": "B300 269GB",
+      "search": "gpu_name=B300 num_gpus=1 gpu_ram>=260 cpu_ram>=64 disk_space>=1600 reliability>0.98 rentable=true verified=true",
+      "disk_gb": 1800,
+      "concurrency": 64,
+      "max_hourly_usd": 7.0
     }
   },
   "jobs": [

@@ -10,9 +10,9 @@ set -euo pipefail
 
 WORKDIR=/workspace/sensebench
 REPO_URL=https://github.com/GliteTech/sensebench.git
-BRANCH="${SENSEBENCH_BRANCH:-self-hosted-vllm-support}"
-DATASET=lexen-v0.1.0
-PREWARM_PROMPT=p003
+BRANCH="${SENSEBENCH_BRANCH:-lexen-v1-rebuild}"
+DATASET=lexen-v1
+PREWARM_PROMPT=p001
 
 mkdir -p "$WORKDIR"
 
