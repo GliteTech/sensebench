@@ -20,6 +20,12 @@ from sensebench.datasets.releases import (
     get_dataset_release,
     load_registered_dataset,
 )
+from sensebench.leaderboard.display_names import (
+    model_family,
+    prettify_model_name,
+    vendor_initial,
+    vendor_logo_slug,
+)
 from sensebench.leaderboard.schemes import (
     DEFAULT_SCHEME_ID,
     SCHEMES,
@@ -53,7 +59,7 @@ DEFAULT_BOOTSTRAP_RESAMPLES: int = 2000
 DEFAULT_BOOTSTRAP_SEED: int = 12345
 CONFIDENCE_LOW_PERCENTILE: float = 2.5
 CONFIDENCE_HIGH_PERCENTILE: float = 97.5
-LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v6"
+LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v7"
 RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
 OFFICIAL_VOTES_PER_ITEM: int = 1
 OFFICIAL_SEMANTIC_REASKS: int = 1
@@ -87,6 +93,10 @@ class LeaderboardEntry(LeaderboardModel):
     runner_github_handle: str | None
     runner_name: str | None
     model: str
+    display_label: str | None
+    logo_slug: str | None
+    vendor_initial: str | None
+    family: str | None
     requested_model: str
     resolved_model: str | None
     model_kind: str
@@ -415,6 +425,10 @@ def _entry_for_run(
         runner_github_handle=metadata.runner.github_handle,
         runner_name=metadata.runner.name,
         model=model.display_name,
+        display_label=prettify_model_name(model.display_name),
+        logo_slug=vendor_logo_slug(model.llm_vendor),
+        vendor_initial=vendor_initial(model.llm_vendor, model.display_name),
+        family=model_family(model.llm_vendor, model.display_name),
         requested_model=model.requested_model,
         resolved_model=model.resolved_model,
         model_kind=model_kind,

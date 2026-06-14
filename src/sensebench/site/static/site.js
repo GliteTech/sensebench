@@ -15,6 +15,10 @@
   const maxCostFilter = document.getElementById("max-cost-filter");
   const viewFilter = document.getElementById("view-filter");
   const frontierOnly = document.getElementById("frontier-only");
+  const sortSelect = document.getElementById("sort-select");
+  const compareBar = document.getElementById("compare-bar");
+  const compareBarCount = document.getElementById("compare-bar-count");
+  const compareBarClear = document.getElementById("compare-bar-clear");
   const chartElement = document.getElementById("leaderboard-chart");
   const chartNote = document.getElementById("chart-note");
   const compareCharts = document.getElementById("compare-charts");
@@ -324,11 +328,24 @@
     return entry.gpu;
   }
 
-  function modelLabel(entry) {
-    if (entry.reasoning_effort) {
-      return `${entry.model} (${entry.reasoning_effort})`;
+  function logoHtml(entry) {
+    if (entry.logo_slug) {
+      return `<img class="vendor-logo" src="${basePath}assets/logos/${escapeHtml(entry.logo_slug)}.svg" alt="" width="18" height="18" loading="lazy">`;
     }
-    return entry.model;
+    const family = entry.family || familyOf(entry);
+    const initial =
+      entry.vendor_initial ||
+      (entry.llm_vendor || entry.model || "?").trim().charAt(0).toUpperCase() ||
+      "?";
+    return `<span class="vendor-initial fam-${escapeHtml(String(family).toLowerCase())}">${escapeHtml(initial)}</span>`;
+  }
+
+  function modelLabel(entry) {
+    const base = entry.display_label || entry.model;
+    if (entry.reasoning_effort) {
+      return `${base} (${entry.reasoning_effort})`;
+    }
+    return base;
   }
 
   function shortModelName(model) {
@@ -581,18 +598,16 @@
           ? '<span class="badge badge-frontier" title="On the accuracy-cost Pareto frontier">★</span>'
           : "";
         return `<tr>
-          <td><div class="cell-primary">${row.displayRank}</div>${rangeHtml}</td>
-          <td><input class="compare-checkbox" type="checkbox" data-run-id="${escapeHtml(entry.run_id)}"${checked}${disabled}></td>
-          <td>
-            <div class="cell-primary">${escapeHtml(modelLabel(entry))}</div>
+          <td class="col-rank"><div class="cell-primary">${row.displayRank}</div>${rangeHtml}</td>
+          <td class="col-compare"><input class="compare-checkbox" type="checkbox" data-run-id="${escapeHtml(entry.run_id)}"${checked}${disabled}></td>
+          <td class="col-model">
+            <div class="cell-primary">${logoHtml(entry)}<a class="model-link" href="${basePath}${escapeHtml(entry.run_url)}" title="${escapeHtml(entry.run_id)}">${escapeHtml(modelLabel(entry))}</a></div>
             <div class="cell-secondary">${vendorParts.join(" · ")}</div>
+            <div class="cell-secondary provenance-mobile">${escapeHtml(entry.prompt_id)}</div>
           </td>
-          <td><div class="cell-primary">${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
-          <td>${formatMoney(entry.cost_per_million_items)}</td>
-          <td>${escapeHtml(entry.prompt_id)}</td>
-          <td>${escapeHtml(entry.dataset_version)}</td>
-          <td><a href="${basePath}${escapeHtml(entry.run_url)}" title="${escapeHtml(entry.run_id)}">view</a></td>
-          <td>${frontierHtml}</td>
+          <td class="col-accuracy"><div class="cell-primary">${frontierHtml ? frontierHtml + " " : ""}${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
+          <td class="col-cost">${formatMoney(entry.cost_per_million_items)}</td>
+          <td class="col-prompt">${escapeHtml(entry.prompt_id)}</td>
         </tr>`;
       })
       .join("");
@@ -634,6 +649,20 @@
         th.removeAttribute("aria-sort");
       }
     });
+    if (sortSelect && sortSelect.value !== state.sortKey) {
+      sortSelect.value = state.sortKey;
+    }
+  }
+
+  function updateCompareBar() {
+    if (!compareBar) {
+      return;
+    }
+    const count = state.selected.size;
+    compareBar.hidden = count < 2;
+    if (compareBarCount) {
+      compareBarCount.textContent = `Compare (${count})`;
+    }
   }
 
   function paretoFrontier(points) {
@@ -1282,6 +1311,7 @@
     renderCompareCharts();
     renderPairwise();
     updateAccuracyHeaders();
+    updateCompareBar();
   }
 
   function attachControls() {
@@ -1321,6 +1351,20 @@
         render();
       });
     });
+    if (sortSelect) {
+      sortSelect.addEventListener("change", () => {
+        const key = sortSelect.value;
+        state.sortKey = key;
+        state.sortDirection = key === "rank" || key === "model" ? 1 : -1;
+        render();
+      });
+    }
+    if (compareBarClear) {
+      compareBarClear.addEventListener("click", () => {
+        state.selected.clear();
+        render();
+      });
+    }
     window.addEventListener("resize", () => {
       if (mainChart) {
         mainChart.resize();
