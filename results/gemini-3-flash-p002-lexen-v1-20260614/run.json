@@ -1,0 +1,86 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "gemini-3-flash-p002-lexen-v1-20260614",
+  "created_at": "2026-06-14T11:28:13.627340+00:00",
+  "git_commit": "52ad50b8e487e20b0020ff05de84bad7e418749e",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p002",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "gemini/gemini-3-flash-preview",
+    "requested_model": "gemini/gemini-3-flash-preview",
+    "resolved_model": "gemini-3-flash-preview",
+    "resolved_model_counts": {
+      "gemini-3-flash-preview": 4915
+    },
+    "llm_vendor": "Google",
+    "api_provider": "Google",
+    "source_kind": "proprietary",
+    "license": null,
+    "model_url": null,
+    "reasoning_effort": null,
+    "endpoint_base_url": null
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": null,
+    "max_tokens": 256,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "machine": null,
+  "execution": {
+    "concurrency": 32,
+    "warmup_call_count": 0,
+    "timing": {
+      "benchmark_started_at": "2026-06-14T11:24:05.886780+00:00",
+      "benchmark_ended_at": "2026-06-14T11:28:13.621327+00:00",
+      "benchmark_seconds": 247.7353796249954,
+      "setup_seconds": 0.9859451659722254
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4500,
+    "accuracy": 0.9257354453816087,
+    "call_count": 4915,
+    "usage": {
+      "input_tokens": 1139510,
+      "cached_input_tokens": null,
+      "output_tokens": 1181963,
+      "reasoning_output_tokens": 1177198
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 4.115644,
+      "input_uncached_usd": 0.569755,
+      "input_cached_usd": 0.0,
+      "output_usd": 3.545889,
+      "input_uncached_unit_price_usd": 5e-7,
+      "input_cached_unit_price_usd": 5e-8,
+      "output_unit_price_usd": 3e-6,
+      "source": "litellm_estimate"
+    },
+    "elapsed_seconds": 247.7353796249954
+  }
+}
