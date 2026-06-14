@@ -374,6 +374,26 @@ def test_build_site_emits_static_pages_and_data(
     assert (output_dir / SITE_ASSETS_DIRNAME / ECHARTS_VENDOR_PATH).exists()
     assert run_id in (output_dir / "sitemap.xml").read_text(encoding="utf-8")
 
+    # Prompts index + per-prompt pages (details, rendered examples, JSON download).
+    prompts_index = output_dir / "prompts" / INDEX_HTML_FILENAME
+    assert prompts_index.exists()
+    prompts_index_html = prompts_index.read_text(encoding="utf-8")
+    assert "prompts/p001/" in prompts_index_html
+    assert "prompts/p002/" in prompts_index_html
+    p001_page = output_dir / "prompts" / "p001" / INDEX_HTML_FILENAME
+    assert p001_page.exists()
+    assert (output_dir / "prompts" / "p001" / "p001.json").exists()
+    p001_html = p001_page.read_text(encoding="utf-8")
+    assert "Rendered Item Examples" in p001_html
+    assert "prompts/p001/p001.json" in p001_html
+    # Nav exposes Prompts, and prompt mentions link to the prompt page.
+    index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
+    assert ">Prompts</a>" in index_html
+    run_html = (output_dir / SITE_RUNS_DIRNAME / run_id / INDEX_HTML_FILENAME).read_text(
+        encoding="utf-8"
+    )
+    assert "prompts/p001/" in run_html
+
     site_data = SiteData.model_validate_json(
         (output_dir / SITE_DATA_DIRNAME / LEADERBOARD_JSON_PATH).read_text(encoding="utf-8")
     )

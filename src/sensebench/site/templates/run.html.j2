@@ -113,7 +113,7 @@
       <dt>Dataset revision</dt><dd>{{ metadata.dataset.dataset_revision or "n/a" }}</dd>
       <dt>Dataset items</dt><dd>{{ metadata.dataset.item_count|num }}</dd>
       <dt>Dataset hash</dt><dd class="hash">{{ entry.dataset_content_hash }}</dd>
-      <dt>Prompt</dt><dd>{{ entry.prompt_id }}</dd>
+      <dt>Prompt</dt><dd><a href="{{ base_path }}prompts/{{ entry.prompt_id }}/">{{ entry.prompt_id }}</a></dd>
       <dt>Prompt version</dt><dd>{{ metadata.prompt.sensebench_version or "n/a" }}</dd>
       <dt>Repository files</dt><dd><a href="{{ repository_artifact_url }}">Browse in GitHub</a></dd>
     </dl>

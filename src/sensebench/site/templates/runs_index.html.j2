@@ -27,7 +27,7 @@
           <td>{{ entry.rank }}</td>
           <td>{{ entry.model }}</td>
           <td>{{ entry.accuracy|pct }}</td>
-          <td>{{ entry.prompt_id }}</td>
+          <td><a href="{{ base_path }}prompts/{{ entry.prompt_id }}/">{{ entry.prompt_id }}</a></td>
           <td>{{ entry.dataset_version }}</td>
           <td>{{ entry.created_at }}</td>
           <td><a href="{{ base_path }}{{ entry.run_url }}">{{ entry.run_id }}</a></td>

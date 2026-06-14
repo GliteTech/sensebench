@@ -2,14 +2,18 @@
 
 {% block content %}
 <section class="page-title">
-  <p class="eyebrow">Prompt</p>
+  <p class="eyebrow"><a href="{{ base_path }}prompts/">Prompts</a></p>
   <h1>{{ prompt.id }}: {{ prompt.name }}</h1>
   <p>{{ prompt.description }}</p>
+  <p class="prompt-download">
+    <a class="download-link" href="{{ base_path }}prompts/{{ prompt.id }}/{{ download_name }}" download>⬇ Download {{ download_name }}</a>
+  </p>
 </section>
 
 <section class="detail-block wide">
   <h2>Prompt Metadata</h2>
   <dl>
+    <dt>ID</dt><dd>{{ prompt.id }}</dd>
     <dt>Schema</dt><dd>{{ prompt.schema_version }}</dd>
     <dt>Template</dt><dd>{{ prompt.template_kind.value }}</dd>
     <dt>Output</dt><dd>{{ prompt.output.mode.value }}</dd>
@@ -29,4 +33,25 @@
   <pre><code>{{ message.content }}</code></pre>
   {% endfor %}
 </section>
+
+{% if prompt_examples %}
+<section class="doc-section">
+  <h2>Rendered Item Examples</h2>
+  <p class="note">
+    This prompt rendered against {{ prompt_examples|length }} sample item{{ "s" if prompt_examples|length != 1 else "" }}
+    from the <a href="{{ base_path }}datasets/{{ default_dataset_version }}/">lexEN</a> dataset — exactly the
+    text sent to the model, with candidate senses, the context window, and the target marker filled in.
+  </p>
+  {% for example in prompt_examples %}
+  <div class="prompt-example">
+    <h3><code>{{ example.item_id }}</code> — “{{ example.target_text }}”</h3>
+    <p class="cell-secondary">lemma <strong>{{ example.lemma }}</strong> · pos <strong>{{ example.pos }}</strong> · {{ example.candidate_count }} candidate senses</p>
+    {% for message in example.messages %}
+    <h4>{{ message.role }}</h4>
+    <pre><code>{{ message.content }}</code></pre>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 {% endblock %}
