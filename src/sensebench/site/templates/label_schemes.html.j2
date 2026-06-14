@@ -1,0 +1,95 @@
+{% extends "base.html.j2" %}
+
+{% block content %}
+<section class="page-title">
+  <p class="eyebrow">scoring</p>
+  <h1>Label schemes</h1>
+  <p>
+    SenseBench scores a model's predicted WordNet sense against a gold answer key. The leaderboard's
+    two selectors let you choose <strong>which gold answer key</strong> and at <strong>what sense
+    granularity</strong> — six combinations in all. This page explains what each one means.
+  </p>
+</section>
+
+<section class="doc-section">
+  <h2>Axis 1 — Score against (the gold label set)</h2>
+  <p>
+    Every lexEN item is the same target word in the same sentence context, but three projects
+    assigned its "correct" sense and they do not always agree. You can score every run against any
+    of the three gold label sets:
+  </p>
+  <ul>
+    <li>
+      <strong>lexEN v1</strong> (default) — Glite's gold for these items, produced by a
+      same-protocol three-annotator consensus review that corrects annotation errors in the source
+      labels. This is the official SenseBench score. See the
+      <a href="{{ base_path }}datasets/{{ default_dataset_version }}/">lexEN dataset page</a> and the
+      <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN repository</a>.
+    </li>
+    <li>
+      <strong>Maru 2022 (ALLamended)</strong> — the amended gold labels from Maru et al. 2022,
+      <em>Nibbling at the Hard Core of Word Sense Disambiguation</em> (ACL 2022), released with the
+      <a href="https://github.com/SapienzaNLP/wsd-hard-benchmark" rel="noopener">WSD Hard
+      Benchmark</a>.
+    </li>
+    <li>
+      <strong>Raganato 2017 (original)</strong> — the original gold labels from the Raganato et al.
+      2017 unified evaluation framework, the long-standing standard for English all-words WSD. See
+      the <a href="http://lcl.uniroma1.it/wsdeval/" rel="noopener">WSD Evaluation Framework</a>.
+    </li>
+  </ul>
+  <p>
+    On lexEN v1 these labels differ: the lexEN gold changes <strong>211</strong> labels relative to
+    Maru 2022 and <strong>1,004</strong> relative to the original Raganato labels. Scoring against
+    the original labels therefore reads lower than scoring against the corrected lexEN gold.
+  </p>
+</section>
+
+<section class="doc-section">
+  <h2>Axis 2 — Sense granularity</h2>
+  <ul>
+    <li>
+      <strong>WordNet fine-grained</strong> (default) — the prediction must match the exact
+      <a href="https://wordnet.princeton.edu/" rel="noopener">WordNet 3.0</a> sense key. This is the
+      traditional, strict WSD metric.
+    </li>
+    <li>
+      <strong>Glite coarse-grained</strong> — WordNet's narrow senses are grouped into broader
+      <a href="https://glitedictionary.com" rel="noopener">Glite Dictionary</a> concepts, a more
+      application-oriented sense inventory. A prediction is coarse-correct when its WordNet sense
+      maps to the same Glite concept as a gold sense. Because every fine-grained hit is also a coarse
+      hit, coarse accuracy is always at least the fine-grained accuracy for the same gold set.
+    </li>
+  </ul>
+</section>
+
+<section class="doc-section">
+  <h2>The six schemes</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Score against</th>
+          {% for granularity in scheme_granularities %}<th>{{ granularity.label }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for source in scheme_gold_sources %}
+        <tr>
+          <th scope="row">{{ source.label }}</th>
+          {% for granularity in scheme_granularities %}
+          <td>{{ source.label }} · {{ granularity.label }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p>
+    The default and official SenseBench score is <strong>lexEN v1 · WordNet fine-grained</strong>.
+    Switching the selectors on the <a href="{{ base_path }}">leaderboard</a> re-scores every run and
+    reference baseline live; each <a href="{{ base_path }}runs/">run page</a> reports all six numbers
+    in one table.
+  </p>
+</section>
+{% endblock %}

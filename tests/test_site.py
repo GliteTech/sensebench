@@ -107,8 +107,8 @@ LATENCY_SECONDS: float = 0.5
 TEST_CONCURRENCY: int = 8
 EXPECTED_COST_PER_MILLION_ITEMS: float = 20_000.0
 EXPECTED_TOKENS_PER_ITEM: float = 110.0
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v5"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v5"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v6"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v6"
 TARGET_ART_TEXT: str = "art"
 TARGET_LEMMA_TEXT: str = "Target lemma: art"
 SHOW_RAW_PROMPT_TEXT: str = "Show raw prompt"
@@ -128,7 +128,7 @@ QUANT_FILTER_ID: str = "quant-filter"
 X_METRIC_SELECT_ID: str = "x-metric-select"
 X_SCALE_SELECT_ID: str = "x-scale-select"
 MACHINE_TIMING_HEADING_TEXT: str = "Machine &amp; Timing"
-MACHINE_SECONDS_PER_ITEM_TEXT: str = "Machine seconds / item"
+MACHINE_HOURS_TEXT: str = "Machine-hours / 1M items"
 SPEED_COLUMN_HEADER_TEXT: str = "Speed (s / item)"
 SPEED_SORT_BUTTON_TEXT: str = 'data-sort="seconds_per_item"'
 SORT_ARROW_TEXT: str = '<span class="sort-arrow"'
@@ -411,7 +411,7 @@ def test_build_site_emits_static_pages_and_data(
     assert run_detail.schema_version == RUN_DETAIL_SCHEMA_VERSION
     assert run_detail.metadata.run_id == run_id
     assert run_detail.metadata.totals.cost.total_usd == TOTAL_COST_USD
-    assert run_detail.correctness == EXPECTED_CORRECTNESS_BITS
+    assert run_detail.correctness_by_scheme["lexen_fine"] == EXPECTED_CORRECTNESS_BITS
     assert {artifact.filename for artifact in run_detail.artifacts} == {
         RUN_METADATA_FILENAME,
         PREDICTIONS_FILENAME,
@@ -504,15 +504,17 @@ def test_build_site_self_hosted_run(
     assert self_hosted_entry.gpu == EXPECTED_GPU_LABEL
     assert self_hosted_entry.quantization == FIXTURE_QUANTIZATION
     assert self_hosted_entry.seconds_per_item == LATENCY_SECONDS
+    assert self_hosted_entry.machine_hours_per_million_items == LATENCY_SECONDS * 1_000_000 / 3600
     cloud_entry = next(entry for entry in site_data.entries if entry.run_id == TEST_RUN_ID)
     assert cloud_entry.seconds_per_item is None
+    assert cloud_entry.machine_hours_per_million_items is None
 
     index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
     assert GPU_FILTER_ID in index_html
     assert EXPECTED_GPU_LABEL in index_html
     assert QUANT_FILTER_ID in index_html
     assert FIXTURE_QUANTIZATION in index_html
-    assert MACHINE_SECONDS_PER_ITEM_TEXT in index_html
+    assert MACHINE_HOURS_TEXT in index_html
 
     self_hosted_run_html = (
         output_dir / SITE_RUNS_DIRNAME / SELF_HOSTED_RUN_ID / INDEX_HTML_FILENAME
