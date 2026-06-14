@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from random import Random
 
 from pydantic import ValidationError
 
@@ -14,9 +15,13 @@ from sensebench.datasets.models import DatasetBundle, DatasetIndex, ItemID, Sens
 from sensebench.paths import CALLS_FILENAME, PREDICTIONS_FILENAME, RUN_METADATA_FILENAME
 from sensebench.prompts.models import OutputMode, PromptDefinition, PromptID
 from sensebench.prompts.registry import registered_prompt_paths
-from sensebench.prompts.render import ChatMessage, RenderedTask, render_task
+from sensebench.prompts.render import ChatMessage, RenderedTask, render_task, vote_shuffle_seed
 from sensebench.runner.costs import SECONDS_PER_HOUR
-from sensebench.runner.evaluate import choose_prediction, prediction_is_correct
+from sensebench.runner.evaluate import (
+    choose_prediction,
+    choose_prediction_key,
+    prediction_is_correct,
+)
 from sensebench.runner.extract import ValidSenseIndexExtraction, extract_sense_index
 from sensebench.runs.loaders import load_run_directory
 from sensebench.runs.models import (
@@ -276,7 +281,32 @@ def _sense_keys_by_index(*, prediction: PredictionRecord) -> dict[int, SenseKey]
     return {candidate.index: candidate.sense_key for candidate in prediction.candidates}
 
 
-def _prediction_consistency_issues(*, prediction: PredictionRecord) -> list[RunValidationIssue]:
+def _vote_sense_keys_by_index(
+    *,
+    prediction: PredictionRecord,
+    prompt_id: PromptID,
+    vote_index: int,
+    shuffle: bool,
+) -> dict[int, SenseKey]:
+    """Index->key map for a vote's candidate order (per-vote shuffle reproduced by seed)."""
+    if not shuffle:
+        return _sense_keys_by_index(prediction=prediction)
+    ordered = sorted(prediction.candidates, key=lambda candidate: candidate.index)
+    seed = vote_shuffle_seed(
+        prompt_id=prompt_id,
+        item_id=prediction.item_id,
+        vote_index=vote_index,
+    )
+    Random(seed).shuffle(ordered)
+    return {index: candidate.sense_key for index, candidate in enumerate(ordered, start=1)}
+
+
+def _prediction_consistency_issues(
+    *,
+    prediction: PredictionRecord,
+    prompt_id: PromptID,
+    shuffle: bool,
+) -> list[RunValidationIssue]:
     messages: list[str] = []
     sense_keys_by_index = _sense_keys_by_index(prediction=prediction)
 
@@ -324,11 +354,17 @@ def _prediction_consistency_issues(*, prediction: PredictionRecord) -> list[RunV
 
     for vote in prediction.votes:
         if vote.status == VoteStatus.SUCCESS:
+            vote_keys = _vote_sense_keys_by_index(
+                prediction=prediction,
+                prompt_id=prompt_id,
+                vote_index=vote.vote_index,
+                shuffle=shuffle,
+            )
             if vote.chosen_sense_index is None:
                 messages.append(
                     f"vote {vote.vote_index}: successful vote must record chosen_sense_index"
                 )
-            elif vote.chosen_sense_key != sense_keys_by_index.get(vote.chosen_sense_index):
+            elif vote.chosen_sense_key != vote_keys.get(vote.chosen_sense_index):
                 messages.append(
                     f"vote {vote.vote_index}: chosen_sense_key does not match "
                     f"candidate {vote.chosen_sense_index}"
@@ -361,12 +397,22 @@ def _decision_issues(
             f"vote indexes {observed_vote_indexes} do not match "
             f"policy votes_per_item {policy.votes_per_item}"
         )
-    replayed_index = choose_prediction(votes=prediction.votes)
-    if prediction.predicted_sense_index != replayed_index:
-        messages.append(
-            f"predicted_sense_index {prediction.predicted_sense_index} does not match "
-            f"replayed vote decision {replayed_index}"
-        )
+    if policy.shuffle_senses_per_vote:
+        # Per-vote shuffle: indices are not comparable across votes, so the
+        # decision is replayed (and recorded) over sense keys.
+        replayed_key = choose_prediction_key(votes=prediction.votes)
+        if prediction.predicted_sense_key != replayed_key:
+            messages.append(
+                f"predicted_sense_key {prediction.predicted_sense_key} does not match "
+                f"replayed vote decision {replayed_key}"
+            )
+    else:
+        replayed_index = choose_prediction(votes=prediction.votes)
+        if prediction.predicted_sense_index != replayed_index:
+            messages.append(
+                f"predicted_sense_index {prediction.predicted_sense_index} does not match "
+                f"replayed vote decision {replayed_index}"
+            )
     return [
         RunValidationIssue(
             rule=RunValidationRule.PREDICTION_DECISION,
@@ -537,11 +583,11 @@ def _vote_extraction_issues(
     calls_by_id: dict[CallID, CallRecord],
     output_mode: OutputMode,
     policy: RunPolicy,
+    prompt_id: PromptID,
 ) -> list[RunValidationIssue]:
     if prediction.status in (PredictionStatus.MONOSEMOUS, PredictionStatus.NO_CANDIDATES):
         return []
     issues: list[RunValidationIssue] = []
-    sense_keys_by_index = _sense_keys_by_index(prediction=prediction)
     max_attempts = policy.semantic_reasks_per_invalid_vote + 1
     for vote in prediction.votes:
         location = f"{prediction.item_id}:{vote.vote_index}"
@@ -571,7 +617,12 @@ def _vote_extraction_issues(
             calls=calls,
             output_mode=output_mode,
             candidate_count=len(prediction.candidates),
-            sense_keys_by_index=sense_keys_by_index,
+            sense_keys_by_index=_vote_sense_keys_by_index(
+                prediction=prediction,
+                prompt_id=prompt_id,
+                vote_index=vote.vote_index,
+                shuffle=policy.shuffle_senses_per_vote,
+            ),
             max_attempts=max_attempts,
             location=location,
         )
@@ -721,6 +772,7 @@ class _RenderCache:
         self._dataset_index = dataset_index
         self._prompt = prompt
         self._rendered_by_item: dict[ItemID, RenderedTask | None] = {}
+        self._rendered_by_vote: dict[tuple[ItemID, int], RenderedTask | None] = {}
 
     def rendered(self, *, item_id: ItemID) -> RenderedTask | None:
         if item_id not in self._rendered_by_item:
@@ -739,6 +791,34 @@ class _RenderCache:
                     candidates=candidates,
                 )
         return self._rendered_by_item[item_id]
+
+    def rendered_for_vote(
+        self, *, item_id: ItemID, vote_index: int, shuffle: bool
+    ) -> RenderedTask | None:
+        if not shuffle:
+            return self.rendered(item_id=item_id)
+        key = (item_id, vote_index)
+        if key not in self._rendered_by_vote:
+            item = self._dataset_index.items_by_id.get(item_id)
+            if item is None:
+                self._rendered_by_vote[key] = None
+            else:
+                candidates: list[SenseCandidate] = get_candidate_senses(
+                    lemma=item.lemma,
+                    pos=item.pos,
+                )
+                self._rendered_by_vote[key] = render_task(
+                    prompt=self._prompt,
+                    item=item,
+                    dataset_index=self._dataset_index,
+                    candidates=candidates,
+                    shuffle_seed=vote_shuffle_seed(
+                        prompt_id=self._prompt.id,
+                        item_id=item_id,
+                        vote_index=vote_index,
+                    ),
+                )
+        return self._rendered_by_vote[key]
 
 
 def _candidate_set_issues(
@@ -782,12 +862,15 @@ def _prompt_rendering_issues(
     *,
     calls: list[CallRecord],
     render_cache: _RenderCache,
+    shuffle: bool,
 ) -> list[RunValidationIssue]:
     issues: list[RunValidationIssue] = []
     for call in calls:
         if call.attempt_kind != AttemptKind.INITIAL:
             continue
-        rendered = render_cache.rendered(item_id=call.item_id)
+        rendered = render_cache.rendered_for_vote(
+            item_id=call.item_id, vote_index=call.vote_index, shuffle=shuffle
+        )
         if rendered is None:
             issues.append(
                 RunValidationIssue(
@@ -1018,10 +1101,18 @@ def verify_run_directory(
     if prompt is not None and prompt.id == loaded.metadata.prompt.id:
         verification_prompt = prompt
     calls_by_id: dict[CallID, CallRecord] = {call.call_id: call for call in loaded.calls}
+    run_prompt_id = loaded.metadata.prompt.id
+    shuffle_senses = loaded.metadata.policy.shuffle_senses_per_vote
     for prediction in loaded.predictions:
         issues.extend(_candidate_issues(prediction=prediction))
         issues.extend(_vote_reference_issues(prediction=prediction, calls_by_id=calls_by_id))
-        issues.extend(_prediction_consistency_issues(prediction=prediction))
+        issues.extend(
+            _prediction_consistency_issues(
+                prediction=prediction,
+                prompt_id=run_prompt_id,
+                shuffle=shuffle_senses,
+            )
+        )
         issues.extend(_decision_issues(prediction=prediction, policy=loaded.metadata.policy))
         if verification_prompt is not None:
             issues.extend(
@@ -1030,6 +1121,7 @@ def verify_run_directory(
                     calls_by_id=calls_by_id,
                     output_mode=verification_prompt.output.mode,
                     policy=loaded.metadata.policy,
+                    prompt_id=run_prompt_id,
                 )
             )
     issues.extend(_correctness_issues(predictions=loaded.predictions))
@@ -1045,5 +1137,9 @@ def verify_run_directory(
         issues.extend(
             _candidate_set_issues(predictions=loaded.predictions, render_cache=render_cache)
         )
-        issues.extend(_prompt_rendering_issues(calls=loaded.calls, render_cache=render_cache))
+        issues.extend(
+            _prompt_rendering_issues(
+                calls=loaded.calls, render_cache=render_cache, shuffle=shuffle_senses
+            )
+        )
     return RunValidationReport(run_dir=run_dir, issues=issues)
