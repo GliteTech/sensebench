@@ -12,7 +12,8 @@ Provenance:
   ("Nibbling at the Hard Core of Word Sense Disambiguation", ACL 2022,
   <https://github.com/SapienzaNLP/wsd-hard-benchmark>).
 * `escher.key.txt` — ESCHER (Barba et al. 2021), reproduced by Glite from the official checkpoint.
-* `consec.key.txt` — ConSeC (Barba et al. 2021), reproduced by Glite from the official checkpoint.
+* `consec.key.txt` — ConSeC (Barba et al. 2021), reproduced by Glite (SemCor + WordNet
+  Gloss+Examples training; 82.9 F1 on Raganato ALL, −0.3 of the published 83.2 F1).
 
 The MFS (most frequent sense) baseline is not a file: it is computed at build time as WordNet 3.0's
 first (frequency-ranked) sense for each item's lemma and part of speech.
