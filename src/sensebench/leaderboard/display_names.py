@@ -102,6 +102,7 @@ _DATE_RE = re.compile(r"^(?:20\d{6}|\d{4}-\d{2}-\d{2})$")
 # Mirror of site.js FAMILY_PATTERNS (order matters; first match wins).
 _FAMILY_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"gemma"), "Gemma"),
+    (re.compile(r"gemini"), "Gemini"),
     (re.compile(r"qwen"), "Qwen"),
     (re.compile(r"glm"), "GLM"),
     (re.compile(r"llama|maverick|scout"), "Llama"),
@@ -113,6 +114,8 @@ _FAMILY_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"hunyuan"), "Hunyuan"),
     (re.compile(r"olmo"), "OLMo"),
     (re.compile(r"command|c4ai"), "Command"),
+    (re.compile(r"kimi|moonshot"), "Kimi"),
+    (re.compile(r"grok"), "Grok"),
     (re.compile(r"gpt|davinci"), "GPT"),
     (re.compile(r"claude"), "Claude"),
     (re.compile(r"minimax"), "MiniMax"),

@@ -67,8 +67,8 @@ def test_vendor_logo_slug(vendor: str | None, expected: str | None) -> None:
         ("Anthropic", "claude-opus-4-8", "Claude"),
         ("DeepSeek", "openrouter/deepseek/deepseek-v4-pro", "DeepSeek"),
         ("Alibaba", "Qwen/Qwen3.6-27B-FP8", "Qwen"),
+        ("Google", "gemini/gemini-3.5-flash", "Gemini"),
         # No family pattern -> falls back to the vendor string.
-        ("Google", "gemini/gemini-3.5-flash", "Google"),
         ("TestVendor", "fake-model", "TestVendor"),
         (None, "fake-model", "Other"),
     ],
