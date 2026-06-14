@@ -1,0 +1,33 @@
+{% extends "base.html.j2" %}
+
+{% block content %}
+<section class="page-title">
+  <p class="eyebrow">Reference</p>
+  <h1>Prompts</h1>
+  <p>
+    Every SenseBench run uses one of these registered prompt formats to query the model. A prompt fixes
+    the context window, candidate-sense ordering, target marker, and output format, so runs on the same
+    prompt are directly comparable. Open a prompt for full metadata, the message templates, rendered
+    item examples, and a download of the raw JSON.
+  </p>
+</section>
+
+<section class="table-panel" aria-label="Registered prompts">
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        {% for prompt in prompts %}
+        <tr>
+          <td><a href="{{ base_path }}prompts/{{ prompt.id }}/"><strong>{{ prompt.id }}</strong></a></td>
+          <td><a href="{{ base_path }}prompts/{{ prompt.id }}/">{{ prompt.name }}</a></td>
+          <td>{{ prompt.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -74,6 +74,7 @@ from sensebench.paths import (
 )
 from sensebench.prompts.models import MessageRole, PromptDefinition
 from sensebench.prompts.registry import load_prompt_definition, registered_prompt_paths
+from sensebench.prompts.render import render_task
 from sensebench.runner.evaluate import prediction_is_correct
 from sensebench.runs.loaders import LoadedRun, load_run_directory
 from sensebench.runs.models import (
@@ -123,6 +124,10 @@ FRONTIER_RUN_IDS_CONTEXT_KEY: str = "frontier_run_ids"
 RELEASE_CONTEXT_KEY: str = "release"
 PROMPT_CONTEXT_KEY: str = "prompt"
 PARAMS_JSON_CONTEXT_KEY: str = "params_json"
+PROMPT_EXAMPLES_CONTEXT_KEY: str = "prompt_examples"
+PROMPT_DOWNLOAD_CONTEXT_KEY: str = "download_name"
+PROMPTS_CONTEXT_KEY: str = "prompts"
+PROMPT_EXAMPLE_COUNT: int = 3
 DETAIL_CONTEXT_KEY: str = "detail"
 REPOSITORY_ARTIFACT_URL_CONTEXT_KEY: str = "repository_artifact_url"
 ENTRIES_CONTEXT_KEY: str = "entries"
@@ -1263,30 +1268,98 @@ def _render_dataset_page(
     return path
 
 
+def _prompt_examples(
+    *,
+    prompt: PromptDefinition,
+    dataset: DatasetBundle,
+    limit: int,
+) -> list[dict[str, object]]:
+    """Render `prompt` against the first few polysemous dataset items for display."""
+    index = build_dataset_index(bundle=dataset)
+    examples: list[dict[str, object]] = []
+    for item in dataset.items:
+        if len(examples) >= limit:
+            break
+        candidates = get_candidate_senses(lemma=item.lemma, pos=item.pos)
+        if len(candidates) < 2:
+            continue
+        rendered = render_task(
+            prompt=prompt,
+            item=item,
+            dataset_index=index,
+            candidates=candidates,
+        )
+        examples.append(
+            {
+                "item_id": item.item_id,
+                "lemma": item.lemma,
+                "pos": item.pos,
+                "target_text": item.target_text,
+                "candidate_count": len(candidates),
+                "messages": [
+                    {"role": message.role.value, "content": message.content}
+                    for message in rendered.messages
+                ],
+            }
+        )
+    return examples
+
+
+def _render_prompts_index(
+    *,
+    env: Environment,
+    output_dir: Path,
+    base_url: str,
+) -> str:
+    prompts = [load_prompt_definition(path=path) for path in registered_prompt_paths()]
+    route = f"{PROMPTS_ROUTE_PREFIX}/"
+    html_text = _render(
+        env=env,
+        template_name="prompts_index.html.j2",
+        base_url=base_url,
+        title="Prompts",
+        description="Prompt formats SenseBench runs use to query models.",
+        path=route,
+        context={PROMPTS_CONTEXT_KEY: prompts},
+    )
+    _write_text(path=_page_file_path(output_dir=output_dir, route=route), text=html_text)
+    return route
+
+
 def _render_prompt_pages(
     *,
     env: Environment,
     output_dir: Path,
     base_url: str,
+    dataset_cache: dict[str, DatasetBundle],
 ) -> list[str]:
     paths: list[str] = []
+    dataset = _dataset_for_version(version=DEFAULT_LEXEN_RELEASE_ID, cache=dataset_cache)
     for prompt_path in registered_prompt_paths():
         prompt = load_prompt_definition(path=prompt_path)
-        path = f"{PROMPTS_ROUTE_PREFIX}/{prompt.id}/"
+        route = f"{PROMPTS_ROUTE_PREFIX}/{prompt.id}/"
+        page_dir = output_dir / PROMPTS_ROUTE_PREFIX / prompt.id
+        page_dir.mkdir(parents=True, exist_ok=True)
+        download_name = f"{prompt.id}{PROMPT_JSON_SUFFIX}"
+        copy2(src=prompt_path, dst=page_dir / download_name)
         html_text = _render(
             env=env,
             template_name="prompt.html.j2",
             base_url=base_url,
             title=f"{prompt.id} Prompt",
             description=prompt.description,
-            path=path,
+            path=route,
             context={
                 PROMPT_CONTEXT_KEY: prompt,
                 PARAMS_JSON_CONTEXT_KEY: prompt.params.model_dump_json(indent=2),
+                PROMPT_EXAMPLES_CONTEXT_KEY: _prompt_examples(
+                    prompt=prompt, dataset=dataset, limit=PROMPT_EXAMPLE_COUNT
+                ),
+                PROMPT_DOWNLOAD_CONTEXT_KEY: download_name,
             },
         )
-        _write_text(path=_page_file_path(output_dir=output_dir, route=path), text=html_text)
-        paths.append(path)
+        _write_text(path=_page_file_path(output_dir=output_dir, route=route), text=html_text)
+        paths.append(route)
     return paths
 
 
@@ -1514,7 +1587,12 @@ def build_site(
         )
     )
     paths.append(_render_dataset_page(env=env, output_dir=output_dir, base_url=base_url))
-    paths.extend(_render_prompt_pages(env=env, output_dir=output_dir, base_url=base_url))
+    paths.append(_render_prompts_index(env=env, output_dir=output_dir, base_url=base_url))
+    paths.extend(
+        _render_prompt_pages(
+            env=env, output_dir=output_dir, base_url=base_url, dataset_cache=dataset_cache
+        )
+    )
     paths.extend(_render_static_pages(env=env, output_dir=output_dir, base_url=base_url))
     paths.append(_render_label_schemes(env=env, output_dir=output_dir, base_url=base_url))
     _render_404(env=env, output_dir=output_dir, base_url=base_url)
