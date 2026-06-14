@@ -19,8 +19,8 @@ Provenance:
 The MFS (most frequent sense) baseline is not a file: it is computed at build time as WordNet 3.0's
 first (frequency-ranked) sense for each item's lemma and part of speech.
 
-**Training regimes differ.** Each baseline uses its strongest available faithful Glite
-reproduction, but they were not all trained on the same data: ESCHER is SemCor-only while ConSeC is
-SemCor + WordNet Gloss+Examples (its paper-best configuration). The ConSeC−ESCHER margin on the
-leaderboard therefore reflects this training-data difference on top of the architecture; in the
-original papers the matched-training gap is ~1.3 F1 (SemCor) to ~1.6 F1 (+WNGE) on Raganato ALL.
+**Training regimes differ.** Each baseline uses its strongest available faithful Glite reproduction,
+but they were not all trained on the same data: ESCHER is SemCor-only while ConSeC is SemCor +
+WordNet Gloss+Examples (its paper-best configuration). The ConSeC−ESCHER margin on the leaderboard
+therefore reflects this training-data difference on top of the architecture; in the original papers
+the matched-training gap is ~1.3 F1 (SemCor) to ~1.6 F1 (+WNGE) on Raganato ALL.

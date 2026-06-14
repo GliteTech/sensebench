@@ -39,6 +39,7 @@ from sensebench.prompts.registry import load_prompt_definition
 from sensebench.prompts.render import render_task
 from sensebench.runner.client import LiteLlmClient
 from sensebench.runner.endpoint import (
+    OPENROUTER_PREFIX,
     VLLM_ENGINE_NAME,
     is_local_endpoint,
     litellm_model_id,
@@ -214,7 +215,7 @@ def _default_run_id(
 
 
 def _warn_if_unpriced(*, model: str) -> None:
-    if model.startswith("openrouter/"):
+    if model.startswith(OPENROUTER_PREFIX):
         return
     import litellm
 

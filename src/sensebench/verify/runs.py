@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from random import Random
+from typing import NamedTuple
 
 from pydantic import ValidationError
 
@@ -767,12 +768,17 @@ def _messages_payload(*, messages: Sequence[ChatMessage | MessageRecord]) -> lis
     ]
 
 
+class _VoteCacheKey(NamedTuple):
+    item_id: ItemID
+    vote_index: int
+
+
 class _RenderCache:
     def __init__(self, *, dataset_index: DatasetIndex, prompt: PromptDefinition) -> None:
         self._dataset_index = dataset_index
         self._prompt = prompt
         self._rendered_by_item: dict[ItemID, RenderedTask | None] = {}
-        self._rendered_by_vote: dict[tuple[ItemID, int], RenderedTask | None] = {}
+        self._rendered_by_vote: dict[_VoteCacheKey, RenderedTask | None] = {}
 
     def rendered(self, *, item_id: ItemID) -> RenderedTask | None:
         if item_id not in self._rendered_by_item:
@@ -797,7 +803,7 @@ class _RenderCache:
     ) -> RenderedTask | None:
         if not shuffle:
             return self.rendered(item_id=item_id)
-        key = (item_id, vote_index)
+        key = _VoteCacheKey(item_id=item_id, vote_index=vote_index)
         if key not in self._rendered_by_vote:
             item = self._dataset_index.items_by_id.get(item_id)
             if item is None:

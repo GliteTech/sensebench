@@ -8,13 +8,13 @@ models on rented vast.ai GPUs, and how anyone can submit a self-hosted run witho
 `sensebench run --hosting-kind self_hosted` points the runner at an OpenAI-compatible endpoint
 (vLLM). When the endpoint is on localhost, machine details (GPU model and count, CPU, RAM) are
 collected automatically and the vLLM engine version is read from the server's `/version` endpoint.
-LiteLLM's `hosted_vllm` route requires a dummy API key, so export `HOSTED_VLLM_API_KEY=dummy`
-(the host env script does this).
+LiteLLM's `hosted_vllm` route requires a dummy API key, so export `HOSTED_VLLM_API_KEY=dummy` (the
+host env script does this).
 
-**Machine-time metric:** passing `--hourly-rate-usd` records the machine's hourly rate, and run
-cost is estimated from the wall-clock time the benchmark occupied the box. `--warmup-calls 8`
-issues unrecorded completions before the timed loop so engine warmup (compilation, caches) does
-not pollute the timing.
+**Machine-time metric:** passing `--hourly-rate-usd` records the machine's hourly rate, and run cost
+is estimated from the wall-clock time the benchmark occupied the box. `--warmup-calls 8` issues
+unrecorded completions before the timed loop so engine warmup (compilation, caches) does not pollute
+the timing.
 
 ## Tooling layout
 
@@ -66,8 +66,8 @@ SSH=(ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 -p "$PORT" "root@$HOST
 
 ### 2. Bootstrap the box
 
-`setup_host.sh` clones this repository on the box (branch `lexen-v1-rebuild`, override
-with `SENSEBENCH_BRANCH`), so only the bootstrap script and the HF token need copying:
+`setup_host.sh` clones this repository on the box (branch `lexen-v1-rebuild`, override with
+`SENSEBENCH_BRANCH`), so only the bootstrap script and the HF token need copying:
 
 ```bash
 "${SSH[@]}" "mkdir -p /workspace/sensebench"
@@ -79,15 +79,15 @@ scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 -P "$PORT" \
 ```
 
 The script installs uv, clones the repo, installs sensebench into a venv, writes
-`/workspace/sensebench/env.sh` (PATH, `HF_HOME`, dummy API keys, `HF_TOKEN`), installs the HF
-token, prefetches the dataset and the NLTK WordNet corpus, prints the box's UTC time
-(sanity-check it against your clock), and ends with `DONE`. It is idempotent — re-run it freely.
+`/workspace/sensebench/env.sh` (PATH, `HF_HOME`, dummy API keys, `HF_TOKEN`), installs the HF token,
+prefetches the dataset and the NLTK WordNet corpus, prints the box's UTC time (sanity-check it
+against your clock), and ends with `DONE`. It is idempotent — re-run it freely.
 
 ### 3. Run the legs
 
 The jobs for a preset are the manifest `jobs` whose `gpus` list contains the preset, executed in
-list order (smallest models first, `mistral-small-3.2-fp8` last). Run legs sequentially — each
-leg owns the GPU. Launch each leg inside tmux so it survives SSH disconnects:
+list order (smallest models first, `mistral-small-3.2-fp8` last). Run legs sequentially — each leg
+owns the GPU. Launch each leg inside tmux so it survives SSH disconnects:
 
 ```bash
 JOB=granite-4.1-8b-fp8
@@ -106,14 +106,14 @@ Monitor:
 "${SSH[@]}" "tail -f /workspace/sensebench/logs/server-$JOB.log"
 ```
 
-Each leg downloads the checkpoint, serves it in the `vllm` tmux session, waits for `/health`,
-then runs every manifest prompt with run id `vllm-<job>-<gpu>-<prompt>-<dataset>-<YYYYMMDD>`
-(e.g. `vllm-qwen3.6-27b-fp8-h100-p001-lexen-v1-20260614`) and verifies it on the box. Runs
-that already have a `run.json` are skipped, so re-launching a failed leg resumes where it left
-off. Add `--limit N` for a smoke leg: the run id gets a `-smoke` suffix, and verification is
-skipped (partial runs can never pass full-dataset verification and are not leaderboard-eligible).
-Check the job's `notes` in the manifest before starting it — the Gemma 4 jobs have a fallback
-image and the Mistral job may need vLLM 0.9.x.
+Each leg downloads the checkpoint, serves it in the `vllm` tmux session, waits for `/health`, then
+runs every manifest prompt with run id `vllm-<job>-<gpu>-<prompt>-<dataset>-<YYYYMMDD>` (e.g.
+`vllm-qwen3.6-27b-fp8-h100-p001-lexen-v1-20260614`) and verifies it on the box. Runs that already
+have a `run.json` are skipped, so re-launching a failed leg resumes where it left off. Add
+`--limit N` for a smoke leg: the run id gets a `-smoke` suffix, and verification is skipped (partial
+runs can never pass full-dataset verification and are not leaderboard-eligible). Check the job's
+`notes` in the manifest before starting it — the Gemma 4 jobs have a fallback image and the Mistral
+job may need vLLM 0.9.x.
 
 ### 4. Fetch and verify locally
 
@@ -125,8 +125,8 @@ for run_dir in runs/vllm-*-h100-*; do
 done
 ```
 
-Each leg now runs both registered prompts (`p001`, `p002`); the loop reads each run's prompt id
-from its `run.json` so verification matches the prompt the run actually used.
+Each leg now runs both registered prompts (`p001`, `p002`); the loop reads each run's prompt id from
+its `run.json` so verification matches the prompt the run actually used.
 
 ### 5. Destroy the instance
 
@@ -135,8 +135,8 @@ uv run python tools/self_hosted/destroy.py work/h100/instance.json
 uvx vastai@0.5.0 show instances --raw   # must print an empty list
 ```
 
-`destroy.py` re-checks that the instance is actually gone and exits non-zero with a loud warning
-if it still appears alive — never end a batch with that command failing, the box keeps billing.
+`destroy.py` re-checks that the instance is actually gone and exits non-zero with a loud warning if
+it still appears alive — never end a batch with that command failing, the box keeps billing.
 
 ## Submitting the runs
 
@@ -149,8 +149,8 @@ CI re-verifies every submitted run from the raw artifacts; the leaderboard updat
 
 ## Self-hosted runs without vast.ai
 
-Anyone can submit a self-hosted run from any machine with a GPU — vast.ai and the batch tooling
-are not required:
+Anyone can submit a self-hosted run from any machine with a GPU — vast.ai and the batch tooling are
+not required:
 
 ```bash
 vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000 --max-model-len 8192
@@ -165,7 +165,7 @@ sensebench run \
 ```
 
 Because the endpoint is on localhost, machine info is collected automatically. If the runner is a
-different machine from the GPU host, run `sensebench machine-info` on the GPU host, save the JSON
-to a file, and pass `--machine-info-json <file>` to `sensebench run` — self-hosted submissions
-without GPU details fail verification. Record provenance with `--provider`, `--instance-id`, and
+different machine from the GPU host, run `sensebench machine-info` on the GPU host, save the JSON to
+a file, and pass `--machine-info-json <file>` to `sensebench run` — self-hosted submissions without
+GPU details fail verification. Record provenance with `--provider`, `--instance-id`, and
 `--hourly-rate-usd` where applicable, then verify and submit as above.

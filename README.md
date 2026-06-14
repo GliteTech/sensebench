@@ -49,10 +49,10 @@ metadata and shown on the leaderboard) and give the thinking budget headroom wit
 Pass `--github-handle` so the run is eligible for leaderboard submission (you can also stamp it
 later with `sensebench set-runner`).
 
-On first use this downloads the NLTK WordNet corpus and the registered dataset release
-(`lexen-v1`, cached under `~/.cache/sensebench/`, integrity-checked against a pinned SHA-256
-hash). The run preflights the model with a single call, evaluates every item with a live progress
-bar, writes `runs/<run-id>/`, and ends with an accuracy summary and submission instructions:
+On first use this downloads the NLTK WordNet corpus and the registered dataset release (`lexen-v1`,
+cached under `~/.cache/sensebench/`, integrity-checked against a pinned SHA-256 hash). The run
+preflights the model with a single call, evaluates every item with a live progress bar, writes
+`runs/<run-id>/`, and ends with an accuracy summary and submission instructions:
 
 ```text
 run:     gpt-5.5-medium-reasoning-p001-lexen-v1-20260614
@@ -83,8 +83,8 @@ Useful flags:
 * `--limit 25` for a cheap smoke run (not leaderboard-eligible)
 * `--run-id my-run` to name the run yourself (otherwise generated from model, prompt, and dataset)
 * `--temperature`, `--max-tokens`, `--seed`, `--reasoning-effort` for sampling control
-* `--source-kind open_source`, `--license`, `--model-url`, `--vendor` to record model metadata
-  shown on the leaderboard
+* `--source-kind open_source`, `--license`, `--model-url`, `--vendor` to record model metadata shown
+  on the leaderboard
 * `--hosting-kind self_hosted --endpoint-base-url http://...` for self-hosted models
 
 Each run directory contains:
@@ -121,8 +121,8 @@ cost even when LiteLLM has no static pricing entry for the model.
 The runner supports high concurrency, and the default is `512`. Effective throughput still depends
 on the OpenRouter account, selected model, and upstream provider routing. If a run stalls or returns
 rate-limit errors, reduce `--concurrency` and check the OpenRouter dashboard or response errors for
-the current limit. A full `lexen-v1` run evaluates 4,861 items, so use `--limit` first for a
-cheap smoke test.
+the current limit. A full `lexen-v1` run evaluates 4,861 items, so use `--limit` first for a cheap
+smoke test.
 
 For example, to run Gemma 4 26B through OpenRouter:
 
@@ -174,11 +174,11 @@ sensebench verify runs/<run-id> --dataset lexen-v1 --prompt p001
 ## Dataset
 
 [lexEN](https://github.com/GliteTech/lexen) is Glite's verified English WSD evaluation set.
-`lexen-v1` contains 4,861 polysemous items derived from the Senseval-2, Senseval-3,
-SemEval-2013, and SemEval-2015 all-words tasks, with candidate senses drawn from WordNet 3.0. It is
-built on Maru 2022's ALL_NEW corrections and applies a same-protocol three-annotator consensus
-review to 363 suspicious items, changing 211 gold labels and removing 56 unresolvable items
-relative to the source set.
+`lexen-v1` contains 4,861 polysemous items derived from the Senseval-2, Senseval-3, SemEval-2013,
+and SemEval-2015 all-words tasks, with candidate senses drawn from WordNet 3.0. It is built on Maru
+2022's ALL_NEW corrections and applies a same-protocol three-annotator consensus review to 363
+suspicious items, changing 211 gold labels and removing 56 unresolvable items relative to the source
+set.
 
 Dataset releases are immutable JSONL exports published as
 [GitHub release assets](https://github.com/GliteTech/lexen/releases) and downloaded automatically on
@@ -225,10 +225,10 @@ The public leaderboard site is generated as static GitHub Pages output:
 sensebench site build --results-dir results --output-dir _site --strict
 ```
 
-The generated site includes an interactive leaderboard with bootstrap confidence intervals and
-rank ranges, Pareto charts, reference baselines (MFS, BEM, ESCHER, ConSeC) scored on the same
-items, paired statistical run comparisons, static run-detail pages, dataset and prompt reference
-pages, submission instructions, a sitemap, and static JSON under `_site/data/`.
+The generated site includes an interactive leaderboard with bootstrap confidence intervals and rank
+ranges, Pareto charts, reference baselines (MFS, BEM, ESCHER, ConSeC) scored on the same items,
+paired statistical run comparisons, static run-detail pages, dataset and prompt reference pages,
+submission instructions, a sitemap, and static JSON under `_site/data/`.
 
 ## Development
 
