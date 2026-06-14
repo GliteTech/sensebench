@@ -605,6 +605,7 @@
     const points = plottablePoints(allPoints, scale);
     const frontier = plottablePoints([...frontierPoints], scale).sort((a, b) => a.x - b.x);
     const scatterPoints = frontierOnly?.checked ? frontier : points;
+    const frontierSet = new Set(frontier.map((point) => point.entry.run_id));
     const baselines = visibleBaselines();
     const { colorOf, display, legendFamilies } = familyAssignments(scatterPoints);
     const byFamily = new Map();
@@ -625,11 +626,33 @@
         symbolSize: 11,
         itemStyle: { color: colorOf.get(family) },
         emphasis: { focus: "series" },
-        data: byFamily.get(family).map((point) => ({
-          value: [point.x, point.y],
-          entry: point.entry,
-          symbol: pointSymbol(point.entry)
-        }))
+        data: byFamily.get(family).map((point) => {
+          const onFrontier = frontierSet.has(point.entry.run_id);
+          const selfHosted = isSelfHosted(point.entry);
+          // Frontier points keep their family colour and cloud/self-hosted shape
+          // but are drawn hollow (empty* = white-filled, coloured ring) so they
+          // read as the frontier instead of a misleading uniform marker.
+          const symbol = onFrontier
+            ? selfHosted
+              ? "emptyTriangle"
+              : "emptyCircle"
+            : selfHosted
+              ? "triangle"
+              : "circle";
+          return {
+            value: [point.x, point.y],
+            entry: point.entry,
+            symbol,
+            symbolSize: onFrontier ? 13 : 11,
+            itemStyle: onFrontier
+              ? {
+                  color: colorOf.get(family),
+                  borderColor: colorOf.get(family),
+                  borderWidth: 2
+                }
+              : { color: colorOf.get(family) }
+          };
+        })
       }));
     if (!mainChart) {
       mainChart = window.echarts.init(chartElement);
@@ -700,9 +723,7 @@
           {
             name: "Pareto frontier",
             type: "line",
-            showSymbol: true,
-            symbol: "emptyCircle",
-            symbolSize: 12,
+            showSymbol: false,
             itemStyle: { color: "#374151" },
             lineStyle: { width: 2, color: "#374151" },
             emphasis: { disabled: true },
