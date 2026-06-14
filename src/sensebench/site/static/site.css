@@ -885,9 +885,8 @@ mark {
     display: grid;
     grid-template-columns: 52px 1fr auto;
     grid-template-areas:
-      "rank model acc"
-      "rank model cost"
-      "compare model .";
+      "rank    model acc"
+      "compare model cost";
     gap: 1px 12px;
     align-items: start;
     position: relative;
