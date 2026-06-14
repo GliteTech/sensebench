@@ -39,7 +39,7 @@
   <h2>Rendered Item Examples</h2>
   <p class="note">
     This prompt rendered against {{ prompt_examples|length }} sample item{{ "s" if prompt_examples|length != 1 else "" }}
-    from the <a href="{{ base_path }}datasets/{{ default_dataset_version }}/">lexEN</a> dataset — exactly the
+    from the <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN</a> dataset — exactly the
     text sent to the model, with candidate senses, the context window, and the target marker filled in.
   </p>
   {% for example in prompt_examples %}
