@@ -626,6 +626,7 @@
         symbolSize: 11,
         itemStyle: { color: colorOf.get(family) },
         emphasis: { focus: "series" },
+        labelLayout: { hideOverlap: true },
         data: byFamily.get(family).map((point) => {
           const onFrontier = frontierSet.has(point.entry.run_id);
           const selfHosted = isSelfHosted(point.entry);
@@ -650,7 +651,17 @@
                   borderColor: colorOf.get(family),
                   borderWidth: 2
                 }
-              : { color: colorOf.get(family) }
+              : { color: colorOf.get(family) },
+            // Label only the frontier points (the markers now live here, not on
+            // the marker-less frontier line); everything else is hover-only.
+            label: onFrontier
+              ? {
+                  show: true,
+                  position: "top",
+                  fontSize: 11,
+                  formatter: () => shortModelLabel(point.entry)
+                }
+              : { show: false }
           };
         })
       }));
@@ -729,14 +740,6 @@
             emphasis: { disabled: true },
             blur: { lineStyle: { opacity: 0.9 }, itemStyle: { opacity: 0.9 } },
             z: 5,
-            label: {
-              show: true,
-              position: "top",
-              fontSize: 11,
-              formatter: (params) =>
-                params.data.entry ? shortModelLabel(params.data.entry) : ""
-            },
-            labelLayout: { hideOverlap: true },
             data: frontier.map((point) => ({
               value: [point.x, point.y],
               entry: point.entry
