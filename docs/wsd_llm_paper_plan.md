@@ -39,15 +39,15 @@ Key facts for the paper:
 
 * The release is derived from Maru2022 ALL_NEW (**4,917** source instances) and contains **4,861**
   English WSD instances after the consensus review removes 56 unresolvable items.
-* The published release for the paper is `lexen-v1`, with all three professional lexicographers
-  (RF, PW, PH) incorporated and the adjudication rule frozen.
+* The published release for the paper is `lexen-v1`, with all three professional lexicographers (RF,
+  PW, PH) incorporated and the adjudication rule frozen.
 * `lexen-v1` is the published benchmark release; `lexen-v0.2.0` (interim two-reviewer evidence) and
   `lexen-v0.1.0` (mixed-protocol draft) are deprecated.
 * The audit selected **363** suspicious items for review and kept **4,554** unreviewed Maru2022
   labels.
 * The three-annotator gold rule retains a reviewed item when at least two of RF/PW/PH select the
-  same non-empty sense set, and removes it when at least two mark it cannot-answer or no fine-grained
-  sense receives two-reviewer support.
+  same non-empty sense set, and removes it when at least two mark it cannot-answer or no
+  fine-grained sense receives two-reviewer support.
 * Relative to Maru2022, `lexen-v1` changes **211** gold labels and removes **56** items. Reviewed
   decisions: **124** three-way exact agreement, **183** two-of-three sense agreement (**307**
   retained); **29** three-way no-consensus and **27** two-of-three cannot-answer removed.
@@ -291,8 +291,8 @@ Useful subsections:
 
 Must include:
 
-* Until `lexen-v1` is frozen, all `lexen-v0.2.0` numbers are interim because the third
-  lexicographer result is pending.
+* Until `lexen-v1` is frozen, all `lexen-v0.2.0` numbers are interim because the third lexicographer
+  result is pending.
 * The audited subset was selected by a model panel and is therefore enriched for model-Maru2022
   disagreements.
 * Unreviewed items inherit Maru2022 labels.

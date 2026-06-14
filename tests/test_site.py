@@ -20,6 +20,7 @@ from sensebench.paths import (
     LEXEN_DATASET_ID,
     P001_PROMPT_PATH,
     PREDICTIONS_FILENAME,
+    RUN_ARTIFACT_ROOT,
     RUN_METADATA_FILENAME,
     SITE_ASSETS_DIRNAME,
     SITE_DATA_DIRNAME,
@@ -66,7 +67,13 @@ from sensebench.runs.models import (
     VoteRecord,
     VoteStatus,
 )
-from sensebench.site.build import RunDetail, SiteData, _format_money, build_site
+from sensebench.site.build import (
+    PROMPTS_ROUTE_PREFIX,
+    RunDetail,
+    SiteData,
+    _format_money,
+    build_site,
+)
 from sensebench.wordnet import get_candidate_senses
 from tests.run_fixtures import (
     FIXTURE_GPU_NAME,
@@ -368,21 +375,21 @@ def test_build_site_emits_static_pages_and_data(
     assert (output_dir / INDEX_HTML_FILENAME).exists()
     assert (output_dir / SITE_RUNS_DIRNAME / run_id / INDEX_HTML_FILENAME).exists()
     assert (output_dir / SITE_DATA_DIRNAME / SITE_RUNS_DIRNAME / f"{run_id}.json").exists()
-    assert (output_dir / "artifacts" / SITE_RUNS_DIRNAME / run_id / RUN_METADATA_FILENAME).exists()
-    assert (output_dir / "artifacts" / SITE_RUNS_DIRNAME / run_id / PREDICTIONS_FILENAME).exists()
-    assert (output_dir / "artifacts" / SITE_RUNS_DIRNAME / run_id / CALLS_FILENAME).exists()
+    assert (output_dir / RUN_ARTIFACT_ROOT / run_id / RUN_METADATA_FILENAME).exists()
+    assert (output_dir / RUN_ARTIFACT_ROOT / run_id / PREDICTIONS_FILENAME).exists()
+    assert (output_dir / RUN_ARTIFACT_ROOT / run_id / CALLS_FILENAME).exists()
     assert (output_dir / SITE_ASSETS_DIRNAME / ECHARTS_VENDOR_PATH).exists()
     assert run_id in (output_dir / "sitemap.xml").read_text(encoding="utf-8")
 
     # Prompts index + per-prompt pages (details, rendered examples, JSON download).
-    prompts_index = output_dir / "prompts" / INDEX_HTML_FILENAME
+    prompts_index = output_dir / PROMPTS_ROUTE_PREFIX / INDEX_HTML_FILENAME
     assert prompts_index.exists()
     prompts_index_html = prompts_index.read_text(encoding="utf-8")
     assert "prompts/p001/" in prompts_index_html
     assert "prompts/p002/" in prompts_index_html
-    p001_page = output_dir / "prompts" / "p001" / INDEX_HTML_FILENAME
+    p001_page = output_dir / PROMPTS_ROUTE_PREFIX / "p001" / INDEX_HTML_FILENAME
     assert p001_page.exists()
-    assert (output_dir / "prompts" / "p001" / "p001.json").exists()
+    assert (output_dir / PROMPTS_ROUTE_PREFIX / "p001" / "p001.json").exists()
     p001_html = p001_page.read_text(encoding="utf-8")
     assert "Rendered Item Examples" in p001_html
     assert "prompts/p001/p001.json" in p001_html
@@ -462,7 +469,7 @@ def test_build_site_emits_static_pages_and_data(
     assert PRICE_PER_TOKEN_TEXT not in run_html
     assert EXPECTED_PRICE_TEXT in run_html
     assert LEGACY_PRICE_TEXT not in run_html
-    assert f"artifacts/runs/{TEST_RUN_ID}/{RUN_METADATA_FILENAME}" in run_html
+    assert (RUN_ARTIFACT_ROOT / TEST_RUN_ID / RUN_METADATA_FILENAME).as_posix() in run_html
     assert MACHINE_TIMING_HEADING_TEXT not in run_html
 
     index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")

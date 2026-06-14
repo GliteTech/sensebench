@@ -17,6 +17,7 @@ import json
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
+from typing import assert_never
 
 from sensebench.datasets.models import SenseKey, WsdItem
 from sensebench.paths import GLITE_ALIASES_PATH, GLITE_CONCEPT_MAP_PATH
@@ -118,13 +119,15 @@ def load_concept_map() -> ConceptMap:
 
 def gold_fine_keys(*, item: WsdItem, gold_source: GoldSource) -> list[SenseKey]:
     """The gold WordNet sense keys for `gold_source` on this item (possibly empty)."""
-    if gold_source == GoldSource.LEXEN:
-        return list(item.gold_sense_keys)
-    if gold_source == GoldSource.MARU2022:
-        return item.metadata.get(MARU2022_SENSE_KEYS_METADATA_KEY, "").split()
-    if gold_source == GoldSource.RAGANATO:
-        return item.metadata.get(RAGANATO_SENSE_KEYS_METADATA_KEY, "").split()
-    raise ValueError(f"unknown gold source {gold_source!r}")
+    match gold_source:
+        case GoldSource.LEXEN:
+            return list(item.gold_sense_keys)
+        case GoldSource.MARU2022:
+            return item.metadata.get(MARU2022_SENSE_KEYS_METADATA_KEY, "").split()
+        case GoldSource.RAGANATO:
+            return item.metadata.get(RAGANATO_SENSE_KEYS_METADATA_KEY, "").split()
+        case _:
+            assert_never(gold_source)
 
 
 def is_scoreable(*, item: WsdItem, gold_source: GoldSource) -> bool:

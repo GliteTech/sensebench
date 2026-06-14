@@ -50,6 +50,7 @@ DOWNLOAD_SUFFIX: str = ".download"
 PROC_CPUINFO_PATH: Path = Path("/proc/cpuinfo")
 PROC_MEMINFO_PATH: Path = Path("/proc/meminfo")
 SELF_HOSTED_MANIFEST_PATH: Path = Path("tools/self_hosted/manifest.json")
+SELF_HOSTED_BACKFILL_SCRIPT_PATH: Path = Path("tools/self_hosted/backfill_provenance.py")
 WORK_ROOT: Path = Path("work")
 INSTANCE_FILENAME: str = "instance.json"
 DEFAULT_SSH_KEY_PATH: Path = Path.home() / ".ssh" / "id_ed25519"

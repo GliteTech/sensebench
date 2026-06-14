@@ -131,7 +131,7 @@ def prettify_model_name(model: str) -> str:
     tail = re.sub(r"-(\d)-(\d)$", r"-\1.\2", tail)
     rendered: list[str] = []
     for token in re.split(r"[-_]", tail):
-        if not token or token.lower() in _DROP_TOKENS or _DATE_RE.match(token):
+        if len(token) == 0 or token.lower() in _DROP_TOKENS or _DATE_RE.match(token):
             continue
         low = token.lower()
         if low in _ACRONYMS:
@@ -146,29 +146,38 @@ def prettify_model_name(model: str) -> str:
         else:
             rendered.append(normalized[:1].upper() + normalized[1:])
     label = " ".join(rendered).strip()
-    return label or model
+    return label if len(label) > 0 else model
 
 
 def vendor_logo_slug(llm_vendor: str | None) -> str | None:
     """Bundled logo slug for a vendor, or None to use the initial fallback."""
-    if not llm_vendor:
+    if llm_vendor is None or len(llm_vendor) == 0:
         return None
     return _VENDOR_LOGO_SLUGS.get(llm_vendor)
 
 
-def model_family(llm_vendor: str | None, model: str) -> str:
+def model_family(*, llm_vendor: str | None, model: str) -> str:
     """Brand family for the model (mirrors site.js familyOf)."""
-    name = (model or "").lower()
+    name = model.lower()
     for pattern, label in _FAMILY_PATTERNS:
         if pattern.search(name):
             return label
-    return llm_vendor or OTHER_FAMILY
+    if llm_vendor is not None and len(llm_vendor) > 0:
+        return llm_vendor
+    return OTHER_FAMILY
 
 
-def vendor_initial(llm_vendor: str | None, model: str) -> str:
+def vendor_initial(*, llm_vendor: str | None, model: str) -> str:
     """Single uppercase character for the colored-initial fallback badge."""
-    family = model_family(llm_vendor, model)
-    source = family if family != OTHER_FAMILY else (llm_vendor or model or "?")
+    family = model_family(llm_vendor=llm_vendor, model=model)
+    if family != OTHER_FAMILY:
+        source = family
+    elif llm_vendor is not None and len(llm_vendor) > 0:
+        source = llm_vendor
+    elif len(model) > 0:
+        source = model
+    else:
+        source = "?"
     for char in source:
         if char.isalnum():
             return char.upper()
