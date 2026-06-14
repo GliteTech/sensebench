@@ -11,8 +11,16 @@ Provenance:
 * `bem.key.txt` — BEM (Blevins & Zettlemoyer 2020), predictions as released by Maru et al. 2022
   ("Nibbling at the Hard Core of Word Sense Disambiguation", ACL 2022,
   <https://github.com/SapienzaNLP/wsd-hard-benchmark>).
-* `escher.key.txt` — ESCHER (Barba et al. 2021), reproduced by Glite from the official checkpoint.
-* `consec.key.txt` — ConSeC (Barba et al. 2021), reproduced by Glite from the official checkpoint.
+* `escher.key.txt` — ESCHER (Barba et al. 2021), reproduced by Glite (SemCor training; 79.6 F1 on
+  Raganato ALL).
+* `consec.key.txt` — ConSeC (Barba et al. 2021), reproduced by Glite (SemCor + WordNet
+  Gloss+Examples training; 82.9 F1 on Raganato ALL, −0.3 of the published 83.2 F1).
 
 The MFS (most frequent sense) baseline is not a file: it is computed at build time as WordNet 3.0's
 first (frequency-ranked) sense for each item's lemma and part of speech.
+
+**Training regimes differ.** Each baseline uses its strongest available faithful Glite
+reproduction, but they were not all trained on the same data: ESCHER is SemCor-only while ConSeC is
+SemCor + WordNet Gloss+Examples (its paper-best configuration). The ConSeC−ESCHER margin on the
+leaderboard therefore reflects this training-data difference on top of the architecture; in the
+original papers the matched-training gap is ~1.3 F1 (SemCor) to ~1.6 F1 (+WNGE) on Raganato ALL.

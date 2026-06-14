@@ -83,8 +83,8 @@ BASELINE_PREDICTION_SPECS: tuple[BaselinePredictionSpec, ...] = (
         path=ESCHER_BASELINE_PATH,
         kind=BaselineKind.REPRODUCED_PREDICTIONS,
         source_note=(
-            "ESCHER (Barba et al. 2021); predictions reproduced by Glite from the official "
-            "checkpoint, scored on this dataset's items."
+            "ESCHER (Barba et al. 2021; SemCor training); predictions reproduced by Glite, "
+            "scored on this dataset's items."
         ),
         source_url="https://github.com/SapienzaNLP/esc",
     ),
@@ -93,8 +93,8 @@ BASELINE_PREDICTION_SPECS: tuple[BaselinePredictionSpec, ...] = (
         path=CONSEC_BASELINE_PATH,
         kind=BaselineKind.REPRODUCED_PREDICTIONS,
         source_note=(
-            "ConSeC (Barba et al. 2021); predictions reproduced by Glite from the official "
-            "checkpoint, scored on this dataset's items."
+            "ConSeC (Barba et al. 2021); predictions reproduced by Glite (SemCor + WordNet "
+            "Gloss+Examples training, 82.9 F1 on Raganato ALL), scored on this dataset's items."
         ),
         source_url="https://github.com/SapienzaNLP/consec",
     ),
