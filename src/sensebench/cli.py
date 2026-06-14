@@ -549,6 +549,7 @@ async def _run_async(*, args: argparse.Namespace) -> int:
         sampling=_sampling(args=args),
         votes_per_item=int(args.votes),
         semantic_reasks_per_invalid_vote=1,
+        shuffle_senses_per_vote=bool(args.shuffle_senses),
         concurrency=_resolved_concurrency(
             args=args,
             hosting_kind=ModelHostingKind(str(args.hosting_kind)),
@@ -676,6 +677,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--skip-preflight", action="store_true")
     run_parser.add_argument("--votes", type=_positive_int, default=1)
+    run_parser.add_argument(
+        "--shuffle-senses",
+        action="store_true",
+        help=(
+            "Re-shuffle the candidate sense order independently for each vote "
+            "(permutation self-consistency); majority is taken over sense keys."
+        ),
+    )
     run_parser.add_argument(
         "--concurrency",
         type=_positive_int,

@@ -17,7 +17,7 @@ from sensebench.datasets.models import (
 from sensebench.paths import P001_PROMPT_PATH, P002_PROMPT_PATH
 from sensebench.prompts.models import TEMPLATE_VARIABLE_CONTEXT
 from sensebench.prompts.registry import load_prompt_definition
-from sensebench.prompts.render import _render_template, render_task
+from sensebench.prompts.render import _render_template, render_task, vote_shuffle_seed
 from sensebench.wordnet import SenseCandidate, SynsetID, WordNetPos
 
 DETOKENIZED_ITEM_ID: ItemID = "i2"
@@ -226,3 +226,55 @@ def test_render_template_leaves_dollar_text_and_unknown_variables_alone() -> Non
         _render_template(content=f"{{{{{UNKNOWN_VARIABLE}}}}}", variables=variables)
         == f"{{{{{UNKNOWN_VARIABLE}}}}}"
     )
+
+
+def _many_candidates(*, count: int) -> list[SenseCandidate]:
+    return [
+        SenseCandidate(
+            sense_key=f"key{index}",
+            synset_id=f"synset{index}",
+            pos=WordNetPos.NOUN,
+            definition=f"definition {index}",
+            synonyms=[],
+            examples=[],
+        )
+        for index in range(1, count + 1)
+    ]
+
+
+def test_render_task_shuffle_seed_overrides_order_deterministically() -> None:
+    prompt = load_prompt_definition(path=P001_PROMPT_PATH)
+    bundle = _bundle()
+    dataset_index = build_dataset_index(bundle=bundle)
+    candidates = _many_candidates(count=6)
+    base = render_task(
+        prompt=prompt, item=bundle.items[0], dataset_index=dataset_index, candidates=candidates
+    )
+    shuffled = render_task(
+        prompt=prompt,
+        item=bundle.items[0],
+        dataset_index=dataset_index,
+        candidates=candidates,
+        shuffle_seed=12345,
+    )
+    shuffled_again = render_task(
+        prompt=prompt,
+        item=bundle.items[0],
+        dataset_index=dataset_index,
+        candidates=candidates,
+        shuffle_seed=12345,
+    )
+    base_keys = [candidate.sense_key for candidate in base.candidates]
+    shuffled_keys = [candidate.sense_key for candidate in shuffled.candidates]
+    again_keys = [candidate.sense_key for candidate in shuffled_again.candidates]
+    assert sorted(shuffled_keys) == sorted(base_keys)  # same candidate set
+    assert shuffled_keys != base_keys  # reordered
+    assert shuffled_keys == again_keys  # deterministic for a given seed
+    assert shuffled.shuffle_seed == 12345
+
+
+def test_vote_shuffle_seed_varies_per_vote_and_is_deterministic() -> None:
+    first = vote_shuffle_seed(prompt_id="p001", item_id="i1", vote_index=1)
+    second = vote_shuffle_seed(prompt_id="p001", item_id="i1", vote_index=2)
+    assert first != second
+    assert first == vote_shuffle_seed(prompt_id="p001", item_id="i1", vote_index=1)
