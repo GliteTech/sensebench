@@ -8,6 +8,8 @@
   const hostingFilter = document.getElementById("hosting-filter");
   const gpuFilter = document.getElementById("gpu-filter");
   const quantFilter = document.getElementById("quant-filter");
+  const schemeGoldSelect = document.getElementById("scheme-gold-select");
+  const schemeGranularitySelect = document.getElementById("scheme-granularity-select");
   const xMetricSelect = document.getElementById("x-metric-select");
   const xScaleSelect = document.getElementById("x-scale-select");
   const maxCostFilter = document.getElementById("max-cost-filter");
@@ -19,6 +21,7 @@
   const compareEmpty = document.getElementById("compare-empty");
   const comparePairwise = document.getElementById("compare-pairwise");
   const compareTable = document.getElementById("compare-table");
+  const baselinesTableBody = document.querySelector(".baselines-table tbody");
   const dataVersion = window.SENSEBENCH_DATA_VERSION || "";
 
   if (!table) {
@@ -48,16 +51,68 @@
       format: formatMoney,
       missingNote: ""
     },
-    seconds_per_item: {
-      axisLabel: "Machine seconds per item",
-      value: (entry) => entry.seconds_per_item,
-      format: formatSeconds,
+    machine_hours_per_million_items: {
+      axisLabel: "Machine-hours per 1M items",
+      value: (entry) => entry.machine_hours_per_million_items,
+      format: formatMachineHours,
       missingNote: " Cloud API runs record no machine time and are not plotted."
     }
   };
 
   function activeXMetric() {
     return X_METRICS[xMetricSelect?.value] || X_METRICS.cost_per_million_items;
+  }
+
+  function activeScheme() {
+    const gold = schemeGoldSelect?.value || "lexen";
+    const granularity = schemeGranularitySelect?.value || "fine";
+    return `${gold}_${granularity}`;
+  }
+
+  // Project the active scheme's accuracy/CI onto each entry and baseline so the rest of the
+  // pipeline (table, chart, frontier, ranks, tooltips) reads one accuracy field. Idempotent:
+  // each render re-derives from the immutable scheme_scores, not the previous projection.
+  function applyScheme() {
+    const scheme = activeScheme();
+    for (const entry of state.entries) {
+      const score = entry.scheme_scores && entry.scheme_scores[scheme];
+      if (score) {
+        entry.accuracy = score.accuracy;
+        entry.accuracy_ci = score.accuracy_ci;
+      }
+    }
+    for (const baseline of state.baselines) {
+      const score = baseline.scheme_scores && baseline.scheme_scores[scheme];
+      if (score) {
+        baseline.accuracy = score.accuracy;
+        baseline.accuracy_ci = score.accuracy_ci;
+      }
+    }
+  }
+
+  function isDefaultScheme() {
+    return activeScheme() === "lexen_fine";
+  }
+
+  function activeSchemeLabel() {
+    const gold = (schemeGoldSelect?.selectedOptions?.[0]?.text || "lexEN v1").replace(
+      " (default)",
+      ""
+    );
+    const granularity = (
+      schemeGranularitySelect?.selectedOptions?.[0]?.text || "WordNet fine-grained"
+    ).replace(" (default)", "");
+    return `${gold} · ${granularity}`;
+  }
+
+  // When a non-default scheme is active, label every accuracy column header so it is clear the
+  // numbers are not the default lexEN v1 · WordNet fine-grained score.
+  function updateAccuracyHeaders() {
+    const note = isDefaultScheme() ? "" : `Scoring: ${activeSchemeLabel()}`;
+    document.querySelectorAll(".accuracy-scheme-note").forEach((element) => {
+      element.textContent = note;
+      element.hidden = note === "";
+    });
   }
 
   function activeXScale() {
@@ -164,6 +219,12 @@
     proprietary: "Proprietary"
   };
 
+  const baselineKindLabels = {
+    computed_wordnet_mfs: "Computed at build time",
+    published_predictions: "Published predictions",
+    reproduced_predictions: "Reproduced predictions"
+  };
+
   const compareMetrics = [
     {
       key: "accuracy",
@@ -184,10 +245,10 @@
       format: (value) => formatNumber(value, 1)
     },
     {
-      key: "seconds_per_item",
-      title: "Machine s / item",
-      value: (entry) => entry.seconds_per_item,
-      format: formatSeconds
+      key: "machine_hours_per_million_items",
+      title: "Machine-h / 1M",
+      value: (entry) => entry.machine_hours_per_million_items,
+      format: formatMachineHours
     }
   ];
 
@@ -240,6 +301,17 @@
       return `${seconds.toFixed(2)}s`;
     }
     return `${(seconds / 60).toFixed(2)}m`;
+  }
+
+  function formatMachineHours(value) {
+    if (value == null) {
+      return "n/a";
+    }
+    const hours = Number(value);
+    if (hours < 10) {
+      return `${hours.toFixed(2)} h/M`;
+    }
+    return `${formatNumber(hours, 1)} h/M`;
   }
 
   function gpuLabel(entry) {
@@ -934,10 +1006,10 @@
       <thead>
         <tr>
           <th>Model</th>
-          <th>Accuracy</th>
+          <th>Accuracy<span class="accuracy-scheme-note" hidden></span></th>
           <th>Cost / M items</th>
           <th>Tokens / item</th>
-          <th>Machine s / item</th>
+          <th>Machine-h / 1M</th>
           <th>Run</th>
         </tr>
       </thead>
@@ -968,7 +1040,7 @@
               <td><div class="cell-primary">${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
               <td>${formatMoney(entry.cost_per_million_items)}</td>
               <td>${formatNumber(entry.tokens_per_item, 1)}</td>
-              <td>${formatSeconds(entry.seconds_per_item)}</td>
+              <td>${formatMachineHours(entry.machine_hours_per_million_items)}</td>
               <td><a href="${basePath}${escapeHtml(entry.run_url)}">${escapeHtml(entry.run_id)}</a></td>
             </tr>`;
           })
@@ -1105,16 +1177,17 @@
         if (token !== pairwiseToken) {
           return;
         }
+        const scheme = activeScheme();
         const available = [];
         const unavailable = [];
         results.forEach((result, index) => {
           const entry = selectedEntries[index];
-          if (
-            result.status === "fulfilled" &&
-            typeof result.value?.correctness === "string" &&
-            result.value.correctness.length > 0
-          ) {
-            available.push({ entry, correctness: result.value.correctness });
+          const bits =
+            result.status === "fulfilled"
+              ? result.value?.correctness_by_scheme?.[scheme]
+              : null;
+          if (typeof bits === "string" && bits.length > 0) {
+            available.push({ entry, correctness: bits });
           } else {
             unavailable.push(entry);
           }
@@ -1158,7 +1231,44 @@
     );
   }
 
+  function renderBaselines() {
+    if (!baselinesTableBody) {
+      return;
+    }
+    baselinesTableBody.innerHTML = state.baselines
+      .map((baseline) => {
+        const half = ciHalfWidth(baseline);
+        const ciHtml =
+          half == null
+            ? ""
+            : `<div class="cell-secondary" title="95% CI: ${formatPercent(
+                baseline.accuracy_ci.low
+              )} – ${formatPercent(baseline.accuracy_ci.high)}">±${formatPercent(half)}</div>`;
+        const labelHtml = baseline.source_url
+          ? `<a href="${escapeHtml(baseline.source_url)}" rel="noopener">${escapeHtml(
+              baseline.label
+            )}</a>`
+          : escapeHtml(baseline.label);
+        return `<tr>
+          <td>
+            <div class="cell-primary">${labelHtml}</div>
+            <div class="cell-secondary">${escapeHtml(
+              baselineKindLabels[baseline.kind] || baseline.kind
+            )}</div>
+          </td>
+          <td>
+            <div class="cell-primary">${formatPercent(baseline.accuracy)}</div>${ciHtml}
+          </td>
+          <td>${escapeHtml(baseline.dataset_version ?? "")}</td>
+          <td class="baseline-note">${escapeHtml(baseline.source_note)}</td>
+        </tr>`;
+      })
+      .join("");
+  }
+
   function render() {
+    applyScheme();
+    renderBaselines();
     const entries = filteredEntries();
     const metric = activeXMetric();
     const scale = activeXScale();
@@ -1171,6 +1281,7 @@
     renderMainChart(entries, frontierPoints, metric, scale);
     renderCompareCharts();
     renderPairwise();
+    updateAccuracyHeaders();
   }
 
   function attachControls() {
@@ -1182,6 +1293,8 @@
       hostingFilter,
       gpuFilter,
       quantFilter,
+      schemeGoldSelect,
+      schemeGranularitySelect,
       xMetricSelect,
       xScaleSelect,
       maxCostFilter,

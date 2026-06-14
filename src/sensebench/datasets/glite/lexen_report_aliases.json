@@ -1,0 +1,35 @@
+{
+  "spec_version": "1",
+  "aliases": [
+    {
+      "source_sense_key": "court%1:06:05::",
+      "target_sense_key": "court%1:14:00::",
+      "concept_id": "ct:ct7eMZTPoAJBdp6oTQzvWcourt",
+      "reason": "Legacy WordNet sense key for the legal-tribunal noun sense; Glite maps the equivalent legal-court concept through court%1:14:00:: and court%1:06:02::."
+    },
+    {
+      "source_sense_key": "organisation%1:04:01::",
+      "target_sense_key": "organization%1:04:01::",
+      "concept_id": "ct:ct7gdnitck4F9LveHDhcSorganiza",
+      "reason": "British-spelling WordNet sense key; canonical Glite map contains the equivalent American-spelling organization sense key."
+    },
+    {
+      "source_sense_key": "organisation%1:14:00::",
+      "target_sense_key": "organization%1:14:00::",
+      "concept_id": "ct:ct7gdnmWTwSDAEsJWVuChorganiza",
+      "reason": "British-spelling WordNet sense key; canonical Glite map contains the equivalent American-spelling organization sense key."
+    },
+    {
+      "source_sense_key": "organisation%1:14:01::",
+      "target_sense_key": "organization%1:14:01::",
+      "concept_id": "ct:ct7gdnmWTwSDAEsJWVuChorganiza",
+      "reason": "British-spelling WordNet sense key; canonical Glite map contains the equivalent American-spelling organization sense key."
+    },
+    {
+      "source_sense_key": "show%1:10:00::",
+      "target_sense_key": "show%1:04:00::",
+      "concept_id": "ct:ct7hdvMyuhx4Av2nQnPNzshow",
+      "reason": "Legacy WordNet noun sense for a public entertainment/performance; Glite maps the equivalent event concept through show%1:04:00::."
+    }
+  ]
+}

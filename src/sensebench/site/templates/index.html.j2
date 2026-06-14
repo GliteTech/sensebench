@@ -33,6 +33,28 @@
   </dl>
 </section>
 
+<section class="scheme-bar" aria-label="Score labels">
+  <div class="scheme-bar-controls">
+    <label class="scheme-select">
+      <span class="scheme-select-title">Score against</span>
+      <select id="scheme-gold-select">
+        {% for source in scheme_gold_sources %}
+        <option value="{{ source.value }}"{% if source.value == "lexen" %} selected{% endif %}>{{ source.label }}{% if source.value == "lexen" %} (default){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="scheme-select">
+      <span class="scheme-select-title">Sense granularity</span>
+      <select id="scheme-granularity-select">
+        {% for granularity in scheme_granularities %}
+        <option value="{{ granularity.value }}"{% if granularity.value == "fine" %} selected{% endif %}>{{ granularity.label }}{% if granularity.value == "fine" %} (default){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <p class="scheme-bar-note">Re-scores the entire leaderboard — table, chart, Pareto frontier, ranks, and pairwise tests — against the chosen gold labels and sense granularity. Default is lexEN v1 · WordNet fine-grained. <a href="{{ base_path }}label-schemes/">What do these mean? →</a></p>
+</section>
+
 <section class="toolbar" aria-label="Leaderboard controls">
   <label>
     Search
@@ -98,7 +120,7 @@
     Chart X-axis
     <select id="x-metric-select">
       <option value="cost_per_million_items" selected>Cost / M items</option>
-      <option value="seconds_per_item">Machine seconds / item</option>
+      <option value="machine_hours_per_million_items">Machine-hours / 1M items</option>
     </select>
   </label>
   <label>
@@ -138,7 +160,7 @@
       <thead>
         <tr>
           <th>System</th>
-          <th>Accuracy</th>
+          <th>Accuracy<span class="accuracy-scheme-note" hidden></span></th>
           <th>Dataset</th>
           <th>Provenance</th>
         </tr>
@@ -180,7 +202,7 @@
           <th aria-sort="ascending"><button type="button" data-sort="rank">Rank<span class="sort-arrow" aria-hidden="true"> ▲</span></button></th>
           <th>Compare</th>
           <th><button type="button" data-sort="model">Model</button></th>
-          <th><button type="button" data-sort="accuracy">Accuracy</button></th>
+          <th><button type="button" data-sort="accuracy">Accuracy</button><span class="accuracy-scheme-note" hidden></span></th>
           <th><button type="button" data-sort="cost_per_million_items">Cost / M items</button></th>
           <th>Prompt</th>
           <th>Dataset</th>
@@ -227,8 +249,9 @@
   <h2>Method Notes</h2>
   <p>Public rows are rebuilt from verified run artifacts in the repository. Accuracy is recomputed from predictions, and official runs are checked against the registered dataset hash and prompt ID.</p>
   <p>The ± value under each accuracy is half the width of a fixed-seed bootstrap 95% confidence interval. The small range under each rank lists the positions a run could plausibly occupy among the visible rows given overlapping intervals.</p>
-  <p>The Pareto frontier uses the visible rows and the selected chart metric (cost per million items or machine seconds per item): higher accuracy is better, and a lower metric value is better. Starred rows are on the frontier.</p>
-  <p>Machine seconds per item is recorded for self-hosted runs only. It measures the per-item evaluation loop on the recorded machine, excluding model and asset loading; cloud API runs are excluded from that chart.</p>
+  <p>The <strong>Score against</strong> and <strong>Sense granularity</strong> controls re-score every run and baseline against one of six label sets: the lexEN v1, Maru 2022 (ALLamended), or original Raganato 2017 gold labels, each at WordNet 3.0 fine-grained sense or at the coarser Glite concept level. A prediction is coarse-correct when its WordNet sense maps to the same Glite concept as a gold sense (so coarse accuracy is always at least the fine-grained accuracy). The default and official score is lexEN v1 · WordNet fine-grained. See <a href="{{ base_path }}label-schemes/">label schemes</a> for what each option means.</p>
+  <p>The Pareto frontier uses the visible rows and the selected chart metric (cost per million items or machine-hours per 1M items): higher accuracy is better, and a lower metric value is better. Starred rows are on the frontier.</p>
+  <p>Machine-hours per 1M items is recorded for self-hosted runs only. It measures the per-item evaluation loop on the recorded machine, excluding model and asset loading; cloud API runs are excluded from that chart.</p>
   <p>Reference baselines are classic WSD systems scored from per-item predictions on the same dataset items; dashed chart lines show them for context.</p>
   <p>Comparing selected runs on the same dataset uses McNemar's test on paired per-item correctness, which detects differences that overlapping confidence intervals can miss.</p>
 </section>

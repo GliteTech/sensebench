@@ -20,6 +20,13 @@ from sensebench.datasets.releases import (
     get_dataset_release,
     load_registered_dataset,
 )
+from sensebench.leaderboard.schemes import (
+    DEFAULT_SCHEME_ID,
+    SCHEMES,
+    is_scoreable,
+    load_concept_map,
+    scheme_correct,
+)
 from sensebench.paths import PROMPT_JSON_SUFFIX, PROMPT_REGISTRY_DIR, RUN_METADATA_FILENAME
 from sensebench.prompts.models import PromptDefinition, PromptID
 from sensebench.prompts.registry import load_prompt_definition
@@ -46,7 +53,7 @@ DEFAULT_BOOTSTRAP_RESAMPLES: int = 2000
 DEFAULT_BOOTSTRAP_SEED: int = 12345
 CONFIDENCE_LOW_PERCENTILE: float = 2.5
 CONFIDENCE_HIGH_PERCENTILE: float = 97.5
-LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v5"
+LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v6"
 RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
 OFFICIAL_VOTES_PER_ITEM: int = 1
 OFFICIAL_SEMANTIC_REASKS: int = 1
@@ -62,6 +69,13 @@ class LeaderboardModel(BaseModel):
 class AccuracyInterval(LeaderboardModel):
     low: float | None
     high: float | None
+
+
+class SchemeScore(LeaderboardModel):
+    accuracy: float | None
+    accuracy_ci: AccuracyInterval
+    correct_count: int
+    item_count: int
 
 
 class LeaderboardEntry(LeaderboardModel):
@@ -99,6 +113,7 @@ class LeaderboardEntry(LeaderboardModel):
     accuracy_ci: AccuracyInterval
     correct_count: int
     item_count: int
+    scheme_scores: dict[str, SchemeScore]
     call_count: int
     success_count: int
     monosemous_count: int
@@ -125,6 +140,7 @@ class LeaderboardEntry(LeaderboardModel):
     elapsed_seconds: float | None
     benchmark_seconds: float | None
     seconds_per_item: float | None
+    machine_hours_per_million_items: float | None
     concurrency: int | None
     best_group_key: str
 
@@ -312,17 +328,67 @@ def _best_group_key(*, loaded: LoadedRun) -> str:
     )
 
 
+def _score_from_correctness(*, correctness: list[bool]) -> SchemeScore:
+    correct_count = sum(1 for value in correctness if value)
+    item_count = len(correctness)
+    return SchemeScore(
+        accuracy=correct_count / item_count if item_count > 0 else None,
+        accuracy_ci=bootstrap_accuracy_ci(values=correctness),
+        correct_count=correct_count,
+        item_count=item_count,
+    )
+
+
+def _scheme_scores(
+    *,
+    predictions: list[PredictionRecord],
+    dataset: DatasetBundle | None,
+) -> dict[str, SchemeScore]:
+    """Score every prediction under all six schemes by joining to the dataset items.
+
+    When `dataset` is None (non-official build, no dataset to re-score against) only the
+    default lexEN WordNet fine-grained scheme is computed, from the run's frozen `is_correct`.
+    """
+    if dataset is None:
+        lexen_correctness = [prediction.is_correct is True for prediction in predictions]
+        return {DEFAULT_SCHEME_ID: _score_from_correctness(correctness=lexen_correctness)}
+    concept_map = load_concept_map()
+    items_by_id = {item.item_id: item for item in dataset.items}
+    per_scheme: dict[str, list[bool]] = {scheme.scheme_id: [] for scheme in SCHEMES}
+    for prediction in predictions:
+        item = items_by_id.get(prediction.item_id)
+        if item is None:
+            continue
+        for scheme in SCHEMES:
+            if not is_scoreable(item=item, gold_source=scheme.gold_source):
+                continue
+            per_scheme[scheme.scheme_id].append(
+                scheme_correct(
+                    scheme=scheme,
+                    predicted_sense_key=prediction.predicted_sense_key,
+                    item=item,
+                    concept_map=concept_map,
+                )
+            )
+    return {
+        scheme_id: _score_from_correctness(correctness=correctness)
+        for scheme_id, correctness in per_scheme.items()
+    }
+
+
 def _entry_for_run(
     *,
     loaded: LoadedRun,
     prompt: PromptDefinition | None,
     rank: int,
+    dataset: DatasetBundle | None,
 ) -> LeaderboardEntry:
     metadata = loaded.metadata
-    correctness: list[bool] = [prediction.is_correct is True for prediction in loaded.predictions]
-    correct_count = sum(1 for value in correctness if value)
-    item_count = len(loaded.predictions)
-    accuracy = correct_count / item_count if item_count > 0 else None
+    scheme_scores = _scheme_scores(predictions=loaded.predictions, dataset=dataset)
+    headline = scheme_scores[DEFAULT_SCHEME_ID]
+    accuracy = headline.accuracy
+    correct_count = headline.correct_count
+    item_count = headline.item_count
     usage = metadata.totals.usage
     total_tokens = _token_total(usage=usage)
     status_counts = _status_counts(predictions=loaded.predictions)
@@ -335,6 +401,11 @@ def _entry_for_run(
     machine_gpu = machine.gpu if machine is not None else None
     execution = metadata.execution
     benchmark_seconds = execution.timing.benchmark_seconds if execution is not None else None
+    seconds_per_item = (
+        _divide(numerator=benchmark_seconds, denominator=item_count)
+        if self_hosted is not None
+        else None
+    )
     return LeaderboardEntry(
         rank=rank,
         run_id=metadata.run_id,
@@ -369,9 +440,10 @@ def _entry_for_run(
         dataset_version=metadata.dataset.dataset_version,
         dataset_content_hash=metadata.dataset.content_hash,
         accuracy=accuracy,
-        accuracy_ci=bootstrap_accuracy_ci(values=correctness),
+        accuracy_ci=headline.accuracy_ci,
         correct_count=correct_count,
         item_count=item_count,
+        scheme_scores=scheme_scores,
         call_count=len(loaded.calls),
         success_count=status_counts.get(PredictionStatus.SUCCESS, 0),
         monosemous_count=status_counts.get(PredictionStatus.MONOSEMOUS, 0),
@@ -399,10 +471,9 @@ def _entry_for_run(
         else (cost_usd / item_count) * 1_000_000,
         elapsed_seconds=metadata.totals.elapsed_seconds,
         benchmark_seconds=benchmark_seconds,
-        seconds_per_item=(
-            _divide(numerator=benchmark_seconds, denominator=item_count)
-            if self_hosted is not None
-            else None
+        seconds_per_item=seconds_per_item,
+        machine_hours_per_million_items=(
+            seconds_per_item * 1_000_000 / 3600 if seconds_per_item is not None else None
         ),
         concurrency=execution.concurrency if execution is not None else None,
         best_group_key=_best_group_key(loaded=loaded),
@@ -545,7 +616,7 @@ def _verified_entry_for_run(
             ],
         )
     return VerifiedEntryResult(
-        entry=_entry_for_run(loaded=loaded, prompt=prompt, rank=0),
+        entry=_entry_for_run(loaded=loaded, prompt=prompt, rank=0, dataset=dataset),
         issues=[],
     )
 

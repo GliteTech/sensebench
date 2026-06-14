@@ -767,3 +767,145 @@ mark {
     justify-content: flex-start;
   }
 }
+
+/* Score-scheme selector band */
+.scheme-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 0 28px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+.scheme-bar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scheme-select {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.scheme-select-title {
+  min-width: 158px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scheme-select select {
+  min-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.scheme-bar-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.accuracy-scheme-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--accent-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.scheme-matrix-panel {
+  margin-top: 8px;
+  margin-bottom: 40px;
+}
+
+/* Run-page scheme matrix */
+.scheme-matrix-panel {
+  margin-top: 8px;
+}
+
+.scheme-matrix th[scope="row"] {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.scheme-matrix .cell-primary {
+  display: block;
+  font-weight: 700;
+}
+
+.scheme-matrix .cell-secondary {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.dt-sub {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Alternate-source gold badge + prediction-match chips */
+.badge-gold-alt {
+  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
+  color: var(--accent-2);
+}
+
+.predicted-matches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+
+.pm-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.match-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid var(--line);
+}
+
+.match-yes {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.match-no {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.match-na {
+  color: var(--muted);
+}
