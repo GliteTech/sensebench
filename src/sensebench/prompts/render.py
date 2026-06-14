@@ -257,7 +257,7 @@ def render_task(
         ),
         TEMPLATE_VARIABLE_ITEM_ID: item.item_id,
         TEMPLATE_VARIABLE_TARGET_LEMMA: item.lemma,
-        TEMPLATE_VARIABLE_TARGET_POS: item.pos,
+        TEMPLATE_VARIABLE_TARGET_POS: item.pos.value,
         TEMPLATE_VARIABLE_TARGET_TEXT: item.target_text,
     }
     messages: list[ChatMessage] = [

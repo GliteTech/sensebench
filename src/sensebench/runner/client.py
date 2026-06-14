@@ -7,6 +7,7 @@ import time
 from typing import Any, Protocol
 
 from sensebench.runner.costs import unavailable_cost
+from sensebench.runner.endpoint import OPENROUTER_PREFIX
 from sensebench.runner.models import CompletionRequest, CompletionResult
 from sensebench.runs.models import (
     CallRecord,
@@ -252,7 +253,7 @@ class LiteLlmClient:
         for attempt_number in range(self._max_transport_retries + 1):
             try:
                 extra_kwargs: dict[str, object] = {}
-                if request.model.startswith("openrouter/"):
+                if request.model.startswith(OPENROUTER_PREFIX):
                     # OpenRouter's litellm provider config omits reasoning_effort, so reasoning
                     # models routed through it fail preflight. Whitelist it for OpenRouter only.
                     # Native Anthropic/Gemini must NOT get this: litellm translates reasoning_effort

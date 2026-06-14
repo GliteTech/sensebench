@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from types import ModuleType
 
+from sensebench.paths import RUN_METADATA_FILENAME, SELF_HOSTED_BACKFILL_SCRIPT_PATH
 from sensebench.prompts.models import SENSE_INDEX_FIELD
 from sensebench.runner.writer import write_run_artifacts
 from sensebench.runs.models import RunMetadata, SelfHostedLlmReference
@@ -19,7 +20,6 @@ from tests.run_fixtures import (
     voted_prediction,
 )
 
-BACKFILL_SCRIPT_PATH: Path = Path("tools/self_hosted/backfill_provenance.py")
 JOB_ID: str = "granite-4.1-8b-fp8"
 GPU_PRESET: str = "h100"
 RUN_ID: str = f"vllm-{JOB_ID}-{GPU_PRESET}-p001-lexen-v1-20260614"
@@ -32,7 +32,9 @@ GIT_COMMIT_FIELD: str = "git_commit"
 
 
 def _load_backfill_module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("backfill_provenance", BACKFILL_SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "backfill_provenance", SELF_HOSTED_BACKFILL_SCRIPT_PATH
+    )
     assert spec is not None and spec.loader is not None, "backfill script is importable"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -99,7 +101,7 @@ def test_backfill_enriches_self_hosted_run(tmp_path: Path) -> None:
     assert "backfilled" in result
 
     metadata = RunMetadata.model_validate_json(
-        (run_dir / "run.json").read_text(encoding="utf-8"),
+        (run_dir / RUN_METADATA_FILENAME).read_text(encoding="utf-8"),
     )
     assert isinstance(metadata.model, SelfHostedLlmReference)
     assert metadata.model.hf_revision == PINNED_REVISION

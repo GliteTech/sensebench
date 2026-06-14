@@ -74,7 +74,7 @@ def test_vendor_logo_slug(vendor: str | None, expected: str | None) -> None:
     ],
 )
 def test_model_family(vendor: str | None, model: str, expected: str) -> None:
-    assert model_family(vendor, model) == expected
+    assert model_family(llm_vendor=vendor, model=model) == expected
 
 
 @pytest.mark.parametrize(
@@ -89,4 +89,4 @@ def test_model_family(vendor: str | None, model: str, expected: str) -> None:
     ],
 )
 def test_vendor_initial(vendor: str | None, model: str, expected: str) -> None:
-    assert vendor_initial(vendor, model) == expected
+    assert vendor_initial(llm_vendor=vendor, model=model) == expected

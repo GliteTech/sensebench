@@ -12,6 +12,7 @@ from sensebench.runs.models import ModelID
 
 HOSTED_VLLM_PREFIX: str = "hosted_vllm/"
 OPENAI_PREFIX: str = "openai/"
+OPENROUTER_PREFIX: str = "openrouter/"
 LOCAL_HOSTNAMES: frozenset[str] = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1"})
 VLLM_ENGINE_NAME: str = "vllm"
 DEFAULT_PROBE_TIMEOUT_SECONDS: float = 10.0
