@@ -281,7 +281,7 @@ def _index_for_sense_key(
     return None
 
 
-def _choose_prediction_key(*, votes: list[VoteRecord]) -> SenseKey | None:
+def choose_prediction_key(*, votes: list[VoteRecord]) -> SenseKey | None:
     """Majority over sense keys.
 
     Used when each vote shuffles the candidate order independently, so the
@@ -383,7 +383,7 @@ async def evaluate_item(
         # Per-vote shuffle: each vote uses its own candidate order, so indices are
         # not comparable across votes; aggregate by sense key and report the index
         # in the canonical (base) candidate order.
-        chosen_key = _choose_prediction_key(votes=votes)
+        chosen_key = choose_prediction_key(votes=votes)
         chosen_index = _index_for_sense_key(rendered=rendered, sense_key=chosen_key)
     status = PredictionStatus.SUCCESS if chosen_key is not None else PredictionStatus.NO_VALID_VOTE
     prediction = PredictionRecord(
