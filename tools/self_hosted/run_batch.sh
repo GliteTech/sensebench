@@ -19,17 +19,28 @@ export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 GPU=""
 RUN_DATE="$(date -u +%Y%m%d)"
 JOBS_OVERRIDE=""
+BRANCH_OVERRIDE=""
+VOTES=""
+TEMPERATURE=""
+SHUFFLE_SENSES=0
+RUN_SUFFIX=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --gpu) GPU="$2"; shift 2 ;;
     --date) RUN_DATE="$2"; shift 2 ;;
     --jobs) JOBS_OVERRIDE="$2"; shift 2 ;;
+    --branch) BRANCH_OVERRIDE="$2"; shift 2 ;;
+    --votes) VOTES="$2"; shift 2 ;;
+    --temperature) TEMPERATURE="$2"; shift 2 ;;
+    --shuffle-senses) SHUFFLE_SENSES=1; shift 1 ;;
+    --run-suffix) RUN_SUFFIX="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 [ -n "$GPU" ] || { echo "missing --gpu" >&2; exit 2; }
 
 BRANCH=lexen-v1-rebuild
+[ -n "$BRANCH_OVERRIDE" ] && BRANCH="$BRANCH_OVERRIDE"
 GITHUB_HANDLE=vassiliphilippov
 RUNNER_NAME="Vassili Philippov"
 HF_TOKEN_SRC="$HOME/.ssh/hf_token"
@@ -95,12 +106,17 @@ if ! "${SSH[@]}" "SENSEBENCH_BRANCH=$BRANCH bash /workspace/setup_host.sh"; then
 fi
 
 # ---- per-job launcher (baked args, avoids nested-quoting in tmux) -----------
+EXTRA_LEG_ARGS=""
+[ -n "$VOTES" ] && EXTRA_LEG_ARGS="$EXTRA_LEG_ARGS --votes $VOTES"
+[ -n "$TEMPERATURE" ] && EXTRA_LEG_ARGS="$EXTRA_LEG_ARGS --temperature $TEMPERATURE"
+[ "$SHUFFLE_SENSES" = "1" ] && EXTRA_LEG_ARGS="$EXTRA_LEG_ARGS --shuffle-senses"
+[ -n "$RUN_SUFFIX" ] && EXTRA_LEG_ARGS="$EXTRA_LEG_ARGS --run-suffix $RUN_SUFFIX"
 cat > "$LAUNCHER" <<EOF
 #!/usr/bin/env bash
 mkdir -p /workspace/sensebench/logs
-EVICT_MODEL=1 bash /workspace/sensebench/repo/tools/self_hosted/run_leg.sh \\
+EVICT_MODEL=1 HF_HUB_DISABLE_XET=1 bash /workspace/sensebench/repo/tools/self_hosted/run_leg.sh \\
   --job "\$1" --gpu $GPU --hourly-rate-usd $RATE --instance-id $ID \\
-  --github-handle $GITHUB_HANDLE --runner-name "$RUNNER_NAME" \\
+  --github-handle $GITHUB_HANDLE --runner-name "$RUNNER_NAME"$EXTRA_LEG_ARGS \\
   >> /workspace/sensebench/logs/leg-"\$1".log 2>&1
 EOF
 "${SCP[@]}" "$LAUNCHER" "root@$HOST:/workspace/sensebench/launch_leg.sh" || { log "scp launcher failed"; exit 1; }

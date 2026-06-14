@@ -165,3 +165,60 @@ def test_monosemous_item_short_circuits_without_calls() -> None:
 
     assert evaluation.prediction.was_monosemous is True
     assert len(evaluation.calls) == 0
+
+
+SYNSET_BY_KEY: dict[SenseKey, SynsetID] = {
+    FIRST_SENSE_KEY: FIRST_SYNSET_ID,
+    SECOND_SENSE_KEY: SECOND_SYNSET_ID,
+}
+
+
+def _rendered_ordered(*, ordered_keys: list[SenseKey]) -> RenderedTask:
+    candidates: list[CandidateChoice] = [
+        CandidateChoice(index=index, sense_key=key, synset_id=SYNSET_BY_KEY[key])
+        for index, key in enumerate(ordered_keys, start=1)
+    ]
+    return RenderedTask(
+        item_id=ITEM_ID,
+        prompt_id=PROMPT_ID,
+        messages=[ChatMessage(role=MessageRole.USER, content=USER_MESSAGE_CONTENT)],
+        candidates=candidates,
+        output_mode=OutputMode.JSON_SENSE_INDEX,
+        render_hash=RENDER_HASH,
+        shuffle_seed=None,
+        context=ContextWindow(
+            text="x",
+            target_start_char=0,
+            target_end_char=1,
+            sentences_before=0,
+            sentences_after=0,
+        ),
+    )
+
+
+def test_shuffle_per_vote_aggregates_by_sense_key() -> None:
+    # Every vote answers index 1, but the per-vote shuffle maps index 1 to a
+    # different sense each time. Index-based aggregation would see a (wrong)
+    # unanimous "index 1"; key-based aggregation correctly tallies the senses.
+    per_vote: dict[int, RenderedTask] = {
+        1: _rendered_ordered(ordered_keys=[FIRST_SENSE_KEY, SECOND_SENSE_KEY]),
+        2: _rendered_ordered(ordered_keys=[SECOND_SENSE_KEY, FIRST_SENSE_KEY]),
+        3: _rendered_ordered(ordered_keys=[FIRST_SENSE_KEY, SECOND_SENSE_KEY]),
+    }
+    evaluation = run_async(
+        evaluate_item(
+            rendered=_rendered_ordered(ordered_keys=[FIRST_SENSE_KEY, SECOND_SENSE_KEY]),
+            gold_sense_keys=[FIRST_SENSE_KEY],
+            client=FakeClient(outputs=[raw_output_for_sense_index(sense_index=1)] * 3),
+            config=EvaluationConfig(model=FAKE_MODEL, votes_per_item=3),
+            render_for_vote=lambda vote_index: per_vote[vote_index],
+        )
+    )
+
+    # votes chose sense-1, sense-2, sense-1 -> majority sense-1
+    chosen_keys = [vote.chosen_sense_key for vote in evaluation.prediction.votes]
+    assert chosen_keys == [FIRST_SENSE_KEY, SECOND_SENSE_KEY, FIRST_SENSE_KEY]
+    assert evaluation.prediction.predicted_sense_key == FIRST_SENSE_KEY
+    # predicted index reported in the canonical (base) order
+    assert evaluation.prediction.predicted_sense_index == 1
+    assert evaluation.prediction.is_correct is True
