@@ -17,7 +17,14 @@ from sensebench.datasets.models import (
     SenseKey,
     WsdItem,
 )
-from sensebench.leaderboard.aggregate import AccuracyInterval, bootstrap_accuracy_ci
+from sensebench.leaderboard.aggregate import AccuracyInterval, SchemeScore, bootstrap_accuracy_ci
+from sensebench.leaderboard.schemes import (
+    SCHEMES,
+    ConceptMap,
+    is_scoreable,
+    load_concept_map,
+    scheme_correct,
+)
 from sensebench.paths import BEM_BASELINE_PATH, CONSEC_BASELINE_PATH, ESCHER_BASELINE_PATH
 from sensebench.runner.evaluate import prediction_is_correct
 from sensebench.wordnet import get_candidate_senses, wordnet_version
@@ -48,6 +55,7 @@ class Baseline(BaselineModel):
     accuracy_ci: AccuracyInterval
     correct_count: int
     item_count: int
+    scheme_scores: dict[str, SchemeScore]
     dataset_version: str | None
     source_note: str
     source_url: str | None
@@ -172,11 +180,49 @@ def _mfs_predictions(*, dataset: DatasetBundle) -> dict[ItemID, SenseKey]:
     return predictions
 
 
+def _scheme_score(*, correctness: list[bool]) -> SchemeScore:
+    correct_count = sum(1 for value in correctness if value)
+    item_count = len(correctness)
+    return SchemeScore(
+        accuracy=correct_count / item_count if item_count > 0 else None,
+        accuracy_ci=bootstrap_accuracy_ci(values=correctness),
+        correct_count=correct_count,
+        item_count=item_count,
+    )
+
+
+def _scheme_scores_for_predictions(
+    *,
+    dataset: DatasetBundle,
+    predictions: dict[ItemID, SenseKey],
+    concept_map: ConceptMap,
+) -> dict[str, SchemeScore]:
+    per_scheme: dict[str, list[bool]] = {scheme.scheme_id: [] for scheme in SCHEMES}
+    for item in dataset.items:
+        predicted = predictions.get(item.item_id)
+        for scheme in SCHEMES:
+            if not is_scoreable(item=item, gold_source=scheme.gold_source):
+                continue
+            per_scheme[scheme.scheme_id].append(
+                scheme_correct(
+                    scheme=scheme,
+                    predicted_sense_key=predicted,
+                    item=item,
+                    concept_map=concept_map,
+                )
+            )
+    return {
+        scheme_id: _scheme_score(correctness=correctness)
+        for scheme_id, correctness in per_scheme.items()
+    }
+
+
 def _baseline(
     *,
     label: str,
     kind: BaselineKind,
     correctness: list[bool],
+    scheme_scores: dict[str, SchemeScore],
     dataset: DatasetBundle,
     source_note: str,
     source_url: str | None,
@@ -191,13 +237,14 @@ def _baseline(
         accuracy_ci=bootstrap_accuracy_ci(values=correctness),
         correct_count=correct_count,
         item_count=item_count,
+        scheme_scores=scheme_scores,
         dataset_version=dataset.dataset_version,
         source_note=source_note,
         source_url=source_url,
     )
 
 
-def _mfs_baseline(*, dataset: DatasetBundle) -> Baseline:
+def _mfs_baseline(*, dataset: DatasetBundle, concept_map: ConceptMap) -> Baseline:
     predictions = _mfs_predictions(dataset=dataset)
     correctness: list[bool] = [
         _item_correct(item=item, predicted_sense_key=predictions.get(item.item_id))
@@ -207,6 +254,9 @@ def _mfs_baseline(*, dataset: DatasetBundle) -> Baseline:
         label=MFS_BASELINE_LABEL,
         kind=BaselineKind.COMPUTED_WORDNET_MFS,
         correctness=correctness,
+        scheme_scores=_scheme_scores_for_predictions(
+            dataset=dataset, predictions=predictions, concept_map=concept_map
+        ),
         dataset=dataset,
         source_note=MFS_SOURCE_NOTE,
         source_url=None,
@@ -222,7 +272,8 @@ def score_baselines(*, dataset: DatasetBundle) -> list[Baseline]:
     if len(dataset.items) == 0:
         return []
     wordnet_version()
-    baselines: list[Baseline] = [_mfs_baseline(dataset=dataset)]
+    concept_map = load_concept_map()
+    baselines: list[Baseline] = [_mfs_baseline(dataset=dataset, concept_map=concept_map)]
     for spec in BASELINE_PREDICTION_SPECS:
         predictions = _load_key_file(path=spec.path)
         score = _score(dataset=dataset, predictions=predictions, label=spec.label)
@@ -233,6 +284,9 @@ def score_baselines(*, dataset: DatasetBundle) -> list[Baseline]:
                 label=spec.label,
                 kind=spec.kind,
                 correctness=score.correctness,
+                scheme_scores=_scheme_scores_for_predictions(
+                    dataset=dataset, predictions=predictions, concept_map=concept_map
+                ),
                 dataset=dataset,
                 source_note=spec.source_note,
                 source_url=spec.source_url,

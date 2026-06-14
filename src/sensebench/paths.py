@@ -17,6 +17,12 @@ CONSEC_BASELINE_FILENAME: str = "consec.key.txt"
 BEM_BASELINE_PATH: Path = BASELINE_PREDICTIONS_DIR / BEM_BASELINE_FILENAME
 ESCHER_BASELINE_PATH: Path = BASELINE_PREDICTIONS_DIR / ESCHER_BASELINE_FILENAME
 CONSEC_BASELINE_PATH: Path = BASELINE_PREDICTIONS_DIR / CONSEC_BASELINE_FILENAME
+# Glite coarse-sense mapping vendored from the lexEN release (sources/glite-coarsening/).
+GLITE_COARSENING_DIR: Path = PACKAGE_DIR / "datasets" / "glite"
+GLITE_CONCEPT_MAP_FILENAME: str = "wordnet_sense_key_to_glite_concept.jsonl"
+GLITE_ALIASES_FILENAME: str = "lexen_report_aliases.json"
+GLITE_CONCEPT_MAP_PATH: Path = GLITE_COARSENING_DIR / GLITE_CONCEPT_MAP_FILENAME
+GLITE_ALIASES_PATH: Path = GLITE_COARSENING_DIR / GLITE_ALIASES_FILENAME
 # Workflow paths resolve against the current working directory.
 LOCAL_RUNS_DIR: Path = Path("runs")
 SUBMITTED_RESULTS_DIR: Path = Path("results")

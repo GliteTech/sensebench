@@ -15,7 +15,7 @@
       <dd>{{ entry.rank }}</dd>
     </div>
     <div>
-      <dt>Accuracy</dt>
+      <dt>Accuracy <span class="dt-sub">lexEN v1 · WordNet fine</span></dt>
       <dd>{{ entry.accuracy|pct }}</dd>
     </div>
     <div>
@@ -31,6 +31,37 @@
       <dd>{{ entry.cost_per_million_items|money }}</dd>
     </div>
   </dl>
+</section>
+
+<section class="scheme-matrix-panel">
+  <h2>Accuracy across label schemes</h2>
+  <p class="note">The headline accuracy is lexEN v1 · WordNet fine-grained. Each cell re-scores this run's predictions against a different gold label set and sense granularity; coarse counts a prediction correct when its WordNet sense maps to the same Glite concept as a gold sense. <a href="{{ base_path }}label-schemes/">About these label schemes →</a></p>
+  <div class="table-scroll">
+    <table class="scheme-matrix">
+      <thead>
+        <tr>
+          <th>Score against</th>
+          {% for granularity in scheme_granularities %}<th>{{ granularity.label }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for source in scheme_gold_sources %}
+        <tr>
+          <th scope="row">{{ source.label }}</th>
+          {% for granularity in scheme_granularities %}
+          {% set score = entry.scheme_scores.get(source.value ~ "_" ~ granularity.value) %}
+          <td>
+            {% if score and score.accuracy is not none %}
+            <span class="cell-primary">{{ score.accuracy|pct }}</span>
+            <span class="cell-secondary">{{ score.correct_count }} / {{ score.item_count }}</span>
+            {% else %}n/a{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 
 <section class="detail-grid">
@@ -123,7 +154,7 @@
       <dt>Provider</dt><dd>{{ metadata.machine.provider or "n/a" }}{% if metadata.machine.instance_id %} ({{ metadata.machine.instance_id }}){% endif %}</dd>
       <dt>Hourly rate</dt><dd>{% if metadata.machine.hourly_rate_usd is not none %}{{ metadata.machine.hourly_rate_usd|money }}/h{% else %}n/a{% endif %}</dd>
       <dt>Benchmark time</dt><dd>{{ entry.benchmark_seconds|seconds }}</dd>
-      <dt>Seconds / item</dt><dd>{{ entry.seconds_per_item|seconds }}</dd>
+      <dt>Machine-hours / 1M items</dt><dd>{{ entry.machine_hours_per_million_items|machine_hours }}</dd>
       <dt>Concurrency</dt><dd>{{ entry.concurrency|num }}</dd>
     </dl>
     <p class="note">Benchmark time covers only the per-item evaluation loop on this machine, excluding model and asset loading.</p>
@@ -299,6 +330,14 @@
       </details>
       {% endif %}
 
+      <p class="predicted-matches">
+        <span class="pm-label">Prediction matches gold:</span>
+        {% for key, name in [("lexen", "lexEN"), ("maru2022", "Maru 2022"), ("raganato", "Raganato")] %}
+        {% set m = example.predicted_matches_fine.get(key) %}
+        <span class="match-chip {{ 'match-yes' if m == true else ('match-no' if m == false else 'match-na') }}">{{ name }} {{ '✓' if m == true else ('✗' if m == false else '—') }}</span>
+        {% endfor %}
+      </p>
+
       <h4>WordNet 3.0 senses</h4>
       <ol class="sense-list">
         {% for candidate in example.candidates %}
@@ -321,7 +360,9 @@
             </div>
           </div>
           <div class="sense-badges">
-            {% if candidate.is_gold %}<span class="badge badge-gold">Gold</span>{% endif %}
+            {% if candidate.is_gold %}<span class="badge badge-gold">Gold lexEN</span>{% endif %}
+            {% if candidate.is_gold_maru2022 %}<span class="badge badge-gold-alt">Gold Maru 2022</span>{% endif %}
+            {% if candidate.is_gold_raganato %}<span class="badge badge-gold-alt">Gold Raganato</span>{% endif %}
             {% if candidate.is_selected %}<span class="badge badge-selected">Selected</span>{% endif %}
           </div>
         </li>
