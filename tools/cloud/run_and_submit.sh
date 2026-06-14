@@ -34,7 +34,7 @@ acquire() { local n=0; until mkdir "$LOCKDIR" 2>/dev/null; do sleep 2; n=$((n+1)
 release() { rmdir "$LOCKDIR" 2>/dev/null; }
 
 # already_done <run-id> : true if results/<run-id> already merged to origin/main.
-already_done() { git ls-tree -r --name-only origin/main 2>/dev/null | grep -q "^results/$1/run.json$"; }
+already_done() { git fetch origin main -q 2>/dev/null; git ls-tree -r --name-only origin/main 2>/dev/null | grep -q "^results/$1/run.json$"; }
 
 # submit <run-id> <prompt> : verify, copy to results/, then (locked) branch/commit/push/PR/merge.
 submit() {
@@ -74,6 +74,7 @@ reason_run() {
   local slug="$1" model="$2" prompt="$3" effort="$4" maxtok="$5" conc="$6" vendor="$7" source="$8" provider="$9"
   local rid="${slug}-${effort}-reasoning-${prompt}-${DATASET}-${DATE}"
   if already_done "$rid"; then note "SKIP $rid"; return 0; fi
+  rm -rf "runs/$rid"
   note "RUN $rid (conc=$conc)"
   if uv run sensebench run --model "$model" --prompt "$prompt" \
       --reasoning-effort "$effort" --max-tokens "$maxtok" --concurrency "$conc" \
@@ -91,6 +92,7 @@ plain_run() {
   local slug="$1" model="$2" prompt="$3" maxtok="$4" conc="$5" vendor="$6" source="$7" provider="$8"
   local rid="${slug}-${prompt}-${DATASET}-${DATE}"
   if already_done "$rid"; then note "SKIP $rid"; return 0; fi
+  rm -rf "runs/$rid"
   note "RUN $rid (conc=$conc)"
   if uv run sensebench run --model "$model" --prompt "$prompt" \
       --temperature 0 --max-tokens "$maxtok" --concurrency "$conc" \
@@ -103,7 +105,7 @@ plain_run() {
   fi
 }
 
-CO=256; CG=32; CGR=24; CA=16; CR=24
+CO=256; CG=32; CGR=24; CA=16; CR=48
 
 openai_runs() {
   export STREAM=openai
@@ -151,14 +153,15 @@ openrouter_runs() {
   export STREAM=openrouter
   reason_run deepseek-v4-flash openrouter/deepseek/deepseek-v4-flash p001 high 8192 $CR DeepSeek open_source OpenRouter
   reason_run deepseek-v4-flash openrouter/deepseek/deepseek-v4-flash p002 high 8192 $CR DeepSeek open_source OpenRouter
-  plain_run  kimi-k2.5       openrouter/moonshotai/kimi-k2.5 p001 2048 $CR Moonshot open_source OpenRouter
-  plain_run  kimi-k2.5       openrouter/moonshotai/kimi-k2.5 p002 256  $CR Moonshot open_source OpenRouter
-  plain_run  minimax-m3      openrouter/minimax/minimax-m3   p001 2048 $CR MiniMax  open_source OpenRouter
-  plain_run  minimax-m3      openrouter/minimax/minimax-m3   p002 256  $CR MiniMax  open_source OpenRouter
-  plain_run  qwen3.7-plus    openrouter/qwen/qwen3.7-plus    p001 2048 $CR Alibaba  open_source OpenRouter
-  plain_run  qwen3.7-plus    openrouter/qwen/qwen3.7-plus    p002 256  $CR Alibaba  open_source OpenRouter
-  reason_run grok-4.1-fast   openrouter/x-ai/grok-4.1-fast   p001 low 8192 $CR xAI proprietary OpenRouter
-  reason_run grok-4.1-fast   openrouter/x-ai/grok-4.1-fast   p002 low 8192 $CR xAI proprietary OpenRouter
+  # Kimi/MiniMax/Qwen-Plus reason by default on OpenRouter, so give the answer room
+  # past the thinking trace (2048 truncated ~14% of Kimi outputs -> verify rejects).
+  plain_run  kimi-k2.5       openrouter/moonshotai/kimi-k2.5 p001 8192 $CR Moonshot open_source OpenRouter
+  plain_run  kimi-k2.5       openrouter/moonshotai/kimi-k2.5 p002 8192 $CR Moonshot open_source OpenRouter
+  plain_run  minimax-m3      openrouter/minimax/minimax-m3   p001 8192 $CR MiniMax  open_source OpenRouter
+  plain_run  minimax-m3      openrouter/minimax/minimax-m3   p002 8192 $CR MiniMax  open_source OpenRouter
+  plain_run  qwen3.7-plus    openrouter/qwen/qwen3.7-plus    p001 8192 $CR Alibaba  open_source OpenRouter
+  plain_run  qwen3.7-plus    openrouter/qwen/qwen3.7-plus    p002 8192 $CR Alibaba  open_source OpenRouter
+  # grok-4.1-fast dropped: deprecated on OpenRouter (404 -> xAI recommends Grok 4.3). xAI is covered by the grok-4.3 sweep below.
   reason_run deepseek-v4-pro openrouter/deepseek/deepseek-v4-pro p001 high 8192 $CR DeepSeek open_source OpenRouter
   reason_run deepseek-v4-pro openrouter/deepseek/deepseek-v4-pro p002 high 8192 $CR DeepSeek open_source OpenRouter
   reason_run glm-5           openrouter/z-ai/glm-5           p001 low 8192 $CR Z.ai open_source OpenRouter
