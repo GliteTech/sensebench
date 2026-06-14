@@ -90,8 +90,8 @@ from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v6"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v6"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v7"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v7"
 MAX_ERROR_EXAMPLES: int = 12
 PACKAGE_NAME: str = "sensebench.site"
 TEMPLATE_PACKAGE_PATH: str = "templates"

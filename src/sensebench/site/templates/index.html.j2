@@ -141,6 +141,15 @@
       <option value="best">Best per model</option>
     </select>
   </label>
+  <label>
+    Sort by
+    <select id="sort-select">
+      <option value="rank" selected>Rank</option>
+      <option value="accuracy">Accuracy</option>
+      <option value="cost_per_million_items">Cost</option>
+      <option value="model">Model</option>
+    </select>
+  </label>
   <label class="checkbox-label">
     <input id="frontier-only" type="checkbox">
     Frontier only
@@ -199,43 +208,44 @@
     <table id="leaderboard-table">
       <thead>
         <tr>
-          <th aria-sort="ascending"><button type="button" data-sort="rank">Rank<span class="sort-arrow" aria-hidden="true"> ▲</span></button></th>
-          <th>Compare</th>
-          <th><button type="button" data-sort="model">Model</button></th>
-          <th><button type="button" data-sort="accuracy">Accuracy</button><span class="accuracy-scheme-note" hidden></span></th>
-          <th><button type="button" data-sort="cost_per_million_items">Cost / M items</button></th>
-          <th>Prompt</th>
-          <th>Dataset</th>
-          <th>Run</th>
-          <th>Frontier</th>
+          <th class="col-rank" aria-sort="ascending"><button type="button" data-sort="rank">Rank<span class="sort-arrow" aria-hidden="true"> ▲</span></button></th>
+          <th class="col-compare">Compare</th>
+          <th class="col-model"><button type="button" data-sort="model">Model</button></th>
+          <th class="col-accuracy"><button type="button" data-sort="accuracy">Accuracy</button><span class="accuracy-scheme-note" hidden></span></th>
+          <th class="col-cost"><button type="button" data-sort="cost_per_million_items">Cost / M items</button></th>
+          <th class="col-prompt">Prompt</th>
         </tr>
       </thead>
       <tbody>
         {% for entry in site_data.entries %}
         <tr>
-          <td><div class="cell-primary">{{ entry.rank }}</div></td>
-          <td></td>
-          <td>
-            <div class="cell-primary">{{ entry.model }}{% if entry.reasoning_effort %} ({{ entry.reasoning_effort }}){% endif %}</div>
+          <td class="col-rank"><div class="cell-primary">{{ entry.rank }}</div></td>
+          <td class="col-compare"></td>
+          <td class="col-model">
+            <div class="cell-primary">{% if entry.logo_slug %}<img class="vendor-logo" src="{{ base_path }}assets/logos/{{ entry.logo_slug }}.svg" alt="" width="18" height="18" loading="lazy">{% else %}<span class="vendor-initial fam-{{ (entry.family or 'other')|lower }}">{{ entry.vendor_initial or '?' }}</span>{% endif %}<a class="model-link" href="{{ base_path }}{{ entry.run_url }}" title="{{ entry.run_id }}">{{ entry.display_label or entry.model }}{% if entry.reasoning_effort %} ({{ entry.reasoning_effort }}){% endif %}</a></div>
             <div class="cell-secondary">{% if entry.llm_vendor %}{{ entry.llm_vendor }} · {% endif %}{{ entry.source_kind|source_label }}{% if entry.quantization %} · {{ entry.quantization }}{% endif %}{% if entry.gpu %} · {% if entry.gpu_count and entry.gpu_count > 1 %}{{ entry.gpu_count }}×{% endif %}{{ entry.gpu }}{% endif %}</div>
+            <div class="cell-secondary provenance-mobile">{{ entry.prompt_id }}</div>
           </td>
-          <td>
-            <div class="cell-primary">{{ entry.accuracy|pct }}</div>
+          <td class="col-accuracy">
+            <div class="cell-primary">{% if entry.run_id in frontier_run_ids %}<span class="badge badge-frontier" title="On the accuracy-cost Pareto frontier">★</span> {% endif %}{{ entry.accuracy|pct }}</div>
             {% if entry.accuracy_ci.low is not none and entry.accuracy_ci.high is not none %}
             <div class="cell-secondary" title="95% CI: {{ entry.accuracy_ci.low|pct }} – {{ entry.accuracy_ci.high|pct }}">±{{ ((entry.accuracy_ci.high - entry.accuracy_ci.low) / 2)|pct }}</div>
             {% endif %}
           </td>
-          <td>{{ entry.cost_per_million_items|money }}</td>
-          <td>{{ entry.prompt_id }}</td>
-          <td>{{ entry.dataset_version }}</td>
-          <td><a href="{{ base_path }}{{ entry.run_url }}" title="{{ entry.run_id }}">view</a></td>
-          <td>{% if entry.run_id in frontier_run_ids %}<span class="badge badge-frontier" title="On the accuracy-cost Pareto frontier">★</span>{% endif %}</td>
+          <td class="col-cost">{{ entry.cost_per_million_items|money }}</td>
+          <td class="col-prompt">{{ entry.prompt_id }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </section>
+
+<div id="compare-bar" class="compare-bar" hidden>
+  <span id="compare-bar-count" class="compare-bar-count"></span>
+  <a href="#compare-charts" class="compare-bar-go">Compare →</a>
+  <button type="button" id="compare-bar-clear" class="compare-bar-clear">Clear</button>
+</div>
 
 <section class="compare-panel" aria-label="Selected run comparison">
   <h2>Compare Selected Runs</h2>
