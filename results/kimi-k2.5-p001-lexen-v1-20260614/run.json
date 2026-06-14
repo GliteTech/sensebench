@@ -1,0 +1,86 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "kimi-k2.5-p001-lexen-v1-20260614",
+  "created_at": "2026-06-14T16:01:24.343537+00:00",
+  "git_commit": "a6178cc72069f20d460c254a83c2bccd0ac11336",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p001",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "openrouter/moonshotai/kimi-k2.5",
+    "requested_model": "openrouter/moonshotai/kimi-k2.5",
+    "resolved_model": "moonshotai/kimi-k2.5-0127",
+    "resolved_model_counts": {
+      "moonshotai/kimi-k2.5-0127": 4874
+    },
+    "llm_vendor": "Moonshot",
+    "api_provider": "OpenRouter",
+    "source_kind": "open_source",
+    "license": null,
+    "model_url": null,
+    "reasoning_effort": null,
+    "endpoint_base_url": null
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": null,
+    "max_tokens": 8192,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "machine": null,
+  "execution": {
+    "concurrency": 48,
+    "warmup_call_count": 0,
+    "timing": {
+      "benchmark_started_at": "2026-06-14T15:13:23.927194+00:00",
+      "benchmark_ended_at": "2026-06-14T16:01:24.340986+00:00",
+      "benchmark_seconds": 2880.4270134170074,
+      "setup_seconds": 0.9939497500308789
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4504,
+    "accuracy": 0.926558321333059,
+    "call_count": 4874,
+    "usage": {
+      "input_tokens": 3003159,
+      "cached_input_tokens": 38848,
+      "output_tokens": 5834891,
+      "reasoning_output_tokens": 6141642
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 15.0233824,
+      "input_uncached_usd": 1.39981031,
+      "input_cached_usd": null,
+      "output_usd": 13.6469831,
+      "input_uncached_unit_price_usd": null,
+      "input_cached_unit_price_usd": null,
+      "output_unit_price_usd": null,
+      "source": "provider_reported"
+    },
+    "elapsed_seconds": 2880.4270134170074
+  }
+}
