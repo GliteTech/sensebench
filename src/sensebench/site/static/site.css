@@ -244,6 +244,7 @@ dt {
 dd {
   margin: 0;
   font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
 .toolbar {
@@ -902,6 +903,17 @@ mark {
 
   .sense-badges {
     justify-content: flex-start;
+  }
+
+  /* Reference & detail tables (prompts list, scheme matrix, cost, baselines):
+     fit the viewport and wrap instead of forcing a 900px horizontal scroll. */
+  table:not(#leaderboard-table) {
+    min-width: 0;
+  }
+
+  table:not(#leaderboard-table) th,
+  table:not(#leaderboard-table) td {
+    white-space: normal;
   }
 
   /* Leaderboard table -> stacked cards (no horizontal scroll). */
