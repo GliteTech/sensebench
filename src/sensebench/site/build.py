@@ -957,6 +957,7 @@ def _render(
         canonical_url=_absolute_url(base_url=base_url, path=path),
         title=title,
         description=description,
+        default_dataset_version=DEFAULT_LEXEN_RELEASE_ID,
         **context,
     )
 
@@ -1104,7 +1105,7 @@ def _static_pages() -> list[StaticPage]:
                         "Generate a run with: sensebench run --model <model> --prompt p001 "
                         "--github-handle <your-handle>",
                         "Verify it with: sensebench verify runs/<run-id> --dataset "
-                        "lexen-v0.1.0 --prompt p001",
+                        "lexen-v1 --prompt p001",
                     ),
                 ),
             ),

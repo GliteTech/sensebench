@@ -22,7 +22,7 @@ from tests.run_fixtures import (
 BACKFILL_SCRIPT_PATH: Path = Path("tools/self_hosted/backfill_provenance.py")
 JOB_ID: str = "granite-4.1-8b-fp8"
 GPU_PRESET: str = "h100"
-RUN_ID: str = f"vllm-{JOB_ID}-{GPU_PRESET}-p003-lexen-v0.1.0-20260613"
+RUN_ID: str = f"vllm-{JOB_ID}-{GPU_PRESET}-p001-lexen-v1-20260614"
 CHECKPOINT: str = "ibm-granite/granite-4.1-8b-fp8"
 PINNED_REVISION: str = "070021b3608433b6107a00733d561c9779b9937e"
 DEFAULT_IMAGE: str = "vllm/vllm-openai:v0.22.1"
