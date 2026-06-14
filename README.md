@@ -50,28 +50,28 @@ Pass `--github-handle` so the run is eligible for leaderboard submission (you ca
 later with `sensebench set-runner`).
 
 On first use this downloads the NLTK WordNet corpus and the registered dataset release
-(`lexen-v0.1.0`, cached under `~/.cache/sensebench/`, integrity-checked against a pinned SHA-256
+(`lexen-v1`, cached under `~/.cache/sensebench/`, integrity-checked against a pinned SHA-256
 hash). The run preflights the model with a single call, evaluates every item with a live progress
 bar, writes `runs/<run-id>/`, and ends with an accuracy summary and submission instructions:
 
 ```text
-run:     gpt-5.5-medium-reasoning-p001-lexen-v0.1.0-20260612
+run:     gpt-5.5-medium-reasoning-p001-lexen-v1-20260614
 model:   gpt-5.5 (reasoning effort: medium)
 prompt:  p001 — 5+1 Context, Frequency-Ordered WordNet Glosses
-dataset: lexen-v0.1.0 (4,917 items)
+dataset: lexen-v1 (4,861 items)
 policy:  votes_per_item=1 concurrency=512 max_tokens=4096
 runner:  github:your-github-handle
 preflight OK: gpt-5.5
-Evaluating items: 100%|██████████| 4917/4917 [01:03<00:00, 78.0item/s, acc 0.941, cost $31.47]
-run_id: gpt-5.5-medium-reasoning-p001-lexen-v0.1.0-20260612
-accuracy: 0.9406 (4625/4917 correct)
-items: success=4904 monosemous=0 no_valid_vote=13 no_candidates=0
+Evaluating items: 100%|██████████| 4861/4861 [01:02<00:00, 78.0item/s, acc 0.941, cost $31.12]
+run_id: gpt-5.5-medium-reasoning-p001-lexen-v1-20260614
+accuracy: 0.9405 (4572/4861 correct)
+items: success=4848 monosemous=0 no_valid_vote=13 no_candidates=0
 votes: invalid_output=13 transport_error=0
-calls: 5057  cost: $31.47  elapsed: 62.8s
-artifacts: runs/gpt-5.5-medium-reasoning-p001-lexen-v0.1.0-20260612
+calls: 5001  cost: $31.12  elapsed: 62.1s
+artifacts: runs/gpt-5.5-medium-reasoning-p001-lexen-v1-20260614
 
 Submit this run to the public leaderboard:
-  1. Verify it: sensebench verify runs/<run-id> --dataset lexen-v0.1.0 --prompt p001
+  1. Verify it: sensebench verify runs/<run-id> --dataset lexen-v1 --prompt p001
   2. Fork https://github.com/GliteTech/sensebench and copy the run directory to results/<run-id>/
   3. Open a pull request titled submit-<run-id>
 CI re-verifies every submitted run from the raw artifacts; a maintainer reviews each submission,
@@ -121,7 +121,7 @@ cost even when LiteLLM has no static pricing entry for the model.
 The runner supports high concurrency, and the default is `512`. Effective throughput still depends
 on the OpenRouter account, selected model, and upstream provider routing. If a run stalls or returns
 rate-limit errors, reduce `--concurrency` and check the OpenRouter dashboard or response errors for
-the current limit. A full `lexen-v0.1.0` run evaluates 4,917 items, so use `--limit` first for a
+the current limit. A full `lexen-v1` run evaluates 4,861 items, so use `--limit` first for a
 cheap smoke test.
 
 For example, to run Gemma 4 26B through OpenRouter:
@@ -152,7 +152,7 @@ Open-weight models can be benchmarked against a local [vLLM](https://docs.vllm.a
 ```bash
 vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000 --max-model-len 8192
 export HOSTED_VLLM_API_KEY=dummy
-sensebench run --prompt p003 --model meta-llama/Llama-3.1-8B-Instruct \
+sensebench run --prompt p001 --model meta-llama/Llama-3.1-8B-Instruct \
   --hosting-kind self_hosted --endpoint-base-url http://localhost:8000/v1 \
   --source-kind open_source --hourly-rate-usd 2.50 --github-handle your-github-handle
 ```
@@ -168,15 +168,17 @@ Verification replays the full chain — prompt rendering, answer extraction, vot
 correctness against gold — from the stored artifacts:
 
 ```bash
-sensebench verify runs/<run-id> --dataset lexen-v0.1.0 --prompt p001
+sensebench verify runs/<run-id> --dataset lexen-v1 --prompt p001
 ```
 
 ## Dataset
 
 [lexEN](https://github.com/GliteTech/lexen) is Glite's verified English WSD evaluation set.
-`lexen-v0.1.0` contains 4,917 polysemous items derived from the Senseval-2, Senseval-3,
-SemEval-2013, and SemEval-2015 all-words tasks, with candidate senses drawn from WordNet 3.0 and
-gold senses re-verified by Glite to correct annotation errors in the original test sets.
+`lexen-v1` contains 4,861 polysemous items derived from the Senseval-2, Senseval-3,
+SemEval-2013, and SemEval-2015 all-words tasks, with candidate senses drawn from WordNet 3.0. It is
+built on Maru 2022's ALL_NEW corrections and applies a same-protocol three-annotator consensus
+review to 363 suspicious items, changing 211 gold labels and removing 56 unresolvable items
+relative to the source set.
 
 Dataset releases are immutable JSONL exports published as
 [GitHub release assets](https://github.com/GliteTech/lexen/releases) and downloaded automatically on
@@ -184,7 +186,7 @@ first use. Every release is pinned inside the package by URL, SHA-256 content ha
 and the loader rejects any file that does not match.
 
 ```bash
-sensebench fetch-dataset lexen-v0.1.0
+sensebench fetch-dataset lexen-v1
 ```
 
 ## Prompts
@@ -197,7 +199,7 @@ benchmark-relevant change requires a new prompt ID. See `docs/prompts.md`.
 Anyone can submit a run to the public leaderboard:
 
 1. Run the benchmark with the released package, your own API key, and your `--github-handle`.
-2. Verify it locally: `sensebench verify runs/<run-id> --dataset lexen-v0.1.0 --prompt p001`.
+2. Verify it locally: `sensebench verify runs/<run-id> --dataset lexen-v1 --prompt p001`.
 3. Open a pull request that places the complete run directory (`run.json`, `predictions.jsonl`,
    `calls.jsonl.gz`) under `results/<run-id>/`.
 

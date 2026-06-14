@@ -42,9 +42,9 @@ DATASET_RELEASES: dict[DatasetVersion, DatasetRelease] = {
     DEFAULT_LEXEN_RELEASE_ID: DatasetRelease(
         release_id=DEFAULT_LEXEN_RELEASE_ID,
         dataset_id=LEXEN_DATASET_ID,
-        url="https://github.com/GliteTech/lexen/releases/download/lexen-v0.1.0/items.jsonl",
-        content_hash="sha256:0222f3be1b54975692f2be67f271db0a351eb627e327e346d6b8155f9d1ba856",
-        item_count=4917,
+        url="https://github.com/GliteTech/lexen/releases/download/lexen-v1/items.jsonl",
+        content_hash="sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+        item_count=4861,
     ),
 }
 

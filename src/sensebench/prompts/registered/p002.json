@@ -2,7 +2,7 @@
   "schema_version": "sensebench-prompt-v1",
   "id": "p002",
   "name": "Minimal Single-Sentence Prompt",
-  "description": "Minimal English WSD prompt: only the target sentence with <t>...</t> target marking, candidate senses with index, definition, and at most one usage example, and a plain integer answer. Candidate senses are ordered by WordNet frequency.",
+  "description": "Minimal English Word Sense Disambiguation prompt: only the target sentence, detokenized from the Penn-Treebank-style source tokens into natural English (punctuation, contractions, and quotation marks restored) before the target is marked with <t>...</t>. Candidate senses give an index, definition, and at most one usage example, ordered by WordNet frequency; the model returns a plain integer.",
   "template_kind": "chat_messages",
   "template": {
     "messages": [
@@ -25,7 +25,8 @@
     "examples_max_per_sense": 1,
     "include_pos": false,
     "include_synonyms": false,
-    "synonyms_max_per_sense": 0
+    "synonyms_max_per_sense": 0,
+    "detokenize": true
   },
   "output": {
     "mode": "plain_sense_index"
