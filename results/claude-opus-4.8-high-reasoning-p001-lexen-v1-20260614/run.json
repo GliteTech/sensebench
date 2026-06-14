@@ -1,0 +1,86 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "claude-opus-4.8-high-reasoning-p001-lexen-v1-20260614",
+  "created_at": "2026-06-14T12:22:29.216965+00:00",
+  "git_commit": "0ab5b3335e6b46868c1157f9b8be2cc55725737d",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p001",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "claude-opus-4-8",
+    "requested_model": "claude-opus-4-8",
+    "resolved_model": "claude-opus-4-8",
+    "resolved_model_counts": {
+      "claude-opus-4-8": 4861
+    },
+    "llm_vendor": "Anthropic",
+    "api_provider": "Anthropic",
+    "source_kind": "proprietary",
+    "license": null,
+    "model_url": null,
+    "reasoning_effort": "high",
+    "endpoint_base_url": null
+  },
+  "sampling": {
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": 16384,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "machine": null,
+  "execution": {
+    "concurrency": 16,
+    "warmup_call_count": 0,
+    "timing": {
+      "benchmark_started_at": "2026-06-14T12:12:24.074869+00:00",
+      "benchmark_ended_at": "2026-06-14T12:22:29.210735+00:00",
+      "benchmark_seconds": 605.1298587910132,
+      "setup_seconds": 0.9723356670001522
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4577,
+    "accuracy": 0.9415758074470274,
+    "call_count": 4861,
+    "usage": {
+      "input_tokens": 4407608,
+      "cached_input_tokens": 0,
+      "output_tokens": 137880,
+      "reasoning_output_tokens": 0
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 25.48504,
+      "input_uncached_usd": 22.038040000000002,
+      "input_cached_usd": 0.0,
+      "output_usd": 3.447,
+      "input_uncached_unit_price_usd": 5e-6,
+      "input_cached_unit_price_usd": 5e-7,
+      "output_unit_price_usd": 0.000025,
+      "source": "litellm_estimate"
+    },
+    "elapsed_seconds": 605.1298587910132
+  }
+}
