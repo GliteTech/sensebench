@@ -121,7 +121,6 @@ INCORRECT_BIT: str = "0"
 MONEY_SMALL_VALUE_SIGNIFICANT_FIGURES: int = 3
 PAGE_CONTEXT_KEY: str = "page"
 FRONTIER_RUN_IDS_CONTEXT_KEY: str = "frontier_run_ids"
-RELEASE_CONTEXT_KEY: str = "release"
 PROMPT_CONTEXT_KEY: str = "prompt"
 PARAMS_JSON_CONTEXT_KEY: str = "params_json"
 PROMPT_EXAMPLES_CONTEXT_KEY: str = "prompt_examples"
@@ -138,7 +137,6 @@ SOURCE_DATASET_METADATA_KEY: str = "source_dataset"
 ERROR_BUCKET_GROUP: str = "Error"
 ANY_BUCKET_VALUE: str = "Any"
 RUNS_ROUTE: str = "runs/"
-DATASETS_ROUTE_PREFIX: str = "datasets"
 PROMPTS_ROUTE_PREFIX: str = "prompts"
 RUNS_ROUTE_PREFIX: str = "runs"
 STATIC_PAGE_SLUGS: tuple[str, ...] = (
@@ -1247,27 +1245,6 @@ def _render_static_pages(
     return paths
 
 
-def _render_dataset_page(
-    *,
-    env: Environment,
-    output_dir: Path,
-    base_url: str,
-) -> str:
-    release = get_dataset_release(release_id=DEFAULT_LEXEN_RELEASE_ID)
-    path = f"{DATASETS_ROUTE_PREFIX}/{release.release_id}/"
-    html_text = _render(
-        env=env,
-        template_name="dataset.html.j2",
-        base_url=base_url,
-        title=f"{release.release_id} Dataset",
-        description="Registered lexEN dataset release used by the SenseBench leaderboard.",
-        path=path,
-        context={RELEASE_CONTEXT_KEY: release},
-    )
-    _write_text(path=_page_file_path(output_dir=output_dir, route=path), text=html_text)
-    return path
-
-
 def _prompt_examples(
     *,
     prompt: PromptDefinition,
@@ -1586,7 +1563,6 @@ def build_site(
             dataset_cache=dataset_cache,
         )
     )
-    paths.append(_render_dataset_page(env=env, output_dir=output_dir, base_url=base_url))
     paths.append(_render_prompts_index(env=env, output_dir=output_dir, base_url=base_url))
     paths.extend(
         _render_prompt_pages(
