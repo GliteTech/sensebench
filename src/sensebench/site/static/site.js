@@ -603,11 +603,11 @@
           <td class="col-model">
             <div class="cell-primary">${logoHtml(entry)}<a class="model-link" href="${basePath}${escapeHtml(entry.run_url)}" title="${escapeHtml(entry.run_id)}">${escapeHtml(modelLabel(entry))}</a></div>
             <div class="cell-secondary">${vendorParts.join(" · ")}</div>
-            <div class="cell-secondary provenance-mobile">${escapeHtml(entry.prompt_id)}</div>
+            <div class="cell-secondary provenance-mobile"><a href="${basePath}prompts/${encodeURIComponent(entry.prompt_id)}/">${escapeHtml(entry.prompt_id)}</a></div>
           </td>
           <td class="col-accuracy"><div class="cell-primary">${frontierHtml ? frontierHtml + " " : ""}${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
           <td class="col-cost">${formatMoney(entry.cost_per_million_items)}</td>
-          <td class="col-prompt">${escapeHtml(entry.prompt_id)}</td>
+          <td class="col-prompt"><a href="${basePath}prompts/${encodeURIComponent(entry.prompt_id)}/">${escapeHtml(entry.prompt_id)}</a></td>
         </tr>`;
       })
       .join("");
@@ -1051,7 +1051,7 @@
                 ? ""
                 : `<div class="cell-secondary">±${formatPercent(half)}</div>`;
             const secondaryParts = [
-              escapeHtml(entry.prompt_id),
+              `<a href="${basePath}prompts/${encodeURIComponent(entry.prompt_id)}/">${escapeHtml(entry.prompt_id)}</a>`,
               escapeHtml(entry.dataset_version ?? "")
             ];
             if (entry.quantization) {

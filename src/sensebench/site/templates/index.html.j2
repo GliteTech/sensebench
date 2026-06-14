@@ -224,7 +224,7 @@
           <td class="col-model">
             <div class="cell-primary">{% if entry.logo_slug %}<img class="vendor-logo" src="{{ base_path }}assets/logos/{{ entry.logo_slug }}.svg" alt="" width="18" height="18" loading="lazy">{% else %}<span class="vendor-initial fam-{{ (entry.family or 'other')|lower }}">{{ entry.vendor_initial or '?' }}</span>{% endif %}<a class="model-link" href="{{ base_path }}{{ entry.run_url }}" title="{{ entry.run_id }}">{{ entry.display_label or entry.model }}{% if entry.reasoning_effort %} ({{ entry.reasoning_effort }}){% endif %}</a></div>
             <div class="cell-secondary">{% if entry.llm_vendor %}{{ entry.llm_vendor }} · {% endif %}{{ entry.source_kind|source_label }}{% if entry.quantization %} · {{ entry.quantization }}{% endif %}{% if entry.gpu %} · {% if entry.gpu_count and entry.gpu_count > 1 %}{{ entry.gpu_count }}×{% endif %}{{ entry.gpu }}{% endif %}</div>
-            <div class="cell-secondary provenance-mobile">{{ entry.prompt_id }}</div>
+            <div class="cell-secondary provenance-mobile"><a href="{{ base_path }}prompts/{{ entry.prompt_id }}/">{{ entry.prompt_id }}</a></div>
           </td>
           <td class="col-accuracy">
             <div class="cell-primary">{% if entry.run_id in frontier_run_ids %}<span class="badge badge-frontier" title="On the accuracy-cost Pareto frontier">★</span> {% endif %}{{ entry.accuracy|pct }}</div>
@@ -233,7 +233,7 @@
             {% endif %}
           </td>
           <td class="col-cost">{{ entry.cost_per_million_items|money }}</td>
-          <td class="col-prompt">{{ entry.prompt_id }}</td>
+          <td class="col-prompt"><a href="{{ base_path }}prompts/{{ entry.prompt_id }}/">{{ entry.prompt_id }}</a></td>
         </tr>
         {% endfor %}
       </tbody>
