@@ -33,6 +33,7 @@ from sensebench.runs.models import (
     SamplingParameters,
     TokenUsage,
 )
+from sensebench.verify.runs import verify_run_directory
 from tests.run_fixtures import (
     FIRST_SENSE_KEY,
     FIXTURE_HOURLY_RATE_USD,
@@ -171,6 +172,39 @@ def _run_config(
         warmup_calls=warmup_calls,
         show_progress=False,
     )
+
+
+def test_run_benchmark_shuffle_senses_per_vote_verifies_clean(tmp_path: Path) -> None:
+    # A 3-vote per-vote-shuffle run must round-trip through verify with no errors:
+    # each vote shuffles the 10 candidate senses independently, and verify must
+    # reproduce each vote's order (from the deterministic seed) to validate it.
+    client = _CountingFakeClient()
+    config = RunConfig(
+        run_id="run-shuffle",
+        output_root=tmp_path,
+        dataset=renderable_dataset(gold_sense_keys=[FIRST_SENSE_KEY]),
+        prompt=registered_prompt(),
+        model=self_hosted_model(),
+        runner=RunnerIdentity(github_handle=RUNNER_GITHUB_HANDLE),
+        sampling=SamplingParameters(temperature=0.7),
+        votes_per_item=3,
+        semantic_reasks_per_invalid_vote=1,
+        concurrency=2,
+        shuffle_senses_per_vote=True,
+        machine=fixture_machine(),
+        warmup_calls=0,
+        show_progress=False,
+    )
+
+    completed = run_async(run_benchmark(config=config, client=client))
+
+    assert completed.metadata.policy.shuffle_senses_per_vote is True
+    report = verify_run_directory(
+        run_dir=completed.run_dir,
+        dataset=config.dataset,
+        prompt=config.prompt,
+    )
+    assert not report.has_errors(), [issue.message for issue in report.issues]
 
 
 def test_run_benchmark_records_execution_and_machine_time_cost(tmp_path: Path) -> None:
