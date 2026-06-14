@@ -1,0 +1,105 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "vllm-gemma-4-31b-fp8-h100-p001-lexen-v1-20260614",
+  "created_at": "2026-06-14T13:05:53.315665+00:00",
+  "git_commit": null,
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p001",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "self_hosted_llm",
+    "display_name": "google/gemma-4-31B-it",
+    "requested_model": "hosted_vllm/google/gemma-4-31B-it",
+    "resolved_model": "google/gemma-4-31B-it",
+    "resolved_model_counts": {
+      "google/gemma-4-31B-it": 4863
+    },
+    "llm_vendor": "Google",
+    "source_kind": "open_source",
+    "license": "gemma",
+    "model_url": "https://huggingface.co/google/gemma-4-31B-it",
+    "hf_revision": "0cae789c220fdf68c179ff9b18203021568e61cb",
+    "quantization": "fp8",
+    "inference_engine": "vllm",
+    "inference_engine_version": "0.22.1",
+    "container_image": "vllm/vllm-openai:v0.22.1",
+    "serve_command": "exec vllm serve RedHatAI/gemma-4-31B-it-FP8-Dynamic --port 8000 --served-model-name google/gemma-4-31B-it --max-model-len 8192 --gpu-memory-utilization 0.90 --language-model-only --revision 0cae789c220fdf68c179ff9b18203021568e61cb",
+    "endpoint_base_url": "http://localhost:8000/v1"
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": null,
+    "max_tokens": 2048,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "machine": {
+    "platform": "Linux-6.17.0-1017-aws-x86_64-with-glibc2.35",
+    "cpu_model": "AMD EPYC 7R13 Processor",
+    "cpu_cores": 192,
+    "ram_gib": 1999.9,
+    "gpu": {
+      "name": "NVIDIA H100 80GB HBM3",
+      "count": 1,
+      "vram_mib_per_gpu": 81559,
+      "driver_version": "595.71.05",
+      "cuda_version": "13.2"
+    },
+    "provider": "vast.ai",
+    "instance_id": "40919268",
+    "hourly_rate_usd": 2.2996296296296297
+  },
+  "execution": {
+    "concurrency": 128,
+    "warmup_call_count": 8,
+    "timing": {
+      "benchmark_started_at": "2026-06-14T13:01:23.616150+00:00",
+      "benchmark_ended_at": "2026-06-14T13:05:53.311823+00:00",
+      "benchmark_seconds": 269.69566818804014,
+      "setup_seconds": 2.261110807012301
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4491,
+    "accuracy": 0.9238839744908455,
+    "call_count": 4863,
+    "usage": {
+      "input_tokens": 3179067,
+      "cached_input_tokens": null,
+      "output_tokens": 68311,
+      "reasoning_output_tokens": null
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 0.17227781931888286,
+      "input_uncached_usd": null,
+      "input_cached_usd": null,
+      "output_usd": null,
+      "input_uncached_unit_price_usd": null,
+      "input_cached_unit_price_usd": null,
+      "output_unit_price_usd": null,
+      "source": "machine_time_estimate"
+    },
+    "elapsed_seconds": 269.69566818804014
+  }
+}
