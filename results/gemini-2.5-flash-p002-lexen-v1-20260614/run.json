@@ -1,0 +1,86 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "gemini-2.5-flash-p002-lexen-v1-20260614",
+  "created_at": "2026-06-14T11:07:54.336960+00:00",
+  "git_commit": "9e75ca35dc2e99fcb3b1aaba99746c948c1b9d7f",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p002",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "gemini/gemini-2.5-flash",
+    "requested_model": "gemini/gemini-2.5-flash",
+    "resolved_model": "gemini-2.5-flash",
+    "resolved_model_counts": {
+      "gemini-2.5-flash": 4862
+    },
+    "llm_vendor": "Google",
+    "api_provider": "Google",
+    "source_kind": "proprietary",
+    "license": null,
+    "model_url": null,
+    "reasoning_effort": null,
+    "endpoint_base_url": null
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": null,
+    "max_tokens": 256,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "machine": null,
+  "execution": {
+    "concurrency": 32,
+    "warmup_call_count": 0,
+    "timing": {
+      "benchmark_started_at": "2026-06-14T11:03:56.289293+00:00",
+      "benchmark_ended_at": "2026-06-14T11:07:54.331763+00:00",
+      "benchmark_seconds": 238.04073929198785,
+      "setup_seconds": 1.0852717499947175
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4356,
+    "accuracy": 0.8961119111293973,
+    "call_count": 4862,
+    "usage": {
+      "input_tokens": 1124844,
+      "cached_input_tokens": null,
+      "output_tokens": 1176054,
+      "reasoning_output_tokens": 1171089
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 3.2775882000000003,
+      "input_uncached_usd": 0.3374532,
+      "input_cached_usd": 0.0,
+      "output_usd": 2.940135,
+      "input_uncached_unit_price_usd": 3e-7,
+      "input_cached_unit_price_usd": 3e-8,
+      "output_unit_price_usd": 2.5e-6,
+      "source": "litellm_estimate"
+    },
+    "elapsed_seconds": 238.04073929198785
+  }
+}
