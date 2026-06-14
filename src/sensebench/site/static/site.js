@@ -134,27 +134,31 @@
   // distinguishability. Fixed (not frequency-ranked) so a family keeps its
   // colour across filters and sessions.
   const FAMILY_COLORS = {
-    Gemma: "#4285F4", // Google blue
-    Llama: "#0D2C8B", // deep navy (Meta)
-    Qwen: "#8E24AA", // purple
-    DeepSeek: "#5C7CFA", // indigo (DeepSeek)
-    GLM: "#00ACC1", // cyan
-    Mistral: "#F57C00", // orange (Mistral)
-    Nemotron: "#6FAE00", // green (NVIDIA)
     GPT: "#10A37F", // teal (OpenAI)
     Claude: "#C2410C", // rust/clay (Anthropic)
-    Hunyuan: "#C2185B", // crimson
+    Gemini: "#4285F4", // Google blue
+    Gemma: "#34A853", // Google green (keeps Gemma distinct from Gemini)
+    Qwen: "#8E24AA", // magenta (Alibaba)
+    DeepSeek: "#5C7CFA", // indigo
+    Llama: "#0D2C8B", // deep navy (Meta)
+    GLM: "#00ACC1", // cyan (Z.ai)
+    Mistral: "#F57C00", // orange
+    Kimi: "#7C3AED", // violet (Moonshot)
+    Grok: "#C2185B", // crimson (xAI)
+    MiniMax: "#455A64", // dark slate
+    Nemotron: "#6FAE00", // green (NVIDIA)
+    Granite: "#90A4AE", // blue-grey (IBM)
     Phi: "#FFB300", // amber
-    Granite: "#90A4AE", // blue-grey
-    OLMo: "#827717", // olive
-    Command: "#5D4037", // brown (Cohere)
-    MiniMax: "#455A64" // dark slate
+    OLMo: "#827717" // olive
   };
   const OTHER_FAMILY_LABEL = "Other";
   const OTHER_FAMILY_COLOR = "#9aa0a6";
-  // Model name -> family. Order matters; first match wins.
+  // Model name -> family. Order matters; first match wins. Families absent from
+  // FAMILY_COLORS (e.g. Command, Hunyuan) keep an accurate name in the hover
+  // tooltip but collapse into "Other" in the legend.
   const FAMILY_PATTERNS = [
     [/gemma/, "Gemma"],
+    [/gemini/, "Gemini"],
     [/qwen/, "Qwen"],
     [/glm/, "GLM"],
     [/llama|maverick|scout/, "Llama"],
@@ -166,6 +170,8 @@
     [/hunyuan/, "Hunyuan"],
     [/olmo/, "OLMo"],
     [/command|c4ai/, "Command"],
+    [/kimi|moonshot/, "Kimi"],
+    [/grok/, "Grok"],
     [/gpt|davinci/, "GPT"],
     [/claude/, "Claude"],
     [/minimax/, "MiniMax"]

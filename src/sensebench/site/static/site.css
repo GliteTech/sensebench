@@ -756,7 +756,8 @@ mark {
   font-weight: 700;
 }
 
-.fam-gemma { background: #4285f4; }
+.fam-gemma { background: #34a853; }
+.fam-gemini { background: #4285f4; }
 .fam-llama { background: #0d2c8b; }
 .fam-qwen { background: #8e24aa; }
 .fam-deepseek { background: #5c7cfa; }
@@ -765,6 +766,8 @@ mark {
 .fam-nemotron { background: #6fae00; }
 .fam-gpt { background: #10a37f; }
 .fam-claude { background: #c2410c; }
+.fam-kimi { background: #7c3aed; }
+.fam-grok { background: #c2185b; }
 .fam-hunyuan { background: #c2185b; }
 .fam-phi { background: #ffb300; }
 .fam-granite { background: #90a4ae; }
