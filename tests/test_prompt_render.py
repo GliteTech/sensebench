@@ -14,7 +14,7 @@ from sensebench.datasets.models import (
     Token,
     WsdItem,
 )
-from sensebench.paths import P001_PROMPT_PATH, P003_PROMPT_PATH, P004_PROMPT_PATH
+from sensebench.paths import P001_PROMPT_PATH, P002_PROMPT_PATH
 from sensebench.prompts.models import TEMPLATE_VARIABLE_CONTEXT
 from sensebench.prompts.registry import load_prompt_definition
 from sensebench.prompts.render import _render_template, render_task
@@ -148,8 +148,8 @@ def _detokenized_bundle() -> DatasetBundle:
     )
 
 
-def test_render_task_detokenizes_context_for_p003() -> None:
-    prompt = load_prompt_definition(path=P003_PROMPT_PATH)
+def test_render_task_detokenizes_context_for_p001() -> None:
+    prompt = load_prompt_definition(path=P001_PROMPT_PATH)
     bundle = _detokenized_bundle()
     rendered = render_task(
         prompt=prompt,
@@ -173,8 +173,8 @@ def test_render_task_detokenizes_context_for_p003() -> None:
     assert " ." not in user_message
 
 
-def test_render_task_detokenizes_context_for_p004() -> None:
-    prompt = load_prompt_definition(path=P004_PROMPT_PATH)
+def test_render_task_detokenizes_context_for_p002() -> None:
+    prompt = load_prompt_definition(path=P002_PROMPT_PATH)
     bundle = _detokenized_bundle()
     rendered = render_task(
         prompt=prompt,
@@ -192,9 +192,9 @@ def test_render_task_detokenizes_context_for_p004() -> None:
         ],
     )
 
-    # p004 is the minimal single-message twin of p002, so the user message is
-    # the only message; it must be detokenized (like p003) and ask for a plain
-    # integer (no JSON sense_index field).
+    # p002 is the minimal single-message prompt, so the user message is the only
+    # message; it must be detokenized and ask for a plain integer (no JSON
+    # sense_index field).
     assert len(rendered.messages) == 1
     user_message = rendered.messages[0].content
     assert f"the <t>{TARGET_TEXT}</t>, he said." in user_message

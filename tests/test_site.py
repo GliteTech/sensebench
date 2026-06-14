@@ -81,8 +81,8 @@ from tests.run_fixtures import (
 TEST_RELEASE_ID: str = DEFAULT_LEXEN_RELEASE_ID
 TEST_DATASET_ID: DatasetID = LEXEN_DATASET_ID
 TEST_RELEASE_URL: str = "https://example.com/items.jsonl"
-TEST_RUN_ID: RunID = "fake-model-p001-lexen-v0.1.0-20260612"
-SELF_HOSTED_RUN_ID: RunID = "fake-local-p001-lexen-v0.1.0-20260612"
+TEST_RUN_ID: RunID = "fake-model-p001-lexen-v1-20260612"
+SELF_HOSTED_RUN_ID: RunID = "fake-local-p001-lexen-v1-20260612"
 TEST_MODEL_NAME: ModelID = "fake-model"
 TEST_BASE_URL: str = "https://example.com/sensebench/"
 TEST_CREATED_AT: datetime = datetime(2026, 6, 12, tzinfo=UTC)
