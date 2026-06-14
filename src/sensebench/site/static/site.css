@@ -654,6 +654,102 @@ mark {
   color: var(--accent);
 }
 
+.model-link {
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+
+.model-link:hover {
+  text-decoration: underline;
+}
+
+.vendor-logo {
+  width: 18px;
+  height: 18px;
+  vertical-align: -3px;
+  margin-right: 7px;
+  border-radius: 3px;
+}
+
+:root[data-theme="dark"] .vendor-logo {
+  filter: invert(1);
+}
+
+.vendor-initial {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 7px;
+  vertical-align: -3px;
+  border-radius: 4px;
+  background: var(--muted);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.fam-gemma { background: #4285f4; }
+.fam-llama { background: #0d2c8b; }
+.fam-qwen { background: #8e24aa; }
+.fam-deepseek { background: #5c7cfa; }
+.fam-glm { background: #00acc1; }
+.fam-mistral { background: #f57c00; }
+.fam-nemotron { background: #6fae00; }
+.fam-gpt { background: #10a37f; }
+.fam-claude { background: #c2410c; }
+.fam-hunyuan { background: #c2185b; }
+.fam-phi { background: #ffb300; }
+.fam-granite { background: #90a4ae; }
+.fam-olmo { background: #827717; }
+.fam-command { background: #5d4037; }
+.fam-minimax { background: #455a64; }
+
+/* Provenance line: shown only in the mobile card layout. */
+.provenance-mobile {
+  display: none;
+}
+
+/* Floating compare bar (appears when 2+ runs are selected). */
+.compare-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.compare-bar[hidden] {
+  display: none;
+}
+
+.compare-bar-count {
+  font-weight: 700;
+}
+
+.compare-bar-go {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--accent);
+}
+
+.compare-bar-clear {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+}
+
 .baselines-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -765,6 +861,92 @@ mark {
 
   .sense-badges {
     justify-content: flex-start;
+  }
+
+  /* Leaderboard table -> stacked cards (no horizontal scroll). */
+  #leaderboard-table {
+    min-width: 0;
+  }
+
+  .table-panel .table-scroll {
+    overflow-x: visible;
+  }
+
+  #leaderboard-table thead {
+    display: none;
+  }
+
+  #leaderboard-table,
+  #leaderboard-table tbody {
+    display: block;
+  }
+
+  #leaderboard-table tbody tr {
+    display: grid;
+    grid-template-columns: 52px 1fr auto;
+    grid-template-areas:
+      "rank model acc"
+      "rank model cost"
+      "compare model .";
+    gap: 1px 12px;
+    align-items: start;
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+
+  #leaderboard-table td {
+    border: 0;
+    padding: 0;
+    white-space: normal;
+  }
+
+  #leaderboard-table td.col-rank {
+    grid-area: rank;
+  }
+
+  #leaderboard-table td.col-compare {
+    grid-area: compare;
+    align-self: end;
+    position: relative;
+    z-index: 1;
+  }
+
+  #leaderboard-table td.col-model {
+    grid-area: model;
+    min-width: 0;
+  }
+
+  #leaderboard-table td.col-model .cell-primary {
+    overflow-wrap: anywhere;
+  }
+
+  #leaderboard-table td.col-model .provenance-mobile {
+    display: block;
+  }
+
+  #leaderboard-table td.col-model .model-link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  #leaderboard-table td.col-accuracy {
+    grid-area: acc;
+    justify-self: end;
+    text-align: right;
+  }
+
+  #leaderboard-table td.col-cost {
+    grid-area: cost;
+    justify-self: end;
+    text-align: right;
+  }
+
+  #leaderboard-table td.col-prompt {
+    display: none;
   }
 }
 
