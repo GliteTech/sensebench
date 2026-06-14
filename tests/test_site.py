@@ -107,8 +107,8 @@ LATENCY_SECONDS: float = 0.5
 TEST_CONCURRENCY: int = 8
 EXPECTED_COST_PER_MILLION_ITEMS: float = 20_000.0
 EXPECTED_TOKENS_PER_ITEM: float = 110.0
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v6"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v6"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v7"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v7"
 TARGET_ART_TEXT: str = "art"
 TARGET_LEMMA_TEXT: str = "Target lemma: art"
 SHOW_RAW_PROMPT_TEXT: str = "Show raw prompt"
@@ -459,8 +459,16 @@ def test_build_site_emits_static_pages_and_data(
     assert SPEED_SORT_BUTTON_TEXT not in index_html
     assert SORT_ARROW_TEXT in index_html
     assert RANK_SORT_BUTTON_TEXT in index_html
-    assert f'title="{run_id}">view</a>' in index_html
+    # The model name itself is now the run link (the separate "view" column is gone).
+    assert f'title="{run_id}">Fake Model</a>' in index_html
+    assert "model-link" in index_html
+    assert ">view</a>" not in index_html
     assert f">{run_id}</a>" not in index_html
+    # New controls / card affordances.
+    assert 'id="sort-select"' in index_html
+    assert 'id="compare-bar"' in index_html
+    # TestVendor has no bundled logo, so the colored-initial fallback renders.
+    assert 'class="vendor-initial' in index_html
 
 
 def test_build_site_self_hosted_run(
