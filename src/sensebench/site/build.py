@@ -41,6 +41,18 @@ from sensebench.leaderboard.aggregate import (
     collect_leaderboard_entries,
 )
 from sensebench.leaderboard.baselines import Baseline, BaselineKind, score_baselines
+from sensebench.leaderboard.schemes import (
+    DEFAULT_SCHEME_ID,
+    GOLD_SOURCE_LABELS,
+    GRANULARITY_LABELS,
+    SCHEMES,
+    GoldSource,
+    Granularity,
+    gold_fine_keys,
+    is_scoreable,
+    load_concept_map,
+    scheme_correct,
+)
 from sensebench.paths import (
     CALLS_FILENAME,
     DEFAULT_LEXEN_RELEASE_ID,
@@ -62,6 +74,7 @@ from sensebench.paths import (
 )
 from sensebench.prompts.models import MessageRole, PromptDefinition
 from sensebench.prompts.registry import load_prompt_definition, registered_prompt_paths
+from sensebench.runner.evaluate import prediction_is_correct
 from sensebench.runs.loaders import LoadedRun, load_run_directory
 from sensebench.runs.models import (
     CallID,
@@ -77,8 +90,8 @@ from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses
 
 DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v5"
-RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v5"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v6"
+RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v6"
 MAX_ERROR_EXAMPLES: int = 12
 PACKAGE_NAME: str = "sensebench.site"
 TEMPLATE_PACKAGE_PATH: str = "templates"
@@ -88,6 +101,7 @@ NUM_FILTER_NAME: str = "num"
 MONEY_FILTER_NAME: str = "money"
 MILLION_TOKEN_PRICE_FILTER_NAME: str = "million_token_price"
 SECONDS_FILTER_NAME: str = "seconds"
+MACHINE_HOURS_FILTER_NAME: str = "machine_hours"
 BYTES_FILTER_NAME: str = "bytes"
 SOURCE_LABEL_FILTER_NAME: str = "source_label"
 SOURCE_KIND_LABELS: dict[ModelSourceKind, str] = {
@@ -185,6 +199,8 @@ class ExampleCandidate(SiteModel):
     synonyms: list[str]
     examples: list[str]
     is_gold: bool
+    is_gold_maru2022: bool
+    is_gold_raganato: bool
     is_selected: bool
 
 
@@ -206,6 +222,9 @@ class RunExample(SiteModel):
     predicted_sense_index: int | None
     predicted_sense_key: str | None
     gold_sense_keys: list[str]
+    gold_sense_keys_maru2022: list[str]
+    gold_sense_keys_raganato: list[str]
+    predicted_matches_fine: dict[str, bool | None]
     context_sentences: list[ExampleContextSentence]
     candidates: list[ExampleCandidate]
     prompt_messages: list[ExamplePromptMessage]
@@ -226,7 +245,7 @@ class RunDetail(SiteModel):
     artifacts: list[RunArtifact]
     slices: list[SliceSummary]
     worst_examples: list[RunExample]
-    correctness: str
+    correctness_by_scheme: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,9 +323,19 @@ def _template_env() -> Environment:
     env.filters[MONEY_FILTER_NAME] = _format_money
     env.filters[MILLION_TOKEN_PRICE_FILTER_NAME] = _format_million_token_price
     env.filters[SECONDS_FILTER_NAME] = _format_seconds
+    env.filters[MACHINE_HOURS_FILTER_NAME] = _format_machine_hours
     env.filters[BYTES_FILTER_NAME] = _format_bytes
     env.filters[SOURCE_LABEL_FILTER_NAME] = _format_source_label
     env.filters[BASELINE_KIND_LABEL_FILTER_NAME] = _format_baseline_kind
+    env.globals["scheme_gold_sources"] = [
+        {"value": source.value, "label": GOLD_SOURCE_LABELS[source]}
+        for source in (GoldSource.LEXEN, GoldSource.MARU2022, GoldSource.RAGANATO)
+    ]
+    env.globals["scheme_granularities"] = [
+        {"value": granularity.value, "label": GRANULARITY_LABELS[granularity]}
+        for granularity in (Granularity.FINE, Granularity.COARSE)
+    ]
+    env.globals["default_scheme_id"] = DEFAULT_SCHEME_ID
     return env
 
 
@@ -370,6 +399,14 @@ def _format_seconds(value: float | None) -> str:
         return f"{value:.2f}s"
     minutes = value / 60
     return f"{minutes:.2f}m"
+
+
+def _format_machine_hours(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    if value < 10:
+        return f"{value:.2f} h/M"
+    return f"{value:,.1f} h/M"
 
 
 def _format_bytes(value: int | None) -> str:
@@ -745,6 +782,8 @@ def _example_candidates(
         candidate.sense_key: candidate
         for candidate in get_candidate_senses(lemma=item.lemma, pos=item.pos)
     }
+    maru2022_gold: set[SenseKey] = set(gold_fine_keys(item=item, gold_source=GoldSource.MARU2022))
+    raganato_gold: set[SenseKey] = set(gold_fine_keys(item=item, gold_source=GoldSource.RAGANATO))
     candidates: list[ExampleCandidate] = []
     for candidate in prediction.candidates:
         wordnet_candidate = wordnet_by_key.get(candidate.sense_key)
@@ -757,10 +796,30 @@ def _example_candidates(
                 synonyms=wordnet_candidate.synonyms if wordnet_candidate is not None else [],
                 examples=wordnet_candidate.examples if wordnet_candidate is not None else [],
                 is_gold=candidate.sense_key in prediction.gold_sense_keys,
+                is_gold_maru2022=candidate.sense_key in maru2022_gold,
+                is_gold_raganato=candidate.sense_key in raganato_gold,
                 is_selected=candidate.sense_key == prediction.predicted_sense_key,
             )
         )
     return candidates
+
+
+def _predicted_matches_fine(
+    *,
+    predicted_sense_key: SenseKey | None,
+    item: WsdItem,
+) -> dict[str, bool | None]:
+    matches: dict[str, bool | None] = {}
+    for source in (GoldSource.LEXEN, GoldSource.MARU2022, GoldSource.RAGANATO):
+        gold_keys = gold_fine_keys(item=item, gold_source=source)
+        if len(gold_keys) == 0:
+            matches[source.value] = None
+        else:
+            matches[source.value] = prediction_is_correct(
+                predicted_sense_key=predicted_sense_key,
+                gold_sense_keys=gold_keys,
+            )
+    return matches
 
 
 def _example(
@@ -794,6 +853,11 @@ def _example(
         predicted_sense_index=prediction.predicted_sense_index,
         predicted_sense_key=prediction.predicted_sense_key,
         gold_sense_keys=list(prediction.gold_sense_keys),
+        gold_sense_keys_maru2022=gold_fine_keys(item=item, gold_source=GoldSource.MARU2022),
+        gold_sense_keys_raganato=gold_fine_keys(item=item, gold_source=GoldSource.RAGANATO),
+        predicted_matches_fine=_predicted_matches_fine(
+            predicted_sense_key=prediction.predicted_sense_key, item=item
+        ),
         context_sentences=context_sentences,
         candidates=_example_candidates(prediction=prediction, item=item),
         prompt_messages=_prompt_messages_for_prediction(
@@ -900,14 +964,25 @@ def _dataset_for_entry(
     return _dataset_for_version(version=entry.dataset_version, cache=cache)
 
 
-def _correctness_bits(*, loaded: LoadedRun, dataset: DatasetBundle) -> str:
-    correct_by_item: dict[ItemID, bool | None] = {
-        prediction.item_id: prediction.is_correct for prediction in loaded.predictions
+def _correctness_by_scheme(*, loaded: LoadedRun, dataset: DatasetBundle) -> dict[str, str]:
+    concept_map = load_concept_map()
+    predicted_by_item: dict[ItemID, SenseKey | None] = {
+        prediction.item_id: prediction.predicted_sense_key for prediction in loaded.predictions
     }
-    return "".join(
-        CORRECT_BIT if correct_by_item[item.item_id] is True else INCORRECT_BIT
-        for item in dataset.items
-    )
+    result: dict[str, str] = {}
+    for scheme in SCHEMES:
+        bits: list[str] = []
+        for item in dataset.items:
+            predicted = predicted_by_item.get(item.item_id)
+            correct = is_scoreable(item=item, gold_source=scheme.gold_source) and scheme_correct(
+                scheme=scheme,
+                predicted_sense_key=predicted,
+                item=item,
+                concept_map=concept_map,
+            )
+            bits.append(CORRECT_BIT if correct else INCORRECT_BIT)
+        result[scheme.scheme_id] = "".join(bits)
+    return result
 
 
 def _run_detail(
@@ -937,7 +1012,7 @@ def _run_detail(
             prompt=prompt,
             slices=slices,
         ),
-        correctness=_correctness_bits(loaded=loaded, dataset=dataset),
+        correctness_by_scheme=_correctness_by_scheme(loaded=loaded, dataset=dataset),
     )
 
 
@@ -1038,9 +1113,10 @@ def _static_pages() -> list[StaticPage]:
                         "benchmark time that covers only the per-item evaluation loop, "
                         "excluding model download, weight loading, and inference engine "
                         "startup.",
-                        "Machine seconds per item is the benchmark time divided by the "
-                        "item count at the recorded concurrency; it is comparable only "
-                        "across runs on the same GPU configuration.",
+                        "Machine-hours per 1M items is the benchmark time divided by the "
+                        "item count, scaled to one million items and expressed in machine "
+                        "hours; it is comparable only across runs on the same GPU "
+                        "configuration.",
                         "When the machine's hourly rate is known, run cost is estimated "
                         "as machine time multiplied by that rate (cost source "
                         "machine_time_estimate); otherwise cost is unavailable.",
@@ -1064,7 +1140,7 @@ def _static_pages() -> list[StaticPage]:
                         "quantization are expected and are a property of the kernels, "
                         "not a measurement error.",
                         "Throughput is measured at a fixed per-GPU concurrency, reported "
-                        "as machine seconds per item, so figures are comparable at a "
+                        "as machine-hours per 1M items, so figures are comparable at a "
                         "standard load rather than at each model's individually tuned "
                         "optimum. Accuracy is computed under greedy decoding "
                         "(temperature 0) and is deterministic given the weights; "
@@ -1324,6 +1400,24 @@ def _render_runs_index(
     return path
 
 
+def _render_label_schemes(*, env: Environment, output_dir: Path, base_url: str) -> str:
+    path = "label-schemes/"
+    html_text = _render(
+        env=env,
+        template_name="label_schemes.html.j2",
+        base_url=base_url,
+        title="Label schemes — SenseBench",
+        description=(
+            "The six gold-label and sense-granularity scoring schemes "
+            "on the SenseBench leaderboard."
+        ),
+        path=path,
+        context={},
+    )
+    _write_text(path=_page_file_path(output_dir=output_dir, route=path), text=html_text)
+    return path
+
+
 def _render_index(
     *,
     env: Environment,
@@ -1422,6 +1516,7 @@ def build_site(
     paths.append(_render_dataset_page(env=env, output_dir=output_dir, base_url=base_url))
     paths.extend(_render_prompt_pages(env=env, output_dir=output_dir, base_url=base_url))
     paths.extend(_render_static_pages(env=env, output_dir=output_dir, base_url=base_url))
+    paths.append(_render_label_schemes(env=env, output_dir=output_dir, base_url=base_url))
     _render_404(env=env, output_dir=output_dir, base_url=base_url)
     _write_text(
         path=output_dir / SITEMAP_FILENAME,
