@@ -251,10 +251,17 @@ class LiteLlmClient:
         last_error: Exception | None = None
         for attempt_number in range(self._max_transport_retries + 1):
             try:
+                extra_kwargs: dict[str, object] = {}
+                if request.model.startswith("openrouter/"):
+                    # OpenRouter's litellm provider config omits reasoning_effort, so reasoning
+                    # models routed through it fail preflight. Whitelist it for OpenRouter only.
+                    # Native Anthropic/Gemini must NOT get this: litellm translates reasoning_effort
+                    # into provider thinking config for them, and raw passthrough is rejected.
+                    extra_kwargs["allowed_openai_params"] = ["reasoning_effort"]
                 response = await litellm.acompletion(
                     model=request.model,
                     messages=_messages_payload(request=request),
-                    allowed_openai_params=["reasoning_effort"],
+                    **extra_kwargs,
                     **request.parameters,
                 )
                 payload = _response_to_dict(response=response)
