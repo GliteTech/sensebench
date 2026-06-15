@@ -183,6 +183,102 @@
         "--run-id",
         "qwen3.7-max-medium-reasoning-p001-lexen-v1-<YYYYMMDD>"
       ]
+    },
+    {
+      "original_run_id": "gemini-3.5-flash-p002-lexen-v1-20260614",
+      "replacement_run_id_template": "gemini-3.5-flash-p002-lexen-v1-<YYYYMMDD>",
+      "status": "queued",
+      "priority": "high",
+      "cleanup": {
+        "status": "deleted_in_this_change",
+        "pull_request": null,
+        "reason": "p002 run used max_tokens=256, which was too low for Gemini 3.5 Flash hidden reasoning. The cap caused many length-finished truncated outputs and 82 final no-valid predictions."
+      },
+      "failure_summary": {
+        "item_count": 4861,
+        "recorded_correct_count": 4446,
+        "recorded_accuracy": 0.9146266200370294,
+        "original_max_tokens": 256,
+        "replacement_max_tokens": 8192,
+        "call_count": 5654,
+        "successful_call_count": 5653,
+        "transport_error_count": 1,
+        "transport_retry_count_total": 108,
+        "finish_reason_length_count": 1012,
+        "calls_at_or_above_250_output_tokens": 855,
+        "no_valid_vote_count": 82,
+        "no_valid_vote_rate": 0.0169,
+        "invalid_attempts_by_kind": {
+          "ServiceUnavailableError": 1,
+          "empty_output": 4,
+          "plain_not_integer": 77
+        },
+        "usage": {
+          "input_tokens": 1328771,
+          "output_tokens": 1373974,
+          "reasoning_output_tokens": 1360956
+        },
+        "dominant_raw_pattern": "Hidden reasoning consumed the 256-token budget; visible outputs were often truncated fragments instead of the requested integer.",
+        "salvage_note": "Not repairable from artifacts because the final failed items do not contain a parseable answer; rerun with a larger token budget."
+      },
+      "run_parameters": {
+        "dataset": "lexen-v1",
+        "prompt": "p002",
+        "model": {
+          "kind": "cloud_llm",
+          "display_name": "gemini/gemini-3.5-flash",
+          "requested_model": "gemini/gemini-3.5-flash",
+          "resolved_model": "gemini-3.5-flash",
+          "llm_vendor": "Google",
+          "api_provider": "Google",
+          "source_kind": "proprietary",
+          "reasoning_effort": null
+        },
+        "sampling": {
+          "temperature": 0.0,
+          "top_p": null,
+          "max_tokens": 8192,
+          "seed": null,
+          "extra": {}
+        },
+        "execution": {
+          "concurrency": 32,
+          "warmup_call_count": 0
+        }
+      },
+      "command": [
+        "uv",
+        "run",
+        "sensebench",
+        "run",
+        "--model",
+        "gemini/gemini-3.5-flash",
+        "--prompt",
+        "p002",
+        "--temperature",
+        "0",
+        "--max-tokens",
+        "8192",
+        "--concurrency",
+        "32",
+        "--dataset",
+        "lexen-v1",
+        "--hosting-kind",
+        "cloud_api",
+        "--api-provider",
+        "Google",
+        "--vendor",
+        "Google",
+        "--source-kind",
+        "proprietary",
+        "--github-handle",
+        "vassiliphilippov",
+        "--runner-name",
+        "Vassili Philippov",
+        "--no-progress",
+        "--run-id",
+        "gemini-3.5-flash-p002-lexen-v1-<YYYYMMDD>"
+      ]
     }
   ]
 }
