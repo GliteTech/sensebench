@@ -1,0 +1,188 @@
+{
+  "schema_version": "sensebench-cloud-rerun-manifest-v1",
+  "created_at": "2026-06-15",
+  "dataset": "lexen-v1",
+  "purpose": "Tracks cloud API benchmark runs that were removed or withheld from public results and need clean replacement runs.",
+  "defaults": {
+    "github_handle": "vassiliphilippov",
+    "runner_name": "Vassili Philippov",
+    "hosting_kind": "cloud_api",
+    "monosemous_policy": "short_circuit",
+    "semantic_reasks_per_invalid_vote": 1,
+    "shuffle_senses_per_vote": false,
+    "tie_break": "earliest_vote",
+    "votes_per_item": 1
+  },
+  "runs": [
+    {
+      "original_run_id": "minimax-m3-p002-lexen-v1-20260614",
+      "replacement_run_id_template": "minimax-m3-p002-lexen-v1-<YYYYMMDD>",
+      "status": "queued",
+      "priority": "high",
+      "cleanup": {
+        "status": "deleted",
+        "pull_request": 142,
+        "reason": "p002 run had duplicated plain-integer answers that were recorded as index_out_of_range invalid votes; user chose deletion instead of semantic repair."
+      },
+      "failure_summary": {
+        "item_count": 4861,
+        "recorded_correct_count": 3637,
+        "recorded_accuracy": 0.7481999588562024,
+        "no_valid_vote_count": 699,
+        "no_valid_vote_rate": 0.1438,
+        "invalid_attempt_count": 1403,
+        "invalid_attempts_by_kind": {
+          "empty_output": 3,
+          "index_out_of_range": 1400
+        },
+        "transport_error_count": 0,
+        "dominant_raw_pattern": "Duplicated plain integers such as 22, 33, and 1010.",
+        "salvage_note": "A duplicated-integer parser rule could recover this run, but the run was deleted to keep public results conservative."
+      },
+      "run_parameters": {
+        "dataset": "lexen-v1",
+        "prompt": "p002",
+        "model": {
+          "kind": "cloud_llm",
+          "display_name": "openrouter/minimax/minimax-m3",
+          "requested_model": "openrouter/minimax/minimax-m3",
+          "resolved_model": "minimax/minimax-m3-20260531",
+          "llm_vendor": "MiniMax",
+          "api_provider": "OpenRouter",
+          "source_kind": "open_source",
+          "reasoning_effort": null
+        },
+        "sampling": {
+          "temperature": 0.0,
+          "top_p": null,
+          "max_tokens": 8192,
+          "seed": null,
+          "extra": {}
+        },
+        "execution": {
+          "concurrency": 48,
+          "warmup_call_count": 0
+        }
+      },
+      "command": [
+        "uv",
+        "run",
+        "sensebench",
+        "run",
+        "--model",
+        "openrouter/minimax/minimax-m3",
+        "--prompt",
+        "p002",
+        "--temperature",
+        "0",
+        "--max-tokens",
+        "8192",
+        "--concurrency",
+        "48",
+        "--dataset",
+        "lexen-v1",
+        "--hosting-kind",
+        "cloud_api",
+        "--api-provider",
+        "OpenRouter",
+        "--vendor",
+        "MiniMax",
+        "--source-kind",
+        "open_source",
+        "--github-handle",
+        "vassiliphilippov",
+        "--runner-name",
+        "Vassili Philippov",
+        "--no-progress",
+        "--run-id",
+        "minimax-m3-p002-lexen-v1-<YYYYMMDD>"
+      ]
+    },
+    {
+      "original_run_id": "qwen3.7-max-medium-reasoning-p001-lexen-v1-20260614",
+      "replacement_run_id_template": "qwen3.7-max-medium-reasoning-p001-lexen-v1-<YYYYMMDD>",
+      "status": "queued",
+      "priority": "high",
+      "cleanup": {
+        "status": "deleted_in_this_change",
+        "pull_request": null,
+        "reason": "Run was depressed by OpenRouter transport failures from key quota or key-limit exhaustion; successful model outputs had no parser-repairable pattern."
+      },
+      "failure_summary": {
+        "item_count": 4861,
+        "recorded_correct_count": 3807,
+        "recorded_accuracy": 0.783172186792841,
+        "paired_p002_run_id": "qwen3.7-max-medium-reasoning-p002-lexen-v1-20260614",
+        "paired_p002_accuracy": 0.9282040732359597,
+        "no_valid_vote_count": 817,
+        "no_valid_vote_rate": 0.1681,
+        "transport_error_count": 817,
+        "transport_error_rate": 0.1681,
+        "transport_retry_count_total": 1634,
+        "error_kinds": {
+          "APIError": 817
+        },
+        "dominant_error": "OpenRouter 403 key limit exceeded.",
+        "salvage_note": "Not salvageable from recorded artifacts because failed items have no successful model answer to reinterpret."
+      },
+      "run_parameters": {
+        "dataset": "lexen-v1",
+        "prompt": "p001",
+        "model": {
+          "kind": "cloud_llm",
+          "display_name": "openrouter/qwen/qwen3.7-max",
+          "requested_model": "openrouter/qwen/qwen3.7-max",
+          "resolved_model": "qwen/qwen3.7-max-20260520",
+          "llm_vendor": "Alibaba",
+          "api_provider": "OpenRouter",
+          "source_kind": "open_source",
+          "reasoning_effort": "medium"
+        },
+        "sampling": {
+          "temperature": null,
+          "top_p": null,
+          "max_tokens": 8192,
+          "seed": null,
+          "extra": {}
+        },
+        "execution": {
+          "concurrency": 48,
+          "warmup_call_count": 0
+        }
+      },
+      "command": [
+        "uv",
+        "run",
+        "sensebench",
+        "run",
+        "--model",
+        "openrouter/qwen/qwen3.7-max",
+        "--prompt",
+        "p001",
+        "--reasoning-effort",
+        "medium",
+        "--max-tokens",
+        "8192",
+        "--concurrency",
+        "48",
+        "--dataset",
+        "lexen-v1",
+        "--hosting-kind",
+        "cloud_api",
+        "--api-provider",
+        "OpenRouter",
+        "--vendor",
+        "Alibaba",
+        "--source-kind",
+        "open_source",
+        "--github-handle",
+        "vassiliphilippov",
+        "--runner-name",
+        "Vassili Philippov",
+        "--no-progress",
+        "--run-id",
+        "qwen3.7-max-medium-reasoning-p001-lexen-v1-<YYYYMMDD>"
+      ]
+    }
+  ]
+}
