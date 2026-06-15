@@ -422,6 +422,7 @@ def _self_hosted_model_reference(*, args: argparse.Namespace) -> SelfHostedLlmRe
         source_kind=ModelSourceKind(str(args.source_kind)),
         license=args.license,
         model_url=args.model_url,
+        reasoning_effort=args.reasoning_effort,
         hf_revision=args.hf_revision,
         quantization=args.quantization,
         inference_engine=args.inference_engine,

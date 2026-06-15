@@ -148,6 +148,7 @@ class SelfHostedLlmReference(StrictRunModel):
     source_kind: ModelSourceKind
     license: str | None = None
     model_url: str | None = None
+    reasoning_effort: str | None = None
     hf_revision: str | None = None
     quantization: str | None = None
     inference_engine: str | None = None

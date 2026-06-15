@@ -305,9 +305,10 @@ def _api_provider(*, model: ModelReference) -> str | None:
 
 
 def _reasoning_effort(*, model: ModelReference) -> str | None:
-    if isinstance(model, CloudLlmReference):
-        return model.reasoning_effort
-    return None
+    # Both CloudLlmReference and SelfHostedLlmReference carry reasoning_effort;
+    # self-hosted uses it to distinguish e.g. "no reasoning" vs "reasoning"
+    # (Gemma 4 thinking on/off), shown as a parenthetical on the leaderboard.
+    return model.reasoning_effort
 
 
 def _self_hosted_model(*, model: ModelReference) -> SelfHostedLlmReference | None:
