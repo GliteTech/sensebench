@@ -473,6 +473,7 @@ def _replay_vote(
         )
 
     successful_vote: _ReplayedVote | None = None
+    successful_vote_from_repeated_json = False
     invalid_reason: InvalidOutputReason | str | None = None
     for call_position, call in enumerate(calls):
         is_last_call = call_position == len(calls) - 1
@@ -509,8 +510,14 @@ def _replay_vote(
             )
             if successful_vote is None:
                 successful_vote = replayed_success
+                successful_vote_from_repeated_json = extracted.repeated_json_objects
                 continue
             if replayed_success != successful_vote:
+                if (
+                    successful_vote_from_repeated_json
+                    and call.attempt_kind == AttemptKind.SEMANTIC_REASK
+                ):
+                    continue
                 issues.append(_issue(CALLS_AFTER_SUCCESS_MESSAGE))
                 return _VoteReplayResult(replayed_vote=successful_vote, issues=issues)
             continue
