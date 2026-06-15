@@ -141,6 +141,12 @@ SPEED_SORT_BUTTON_TEXT: str = 'data-sort="seconds_per_item"'
 SORT_ARROW_TEXT: str = '<span class="sort-arrow"'
 RANK_SORT_BUTTON_TEXT: str = 'data-sort="rank"'
 EXPECTED_GPU_LABEL: str = "H100 80GB"
+DOWNLOAD_CSV_BUTTON_ID: str = "download-csv"
+DOWNLOAD_JSON_BUTTON_ID: str = "download-json"
+TABLE_DOWNLOADS_CLASS: str = "table-downloads"
+SITE_JS_FILENAME: str = "site.js"
+SITE_JS_EXPORT_COLUMNS_MARKER: str = "EXPORT_COLUMNS"
+SITE_JS_DOWNLOAD_CSV_MARKER: str = "function downloadCsv"
 BUILT_BY_GLITE_TEXT: str = "Built by Glite"
 EXPECTED_BASELINE_COUNT: int = 4
 ECHARTS_VENDOR_PATH: Path = Path("vendor") / "echarts.min.js"
@@ -494,6 +500,13 @@ def test_build_site_emits_static_pages_and_data(
     # New controls / card affordances.
     assert 'id="sort-select"' in index_html
     assert 'id="compare-bar"' in index_html
+    # CSV / JSON download buttons and the client-side export logic that backs them.
+    assert f'id="{DOWNLOAD_CSV_BUTTON_ID}"' in index_html
+    assert f'id="{DOWNLOAD_JSON_BUTTON_ID}"' in index_html
+    assert TABLE_DOWNLOADS_CLASS in index_html
+    site_js = (output_dir / SITE_ASSETS_DIRNAME / SITE_JS_FILENAME).read_text(encoding="utf-8")
+    assert SITE_JS_EXPORT_COLUMNS_MARKER in site_js
+    assert SITE_JS_DOWNLOAD_CSV_MARKER in site_js
     # TestVendor has no bundled logo, so the colored-initial fallback renders.
     assert 'class="vendor-initial' in index_html
 
