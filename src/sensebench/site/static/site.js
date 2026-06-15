@@ -16,6 +16,8 @@
   const viewFilter = document.getElementById("view-filter");
   const frontierOnly = document.getElementById("frontier-only");
   const sortSelect = document.getElementById("sort-select");
+  const downloadCsvButton = document.getElementById("download-csv");
+  const downloadJsonButton = document.getElementById("download-json");
   const compareBar = document.getElementById("compare-bar");
   const compareBarCount = document.getElementById("compare-bar-count");
   const compareBarClear = document.getElementById("compare-bar-clear");
@@ -37,8 +39,23 @@
     baselines: [],
     selected: new Set(),
     sortKey: "rank",
-    sortDirection: 1
+    sortDirection: 1,
+    dataSchemaVersion: "",
+    generatedAt: null
   };
+
+  // Scheme ids in display order; the official default (lexen_fine) is first. The download
+  // reads accuracy from these immutable scheme_scores, never the top-level accuracy field
+  // (which applyScheme() rewrites in place for whichever scheme the dropdowns select).
+  const EXPORT_SCHEME_IDS = [
+    "lexen_fine",
+    "lexen_coarse",
+    "maru2022_fine",
+    "maru2022_coarse",
+    "raganato_fine",
+    "raganato_coarse"
+  ];
+  const DEFAULT_SCHEME_ID = "lexen_fine";
 
   const runDetailCache = new Map();
   let pairwiseToken = 0;
@@ -1320,6 +1337,229 @@
     updateCompareBar();
   }
 
+  // ----- Downloads: CSV / JSON of the current filtered + sorted view -----
+
+  function schemeScore(entry, schemeId) {
+    return (entry.scheme_scores && entry.scheme_scores[schemeId]) || null;
+  }
+
+  // Column model for the CSV: { header, get(entry) }. Every accuracy column reads from the
+  // immutable scheme_scores so the file is identical regardless of the active scheme dropdown.
+  function buildExportColumns() {
+    const columns = [
+      { header: "rank", get: (entry) => entry.rank },
+      { header: "run_id", get: (entry) => entry.run_id },
+      { header: "run_url", get: (entry) => entry.run_url },
+      { header: "created_at", get: (entry) => entry.created_at },
+      { header: "git_commit", get: (entry) => entry.git_commit },
+      { header: "display_label", get: (entry) => entry.display_label },
+      { header: "model", get: (entry) => entry.model },
+      { header: "requested_model", get: (entry) => entry.requested_model },
+      { header: "resolved_model", get: (entry) => entry.resolved_model },
+      { header: "model_url", get: (entry) => entry.model_url },
+      { header: "model_kind", get: (entry) => entry.model_kind },
+      { header: "llm_vendor", get: (entry) => entry.llm_vendor },
+      { header: "family", get: (entry) => entry.family },
+      { header: "api_provider", get: (entry) => entry.api_provider },
+      { header: "source_kind", get: (entry) => entry.source_kind },
+      { header: "license", get: (entry) => entry.license },
+      { header: "reasoning_effort", get: (entry) => entry.reasoning_effort },
+      { header: "hosting_kind", get: (entry) => entry.hosting_kind },
+      { header: "quantization", get: (entry) => entry.quantization },
+      { header: "inference_engine", get: (entry) => entry.inference_engine },
+      { header: "inference_engine_version", get: (entry) => entry.inference_engine_version },
+      { header: "hf_revision", get: (entry) => entry.hf_revision },
+      { header: "gpu", get: (entry) => entry.gpu },
+      { header: "gpu_count", get: (entry) => entry.gpu_count },
+      { header: "hourly_rate_usd", get: (entry) => entry.hourly_rate_usd },
+      { header: "prompt_id", get: (entry) => entry.prompt_id },
+      { header: "prompt_name", get: (entry) => entry.prompt_name },
+      { header: "dataset_id", get: (entry) => entry.dataset_id },
+      { header: "dataset_version", get: (entry) => entry.dataset_version },
+      { header: "dataset_content_hash", get: (entry) => entry.dataset_content_hash },
+      { header: "item_count", get: (entry) => entry.item_count }
+    ];
+    for (const schemeId of EXPORT_SCHEME_IDS) {
+      columns.push({
+        header: `${schemeId}_accuracy`,
+        get: (entry) => {
+          const score = schemeScore(entry, schemeId);
+          return score ? score.accuracy : null;
+        }
+      });
+      columns.push({
+        header: `${schemeId}_ci_low`,
+        get: (entry) => {
+          const score = schemeScore(entry, schemeId);
+          return score && score.accuracy_ci ? score.accuracy_ci.low : null;
+        }
+      });
+      columns.push({
+        header: `${schemeId}_ci_high`,
+        get: (entry) => {
+          const score = schemeScore(entry, schemeId);
+          return score && score.accuracy_ci ? score.accuracy_ci.high : null;
+        }
+      });
+    }
+    columns.push({
+      header: "lexen_fine_correct_count",
+      get: (entry) => {
+        const score = schemeScore(entry, DEFAULT_SCHEME_ID);
+        return score ? score.correct_count : null;
+      }
+    });
+    const directKeys = [
+      "call_count",
+      "success_count",
+      "monosemous_count",
+      "no_candidates_count",
+      "no_valid_vote_count",
+      "invalid_output_vote_count",
+      "transport_error_vote_count",
+      "input_tokens",
+      "input_uncached_tokens",
+      "cached_input_tokens",
+      "output_tokens",
+      "reasoning_output_tokens",
+      "total_tokens",
+      "tokens_per_item",
+      "cost_source",
+      "cost_usd",
+      "input_uncached_usd",
+      "input_cached_usd",
+      "output_usd",
+      "input_uncached_unit_price_usd",
+      "input_cached_unit_price_usd",
+      "output_unit_price_usd",
+      "cost_per_million_items",
+      "elapsed_seconds",
+      "benchmark_seconds",
+      "seconds_per_item",
+      "machine_hours_per_million_items",
+      "concurrency",
+      "runner_github_handle",
+      "runner_name"
+    ];
+    for (const key of directKeys) {
+      columns.push({ header: key, get: (entry) => entry[key] });
+    }
+    return columns;
+  }
+
+  const EXPORT_COLUMNS = buildExportColumns();
+
+  function csvCell(value) {
+    if (value == null) {
+      return "";
+    }
+    if (typeof value === "boolean") {
+      return value ? "true" : "false";
+    }
+    return String(value);
+  }
+
+  // RFC-4180 quoting plus a formula-injection guard for text cells (model / runner / prompt
+  // names come from pull requests). Numeric cells are never prefixed so they stay numbers.
+  function csvField(value, isNumeric) {
+    let text = csvCell(value);
+    if (!isNumeric && /^[=+\-@\t\r]/.test(text)) {
+      text = `'${text}`;
+    }
+    if (/[",\n\r]/.test(text)) {
+      text = `"${text.replaceAll('"', '""')}"`;
+    }
+    return text;
+  }
+
+  function toCsv(rows, columns) {
+    const header = columns.map((column) => csvField(column.header, false)).join(",");
+    const lines = rows.map((entry) =>
+      columns
+        .map((column) => {
+          const value = column.get(entry);
+          return csvField(value, typeof value === "number");
+        })
+        .join(",")
+    );
+    return [header, ...lines].join("\r\n") + "\r\n";
+  }
+
+  // The exact rows the user currently sees: filters + "best per model" view + active sort.
+  function exportRows() {
+    const entries = filteredEntries();
+    const points = chartPoints(entries, activeXMetric());
+    const frontierIds = new Set(paretoFrontier(points).map((point) => point.entry.run_id));
+    return sortRows(decorateRows(entries, frontierIds)).map((row) => row.entry);
+  }
+
+  function cloneEntry(entry) {
+    if (typeof structuredClone === "function") {
+      return structuredClone(entry);
+    }
+    return JSON.parse(JSON.stringify(entry));
+  }
+
+  // Faithful per-entry dump for JSON: clone (so state.entries is untouched), then pin the
+  // top-level accuracy fields to the default scheme so they are deterministic; scheme_scores
+  // already carries all six. Drop presentation-only keys.
+  function cleanEntryForJson(entry) {
+    const clone = cloneEntry(entry);
+    const headline = schemeScore(clone, DEFAULT_SCHEME_ID);
+    if (headline) {
+      clone.accuracy = headline.accuracy;
+      clone.accuracy_ci = headline.accuracy_ci;
+      clone.correct_count = headline.correct_count;
+    }
+    delete clone.logo_slug;
+    delete clone.vendor_initial;
+    return clone;
+  }
+
+  function triggerDownload(filename, text, mimeType) {
+    const blob = new Blob([text], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.rel = "noopener";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function downloadStamp() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function downloadCsv() {
+    // Leading BOM so Excel reads the file as UTF-8.
+    const csv = "﻿" + toCsv(exportRows(), EXPORT_COLUMNS);
+    triggerDownload(
+      `sensebench-leaderboard-${downloadStamp()}.csv`,
+      csv,
+      "text/csv;charset=utf-8"
+    );
+  }
+
+  function downloadJson() {
+    const rows = exportRows();
+    const payload = {
+      schema_version: state.dataSchemaVersion,
+      exported_at: new Date().toISOString(),
+      source_generated_at: state.generatedAt,
+      row_count: rows.length,
+      default_scheme: DEFAULT_SCHEME_ID,
+      entries: rows.map(cleanEntryForJson)
+    };
+    triggerDownload(
+      `sensebench-leaderboard-${downloadStamp()}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json;charset=utf-8"
+    );
+  }
+
   function attachControls() {
     [
       searchInput,
@@ -1365,6 +1605,12 @@
         render();
       });
     }
+    if (downloadCsvButton) {
+      downloadCsvButton.addEventListener("click", downloadCsv);
+    }
+    if (downloadJsonButton) {
+      downloadJsonButton.addEventListener("click", downloadJson);
+    }
     if (compareBarClear) {
       compareBarClear.addEventListener("click", () => {
         state.selected.clear();
@@ -1391,7 +1637,16 @@
     .then((data) => {
       state.entries = data.entries || [];
       state.baselines = data.baselines || [];
+      state.dataSchemaVersion = data.schema_version || "";
+      state.generatedAt = (data.summary && data.summary.generated_at) || null;
       attachControls();
+      const canDownload = state.entries.length > 0;
+      if (downloadCsvButton) {
+        downloadCsvButton.disabled = !canDownload;
+      }
+      if (downloadJsonButton) {
+        downloadJsonButton.disabled = !canDownload;
+      }
       render();
     })
     .catch(() => {
