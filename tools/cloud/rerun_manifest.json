@@ -279,6 +279,92 @@
         "--run-id",
         "gemini-3.5-flash-p002-lexen-v1-<YYYYMMDD>"
       ]
+    },
+    {
+      "original_run_id": "qwen3.7-max-p001-lexen-v1-20260614",
+      "replacement_run_id_template": "qwen3.7-max-p001-lexen-v1-<YYYYMMDD>",
+      "status": "queued",
+      "priority": "high",
+      "cleanup": {
+        "status": "deleted_in_this_change",
+        "pull_request": null,
+        "reason": "Run was depressed by OpenRouter transport failures after the account ran out of credits; failed items have no model output to reinterpret."
+      },
+      "failure_summary": {
+        "item_count": 4861,
+        "recorded_correct_count": 3688,
+        "recorded_accuracy": 0.758691627237194,
+        "no_valid_vote_count": 923,
+        "no_valid_vote_rate": 0.1899,
+        "call_count": 4861,
+        "successful_call_count": 3938,
+        "transport_error_count": 923,
+        "transport_error_rate": 0.1899,
+        "transport_retry_count_total": 1846,
+        "error_kinds": {
+          "APIError": 923
+        },
+        "dominant_error": "OpenRouter 402 insufficient credits.",
+        "salvage_note": "Not salvageable from recorded artifacts because failed items have no successful model answer to reinterpret."
+      },
+      "run_parameters": {
+        "dataset": "lexen-v1",
+        "prompt": "p001",
+        "model": {
+          "kind": "cloud_llm",
+          "display_name": "openrouter/qwen/qwen3.7-max",
+          "requested_model": "openrouter/qwen/qwen3.7-max",
+          "resolved_model": "qwen/qwen3.7-max-20260520",
+          "llm_vendor": "Alibaba",
+          "api_provider": "OpenRouter",
+          "source_kind": "proprietary",
+          "reasoning_effort": null
+        },
+        "sampling": {
+          "temperature": 0.0,
+          "top_p": null,
+          "max_tokens": 2048,
+          "seed": null,
+          "extra": {}
+        },
+        "execution": {
+          "concurrency": 16,
+          "warmup_call_count": 0
+        }
+      },
+      "command": [
+        "uv",
+        "run",
+        "sensebench",
+        "run",
+        "--model",
+        "openrouter/qwen/qwen3.7-max",
+        "--prompt",
+        "p001",
+        "--temperature",
+        "0",
+        "--max-tokens",
+        "2048",
+        "--concurrency",
+        "16",
+        "--dataset",
+        "lexen-v1",
+        "--hosting-kind",
+        "cloud_api",
+        "--api-provider",
+        "OpenRouter",
+        "--vendor",
+        "Alibaba",
+        "--source-kind",
+        "proprietary",
+        "--github-handle",
+        "vassiliphilippov",
+        "--runner-name",
+        "Vassili Philippov",
+        "--no-progress",
+        "--run-id",
+        "qwen3.7-max-p001-lexen-v1-<YYYYMMDD>"
+      ]
     }
   ]
 }
