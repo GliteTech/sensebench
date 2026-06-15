@@ -23,6 +23,8 @@ LABELED_INDEX_OUTPUT: str = f"{SENSE_INDEX_FIELD}: {VALID_SENSE_INDEX}"
 FENCED_LABELED_INDEX_OUTPUT: str = f"```\n{LABELED_INDEX_OUTPUT}\n```"
 FENCED_PLAIN_OUTPUT: str = "```\n2\n```"
 MULTIPLE_JSON_OBJECTS_OUTPUT: str = f"{JSON_SENSE_OUTPUT} then {dumps({SENSE_INDEX_FIELD: 1})}"
+REPEATED_JSON_OBJECTS_OUTPUT: str = f"{JSON_SENSE_OUTPUT}{JSON_SENSE_OUTPUT}"
+DISAGREEING_JSON_OBJECTS_OUTPUT: str = f"{JSON_SENSE_OUTPUT}{dumps({SENSE_INDEX_FIELD: 1})}"
 BOOLEAN_SENSE_INDEX_OUTPUT: str = dumps({SENSE_INDEX_FIELD: True})
 
 
@@ -135,6 +137,31 @@ def test_extract_rejects_ambiguous_json_objects() -> None:
     assert isinstance(extracted, InvalidSenseIndexExtraction), "ambiguous extraction fails"
     assert extracted.invalid_reason == InvalidOutputReason.INVALID_JSON, (
         "ambiguous JSON is rejected"
+    )
+
+
+def test_extract_accepts_repeated_identical_json_objects() -> None:
+    extracted = extract_sense_index(
+        text=REPEATED_JSON_OBJECTS_OUTPUT,
+        output_mode=OutputMode.JSON_SENSE_INDEX,
+        candidate_count=CANDIDATE_COUNT,
+    )
+
+    assert isinstance(extracted, ValidSenseIndexExtraction), "repeated JSON extraction succeeds"
+    assert extracted.sense_index == VALID_SENSE_INDEX, "sense index is parsed"
+    assert extracted.repeated_json_objects is True, "repeated JSON repair is recorded"
+
+
+def test_extract_rejects_repeated_disagreeing_json_objects() -> None:
+    extracted = extract_sense_index(
+        text=DISAGREEING_JSON_OBJECTS_OUTPUT,
+        output_mode=OutputMode.JSON_SENSE_INDEX,
+        candidate_count=CANDIDATE_COUNT,
+    )
+
+    assert isinstance(extracted, InvalidSenseIndexExtraction), "disagreeing JSON fails"
+    assert extracted.invalid_reason == InvalidOutputReason.INVALID_JSON, (
+        "disagreeing JSON is rejected"
     )
 
 

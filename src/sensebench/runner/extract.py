@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ast import literal_eval
 from dataclasses import dataclass
-from json import JSONDecodeError, loads
+from json import JSONDecodeError, JSONDecoder, loads
 from re import DOTALL, IGNORECASE, Match, Pattern, compile
 from typing import assert_never
 
@@ -32,6 +32,7 @@ PLAIN_ANSWER_LABEL_PATTERN: Pattern[str] = compile(
 @dataclass(frozen=True, slots=True)
 class ValidSenseIndexExtraction:
     sense_index: int
+    repeated_json_objects: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +161,12 @@ def _labeled_sense_index(*, text: str) -> int | None:
 
 
 def _parse_json_output(*, text: str, candidate_count: int) -> SenseIndexExtraction:
+    repeated_json_extraction = _parse_repeated_json_objects(
+        text=text,
+        candidate_count=candidate_count,
+    )
+    if repeated_json_extraction is not None:
+        return repeated_json_extraction
     last_invalid: InvalidSenseIndexExtraction | None = None
     for candidate_text in _candidate_json_texts(text=text):
         parsed = _load_jsonish_value(text=candidate_text)
@@ -177,6 +184,44 @@ def _parse_json_output(*, text: str, candidate_count: int) -> SenseIndexExtracti
     if last_invalid is not None:
         return last_invalid
     return InvalidSenseIndexExtraction(invalid_reason=InvalidOutputReason.INVALID_JSON)
+
+
+def _parse_repeated_json_objects(
+    *,
+    text: str,
+    candidate_count: int,
+) -> SenseIndexExtraction | None:
+    json_decoder = JSONDecoder()
+    values: list[object] = []
+    index = 0
+    while index < len(text):
+        while index < len(text) and text[index].isspace():
+            index += 1
+        if index >= len(text):
+            break
+        try:
+            value, end_index = json_decoder.raw_decode(text, index)
+        except JSONDecodeError:
+            return None
+        values.append(value)
+        index = end_index
+    if len(values) < 2:
+        return None
+    sense_indexes: list[int] = []
+    for value in values:
+        extraction = _extraction_from_parsed_value(
+            parsed=value,
+            candidate_count=candidate_count,
+        )
+        if not isinstance(extraction, ValidSenseIndexExtraction):
+            return extraction
+        sense_indexes.append(extraction.sense_index)
+    if len(set(sense_indexes)) != 1:
+        return InvalidSenseIndexExtraction(invalid_reason=InvalidOutputReason.INVALID_JSON)
+    return ValidSenseIndexExtraction(
+        sense_index=sense_indexes[0],
+        repeated_json_objects=True,
+    )
 
 
 def _parse_plain_output(*, text: str, candidate_count: int) -> SenseIndexExtraction:

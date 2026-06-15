@@ -62,8 +62,8 @@
   },
   "totals": {
     "item_count": 4861,
-    "correct_count": 3762,
-    "accuracy": 0.7739148323390249,
+    "correct_count": 4405,
+    "accuracy": 0.9061921415346637,
     "call_count": 5569,
     "usage": {
       "input_tokens": 4299264,

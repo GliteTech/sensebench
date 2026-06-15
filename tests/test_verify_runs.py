@@ -66,6 +66,11 @@ def raw_output_for_sense_index(*, sense_index: int) -> str:
     return dumps({SENSE_INDEX_FIELD: sense_index})
 
 
+def duplicated_raw_output_for_sense_index(*, sense_index: int) -> str:
+    raw_output = raw_output_for_sense_index(sense_index=sense_index)
+    return f"{raw_output}{raw_output}"
+
+
 def test_verify_valid_tiny_run(tmp_path: Path) -> None:
     run_dir = tmp_path / RUN_DIR_NAME
     metadata = make_metadata(item_count=1, correct_count=1, accuracy=1.0, call_count=0)
@@ -256,6 +261,45 @@ def test_verify_rejects_changed_vote_after_success(tmp_path: Path) -> None:
 
     assert RunValidationRule.VOTE_EXTRACTION in issue_rules(report=report)
     assert any(issue.message == CALLS_AFTER_SUCCESS_MESSAGE for issue in report.issues)
+
+
+def test_verify_allows_legacy_reask_after_repeated_json_repair(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    prediction = voted_prediction(
+        chosen_index=1,
+        gold_sense_keys=[FIRST_SENSE_KEY],
+        is_correct=True,
+    )
+    call_ids: list[CallID] = [CALL_ID, SEMANTIC_REASK_CALL_ID]
+    votes: list[VoteRecord] = [
+        prediction.votes[0].model_copy(
+            update={CALL_IDS_FIELD: call_ids},
+        )
+    ]
+    prediction = prediction.model_copy(update={VOTES_FIELD: votes})
+    reask_call = success_call(
+        raw_output=duplicated_raw_output_for_sense_index(sense_index=2),
+        call_id=SEMANTIC_REASK_CALL_ID,
+    ).model_copy(
+        update={
+            ATTEMPT_INDEX_FIELD: 2,
+            ATTEMPT_KIND_FIELD: AttemptKind.SEMANTIC_REASK,
+        },
+    )
+    metadata = make_metadata(item_count=1, correct_count=1, accuracy=1.0, call_count=2)
+    write_run_artifacts(
+        run_dir=run_dir,
+        metadata=metadata,
+        predictions=[prediction],
+        calls=[
+            success_call(raw_output=duplicated_raw_output_for_sense_index(sense_index=1)),
+            reask_call,
+        ],
+    )
+
+    report = verify_run_directory(run_dir=run_dir, prompt=registered_prompt())
+
+    assert report.has_errors() is False
 
 
 def test_verify_detects_content_hash_mismatch(tmp_path: Path) -> None:
