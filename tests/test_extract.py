@@ -127,6 +127,55 @@ def test_extract_plain_accepts_fenced_integer() -> None:
     assert extracted.sense_index == VALID_SENSE_INDEX, "fenced integer sense index is parsed"
 
 
+def test_extract_plain_repairs_duplicated_integer_when_full_index_is_out_of_range() -> None:
+    extracted = extract_sense_index(
+        text="22",
+        output_mode=OutputMode.PLAIN_SENSE_INDEX,
+        candidate_count=CANDIDATE_COUNT,
+    )
+
+    assert isinstance(extracted, ValidSenseIndexExtraction), "duplicated integer is repaired"
+    assert extracted.sense_index == VALID_SENSE_INDEX, "repeated half is used as sense index"
+    assert extracted.repeated_plain_integer is True, "repeated integer repair is recorded"
+
+
+def test_extract_plain_keeps_direct_integer_when_it_is_in_range() -> None:
+    extracted = extract_sense_index(
+        text="11",
+        output_mode=OutputMode.PLAIN_SENSE_INDEX,
+        candidate_count=11,
+    )
+
+    assert isinstance(extracted, ValidSenseIndexExtraction), "direct integer is parsed"
+    assert extracted.sense_index == 11, "in-range direct integer wins over repeated half"
+    assert extracted.repeated_plain_integer is False, "no repeated repair is recorded"
+
+
+def test_extract_plain_rejects_duplicated_integer_when_half_is_out_of_range() -> None:
+    extracted = extract_sense_index(
+        text="44",
+        output_mode=OutputMode.PLAIN_SENSE_INDEX,
+        candidate_count=CANDIDATE_COUNT,
+    )
+
+    assert isinstance(extracted, InvalidSenseIndexExtraction), "out-of-range duplicate fails"
+    assert extracted.invalid_reason == InvalidOutputReason.INDEX_OUT_OF_RANGE, (
+        "out-of-range sense index is still rejected"
+    )
+
+
+def test_extract_plain_repairs_repeated_multi_digit_integer() -> None:
+    extracted = extract_sense_index(
+        text="1010",
+        output_mode=OutputMode.PLAIN_SENSE_INDEX,
+        candidate_count=10,
+    )
+
+    assert isinstance(extracted, ValidSenseIndexExtraction), "multi-digit duplicate is repaired"
+    assert extracted.sense_index == 10, "multi-digit repeated half is parsed"
+    assert extracted.repeated_plain_integer is True, "repeated integer repair is recorded"
+
+
 def test_extract_rejects_ambiguous_json_objects() -> None:
     extracted = extract_sense_index(
         text=MULTIPLE_JSON_OBJECTS_OUTPUT,

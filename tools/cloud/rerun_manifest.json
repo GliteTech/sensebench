@@ -3,6 +3,19 @@
   "created_at": "2026-06-15",
   "dataset": "lexen-v1",
   "purpose": "Tracks cloud API benchmark runs that were removed or withheld from public results and need clean replacement runs.",
+  "updated_at": "2026-06-16",
+  "current_blockers": [
+    {
+      "provider": "OpenRouter",
+      "status": "blocked",
+      "reason": "OpenRouter preflight currently fails with 402 insufficient credits. Do not rerun MiniMax or Qwen entries until credits/key limits are fixed."
+    },
+    {
+      "provider": "Google",
+      "status": "wait",
+      "reason": "Gemini 3.5 Flash p002 produced residual 503 ServiceUnavailableError failures even at 16k output tokens and lower concurrency. Retry when no other Google benchmark jobs are active."
+    }
+  ],
   "defaults": {
     "github_handle": "vassiliphilippov",
     "runner_name": "Vassili Philippov",
@@ -17,7 +30,7 @@
     {
       "original_run_id": "minimax-m3-p002-lexen-v1-20260614",
       "replacement_run_id_template": "minimax-m3-p002-lexen-v1-<YYYYMMDD>",
-      "status": "queued",
+      "status": "blocked",
       "priority": "high",
       "cleanup": {
         "status": "deleted",
@@ -39,6 +52,35 @@
         "dominant_raw_pattern": "Duplicated plain integers such as 22, 33, and 1010.",
         "salvage_note": "A duplicated-integer parser rule could recover this run, but the run was deleted to keep public results conservative."
       },
+      "attempt_history": [
+        {
+          "attempted_run_id": "minimax-m3-p002-lexen-v1-20260616",
+          "date": "2026-06-16",
+          "max_tokens": 8192,
+          "concurrency": 48,
+          "result": "rejected",
+          "artifact_location": "work/failed-reruns/minimax-m3-p002-lexen-v1-20260616-pre-parser-fix",
+          "notes": "Before the duplicated-plain-integer parser fix, 645 final items had no valid vote; repeated integers such as 22, 33, and 1010 were recorded as index_out_of_range."
+        },
+        {
+          "attempted_run_id": "minimax-m3-p002-lexen-v1-20260616",
+          "date": "2026-06-16",
+          "max_tokens": 8192,
+          "concurrency": 48,
+          "result": "rejected",
+          "artifact_location": "work/failed-reruns/minimax-m3-p002-lexen-v1-20260616-recovered-length",
+          "notes": "After the parser fix, official verification passed and final no_valid_vote was zero, but the strict gate found one recovered length-finished empty output at the 8192-token cap."
+        },
+        {
+          "attempted_run_id": "minimax-m3-p002-lexen-v1-20260616",
+          "date": "2026-06-16",
+          "max_tokens": 16384,
+          "concurrency": 48,
+          "result": "blocked",
+          "artifact_location": "work/failed-reruns/minimax-m3-p002-lexen-v1-20260616-openrouter-402",
+          "notes": "Rerun at 16k output tokens was blocked by OpenRouter 402 insufficient credits and produced 1674 transport-error final votes."
+        }
+      ],
       "run_parameters": {
         "dataset": "lexen-v1",
         "prompt": "p002",
@@ -55,12 +97,12 @@
         "sampling": {
           "temperature": 0.0,
           "top_p": null,
-          "max_tokens": 8192,
+          "max_tokens": 16384,
           "seed": null,
           "extra": {}
         },
         "execution": {
-          "concurrency": 48,
+          "concurrency": 16,
           "warmup_call_count": 0
         }
       },
@@ -76,9 +118,9 @@
         "--temperature",
         "0",
         "--max-tokens",
-        "8192",
+        "16384",
         "--concurrency",
-        "48",
+        "16",
         "--dataset",
         "lexen-v1",
         "--hosting-kind",
@@ -101,7 +143,7 @@
     {
       "original_run_id": "qwen3.7-max-medium-reasoning-p001-lexen-v1-20260614",
       "replacement_run_id_template": "qwen3.7-max-medium-reasoning-p001-lexen-v1-<YYYYMMDD>",
-      "status": "queued",
+      "status": "blocked",
       "priority": "high",
       "cleanup": {
         "status": "deleted_in_this_change",
@@ -187,7 +229,7 @@
     {
       "original_run_id": "gemini-3.5-flash-p002-lexen-v1-20260614",
       "replacement_run_id_template": "gemini-3.5-flash-p002-lexen-v1-<YYYYMMDD>",
-      "status": "queued",
+      "status": "blocked",
       "priority": "high",
       "cleanup": {
         "status": "deleted_in_this_change",
@@ -199,7 +241,7 @@
         "recorded_correct_count": 4446,
         "recorded_accuracy": 0.9146266200370294,
         "original_max_tokens": 256,
-        "replacement_max_tokens": 8192,
+        "replacement_max_tokens": 16384,
         "call_count": 5654,
         "successful_call_count": 5653,
         "transport_error_count": 1,
@@ -221,6 +263,35 @@
         "dominant_raw_pattern": "Hidden reasoning consumed the 256-token budget; visible outputs were often truncated fragments instead of the requested integer.",
         "salvage_note": "Not repairable from artifacts because the final failed items do not contain a parseable answer; rerun with a larger token budget."
       },
+      "attempt_history": [
+        {
+          "attempted_run_id": "gemini-3.5-flash-p002-lexen-v1-20260616",
+          "date": "2026-06-16",
+          "max_tokens": 8192,
+          "concurrency": 32,
+          "result": "rejected",
+          "artifact_location": "work/failed-reruns/gemini-3.5-flash-p002-lexen-v1-20260616-recovered-length",
+          "notes": "Official verification passed, but the strict gate found one recovered length-finished truncated attempt at the 8192-token cap."
+        },
+        {
+          "attempted_run_id": "gemini-3.5-flash-p002-lexen-v1-20260616",
+          "date": "2026-06-16",
+          "max_tokens": 16384,
+          "concurrency": 32,
+          "result": "rejected",
+          "artifact_location": "work/failed-reruns/gemini-3.5-flash-p002-lexen-v1-20260616-16k-503",
+          "notes": "Official verification passed, but the strict gate found 3 final ServiceUnavailableError transport failures."
+        },
+        {
+          "attempted_run_id": "gemini-3.5-flash-p002-lexen-v1-20260616",
+          "date": "2026-06-16",
+          "max_tokens": 16384,
+          "concurrency": 16,
+          "result": "rejected",
+          "artifact_location": "work/failed-reruns/gemini-3.5-flash-p002-lexen-v1-20260616-16k-conc16-503",
+          "notes": "Official verification passed, but the strict gate found 2 final ServiceUnavailableError transport failures; accuracy was 4574/4861 and cost was about $24.94."
+        }
+      ],
       "run_parameters": {
         "dataset": "lexen-v1",
         "prompt": "p002",
@@ -237,12 +308,12 @@
         "sampling": {
           "temperature": 0.0,
           "top_p": null,
-          "max_tokens": 8192,
+          "max_tokens": 16384,
           "seed": null,
           "extra": {}
         },
         "execution": {
-          "concurrency": 32,
+          "concurrency": 16,
           "warmup_call_count": 0
         }
       },
@@ -258,9 +329,9 @@
         "--temperature",
         "0",
         "--max-tokens",
-        "8192",
+        "16384",
         "--concurrency",
-        "32",
+        "16",
         "--dataset",
         "lexen-v1",
         "--hosting-kind",
@@ -283,7 +354,7 @@
     {
       "original_run_id": "qwen3.7-max-p001-lexen-v1-20260614",
       "replacement_run_id_template": "qwen3.7-max-p001-lexen-v1-<YYYYMMDD>",
-      "status": "queued",
+      "status": "blocked",
       "priority": "high",
       "cleanup": {
         "status": "deleted_in_this_change",
@@ -307,6 +378,17 @@
         "dominant_error": "OpenRouter 402 insufficient credits.",
         "salvage_note": "Not salvageable from recorded artifacts because failed items have no successful model answer to reinterpret."
       },
+      "attempt_history": [
+        {
+          "attempted_run_id": "qwen3.7-max-p001-lexen-v1-20260616",
+          "date": "2026-06-16",
+          "max_tokens": 2048,
+          "concurrency": 16,
+          "result": "blocked",
+          "artifact_location": null,
+          "notes": "The run failed during model preflight with OpenRouter 402 insufficient credits, before any run artifact was created."
+        }
+      ],
       "run_parameters": {
         "dataset": "lexen-v1",
         "prompt": "p001",
@@ -423,7 +505,7 @@
           "extra": {}
         },
         "execution": {
-          "concurrency": 32,
+          "concurrency": 16,
           "warmup_call_count": 0
         }
       },
@@ -441,7 +523,7 @@
         "--max-tokens",
         "8192",
         "--concurrency",
-        "32",
+        "16",
         "--dataset",
         "lexen-v1",
         "--hosting-kind",
