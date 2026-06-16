@@ -365,6 +365,101 @@
         "--run-id",
         "qwen3.7-max-p001-lexen-v1-<YYYYMMDD>"
       ]
+    },
+    {
+      "original_run_id": "gemini-3-flash-p001-lexen-v1-20260614",
+      "replacement_run_id_template": "gemini-3-flash-p001-lexen-v1-<YYYYMMDD>",
+      "status": "queued",
+      "priority": "high",
+      "cleanup": {
+        "status": "deleted_in_this_change",
+        "pull_request": null,
+        "reason": "Run had transient Gemini 503 transport failures and a high number of length-finished calls at the original 2048-token output budget."
+      },
+      "failure_summary": {
+        "item_count": 4861,
+        "recorded_correct_count": 4536,
+        "recorded_accuracy": 0.9331413289446616,
+        "original_max_tokens": 2048,
+        "replacement_max_tokens": 8192,
+        "call_count": 4906,
+        "successful_call_count": 4896,
+        "transport_error_count": 10,
+        "transport_error_rate": 0.0021,
+        "transport_retry_count_total": 272,
+        "finish_reason_length_count": 107,
+        "no_valid_vote_count": 10,
+        "no_valid_vote_rate": 0.0021,
+        "invalid_attempts_by_kind": {
+          "ServiceUnavailableError": 10
+        },
+        "usage": {
+          "input_tokens": 3123114,
+          "cached_input_tokens": 2021,
+          "output_tokens": 4185951,
+          "reasoning_output_tokens": 4131431
+        },
+        "dominant_error": "Gemini 503 UNAVAILABLE: model experiencing high demand.",
+        "salvage_note": "Not repairable from artifacts because failed items have no successful model answer; rerun with higher output token budget to reduce truncation risk."
+      },
+      "run_parameters": {
+        "dataset": "lexen-v1",
+        "prompt": "p001",
+        "model": {
+          "kind": "cloud_llm",
+          "display_name": "gemini/gemini-3-flash-preview",
+          "requested_model": "gemini/gemini-3-flash-preview",
+          "resolved_model": "gemini-3-flash-preview",
+          "llm_vendor": "Google",
+          "api_provider": "Google",
+          "source_kind": "proprietary",
+          "reasoning_effort": null
+        },
+        "sampling": {
+          "temperature": 0.0,
+          "top_p": null,
+          "max_tokens": 8192,
+          "seed": null,
+          "extra": {}
+        },
+        "execution": {
+          "concurrency": 32,
+          "warmup_call_count": 0
+        }
+      },
+      "command": [
+        "uv",
+        "run",
+        "sensebench",
+        "run",
+        "--model",
+        "gemini/gemini-3-flash-preview",
+        "--prompt",
+        "p001",
+        "--temperature",
+        "0",
+        "--max-tokens",
+        "8192",
+        "--concurrency",
+        "32",
+        "--dataset",
+        "lexen-v1",
+        "--hosting-kind",
+        "cloud_api",
+        "--api-provider",
+        "Google",
+        "--vendor",
+        "Google",
+        "--source-kind",
+        "proprietary",
+        "--github-handle",
+        "vassiliphilippov",
+        "--runner-name",
+        "Vassili Philippov",
+        "--no-progress",
+        "--run-id",
+        "gemini-3-flash-p001-lexen-v1-<YYYYMMDD>"
+      ]
     }
   ]
 }
