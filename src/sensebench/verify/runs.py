@@ -50,6 +50,12 @@ TIMING_TOLERANCE_SECONDS: float = 1e-9
 CALL_LATENCY_TOLERANCE_SECONDS: float = 0.05
 MACHINE_COST_RELATIVE_TOLERANCE: float = 1e-9
 MAX_OUTPUT_TRUNCATION_FRACTION: float = 0.05
+GEMMA_4_MODEL_TOKEN: str = "gemma-4"
+GEMMA_REASONING_EFFORT: str = "reasoning"
+GEMMA_NO_REASONING_EFFORT: str = "no reasoning"
+GEMMA_REASONING_PARSER_MARKER: str = "--reasoning-parser gemma4"
+GEMMA_ENABLE_THINKING_MARKER: str = "enable_thinking"
+GEMMA_THINKING_ENABLED_MARKER: str = "true"
 MESSAGE_ROLE_FIELD: str = "role"
 MESSAGE_CONTENT_FIELD: str = "content"
 DATASET_ITEM_DIFF_SAMPLE_LIMIT: int = 10
@@ -1040,6 +1046,47 @@ def _model_provenance_issues(*, metadata: RunMetadata) -> list[RunValidationIssu
     ]
 
 
+def _gemma_4_model_identifier(*, metadata: RunMetadata) -> str:
+    model = metadata.model
+    return " ".join(
+        value
+        for value in (model.display_name, model.requested_model, model.resolved_model)
+        if value is not None
+    ).lower()
+
+
+def _gemma_4_thinking_enabled(*, serve_command: str | None) -> bool:
+    normalized = " ".join((serve_command or "").lower().split())
+    return GEMMA_REASONING_PARSER_MARKER in normalized or (
+        GEMMA_ENABLE_THINKING_MARKER in normalized
+        and GEMMA_THINKING_ENABLED_MARKER in normalized
+    )
+
+
+def _gemma_4_reasoning_effort_issues(*, metadata: RunMetadata) -> list[RunValidationIssue]:
+    if metadata.model.kind != SELF_HOSTED_LLM_KIND:
+        return []
+    if GEMMA_4_MODEL_TOKEN not in _gemma_4_model_identifier(metadata=metadata):
+        return []
+    expected = (
+        GEMMA_REASONING_EFFORT
+        if _gemma_4_thinking_enabled(serve_command=metadata.model.serve_command)
+        else GEMMA_NO_REASONING_EFFORT
+    )
+    if metadata.model.reasoning_effort == expected:
+        return []
+    return [
+        RunValidationIssue(
+            rule=RunValidationRule.MODEL_PROVENANCE,
+            location=RUN_METADATA_FILENAME,
+            message=(
+                "self-hosted Gemma 4 runs must record "
+                f"model.reasoning_effort={expected!r} to match the serve command"
+            ),
+        )
+    ]
+
+
 def _output_truncation_issues(
     *,
     metadata: RunMetadata,
@@ -1111,6 +1158,7 @@ def verify_run_directory(
     issues.extend(_machine_info_issues(metadata=loaded.metadata))
     issues.extend(_machine_cost_issues(metadata=loaded.metadata))
     issues.extend(_model_provenance_issues(metadata=loaded.metadata))
+    issues.extend(_gemma_4_reasoning_effort_issues(metadata=loaded.metadata))
     issues.extend(_output_truncation_issues(metadata=loaded.metadata, calls=loaded.calls))
     verification_prompt: PromptDefinition | None = None
     if prompt is not None and prompt.id == loaded.metadata.prompt.id:
