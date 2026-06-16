@@ -33,6 +33,7 @@ PLAIN_ANSWER_LABEL_PATTERN: Pattern[str] = compile(
 class ValidSenseIndexExtraction:
     sense_index: int
     repeated_json_objects: bool = False
+    repeated_plain_integer: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,43 @@ def _validate_range(*, value: int, candidate_count: int) -> SenseIndexExtraction
             invalid_reason=InvalidOutputReason.INDEX_OUT_OF_RANGE,
         )
     return ValidSenseIndexExtraction(sense_index=value)
+
+
+def _validate_repeated_plain_integer(
+    *,
+    text: str,
+    candidate_count: int,
+) -> SenseIndexExtraction | None:
+    if not text.isdigit() or len(text) % 2 != 0:
+        return None
+    midpoint = len(text) // 2
+    first_half = text[:midpoint]
+    second_half = text[midpoint:]
+    if first_half != second_half:
+        return None
+    repeated_value = int(first_half)
+    if repeated_value < 1 or repeated_value > candidate_count:
+        return None
+    return ValidSenseIndexExtraction(
+        sense_index=repeated_value,
+        repeated_plain_integer=True,
+    )
+
+
+def _parse_numeric_text(*, text: str, candidate_count: int) -> SenseIndexExtraction | None:
+    direct_value = _coerce_sense_index_value(value=text)
+    if direct_value is None:
+        return None
+    direct_extraction = _validate_range(value=direct_value, candidate_count=candidate_count)
+    if isinstance(direct_extraction, ValidSenseIndexExtraction):
+        return direct_extraction
+    repeated_extraction = _validate_repeated_plain_integer(
+        text=text,
+        candidate_count=candidate_count,
+    )
+    if repeated_extraction is not None:
+        return repeated_extraction
+    return direct_extraction
 
 
 def _coerce_sense_index_value(*, value: object) -> int | None:
@@ -68,9 +106,17 @@ def _extraction_from_parsed_value(
     parsed: object,
     candidate_count: int,
 ) -> SenseIndexExtraction:
-    direct_value = _coerce_sense_index_value(value=parsed)
-    if direct_value is not None:
-        return _validate_range(value=direct_value, candidate_count=candidate_count)
+    if isinstance(parsed, str):
+        numeric_text_extraction = _parse_numeric_text(
+            text=parsed.strip(),
+            candidate_count=candidate_count,
+        )
+        if numeric_text_extraction is not None:
+            return numeric_text_extraction
+    else:
+        direct_value = _coerce_sense_index_value(value=parsed)
+        if direct_value is not None:
+            return _validate_range(value=direct_value, candidate_count=candidate_count)
     if not isinstance(parsed, dict):
         return InvalidSenseIndexExtraction(
             invalid_reason=InvalidOutputReason.JSON_NOT_OBJECT,
@@ -226,9 +272,12 @@ def _parse_repeated_json_objects(
 
 def _parse_plain_output(*, text: str, candidate_count: int) -> SenseIndexExtraction:
     for candidate_text in _candidate_json_texts(text=text):
-        plain_index = _coerce_sense_index_value(value=candidate_text)
-        if plain_index is not None:
-            return _validate_range(value=plain_index, candidate_count=candidate_count)
+        numeric_text_extraction = _parse_numeric_text(
+            text=candidate_text,
+            candidate_count=candidate_count,
+        )
+        if numeric_text_extraction is not None:
+            return numeric_text_extraction
         labeled_index = _labeled_sense_index(text=candidate_text)
         if labeled_index is not None:
             return _validate_range(value=labeled_index, candidate_count=candidate_count)

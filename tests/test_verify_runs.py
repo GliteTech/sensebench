@@ -4,7 +4,9 @@ from json import dumps
 from pathlib import Path
 
 from sensebench.datasets.models import ItemID, SenseKey
+from sensebench.paths import P002_PROMPT_PATH
 from sensebench.prompts.models import SENSE_INDEX_FIELD, PromptID
+from sensebench.prompts.registry import load_prompt_definition
 from sensebench.runner.writer import write_run_artifacts
 from sensebench.runs.models import (
     RUN_SCHEMA_VERSION_V1,
@@ -69,6 +71,10 @@ def raw_output_for_sense_index(*, sense_index: int) -> str:
 def duplicated_raw_output_for_sense_index(*, sense_index: int) -> str:
     raw_output = raw_output_for_sense_index(sense_index=sense_index)
     return f"{raw_output}{raw_output}"
+
+
+def duplicated_plain_output_for_sense_index(*, sense_index: int) -> str:
+    return f"{sense_index}{sense_index}"
 
 
 def test_verify_valid_tiny_run(tmp_path: Path) -> None:
@@ -298,6 +304,56 @@ def test_verify_allows_legacy_reask_after_repeated_json_repair(tmp_path: Path) -
     )
 
     report = verify_run_directory(run_dir=run_dir, prompt=registered_prompt())
+
+    assert report.has_errors() is False
+
+
+def test_verify_allows_legacy_reask_after_repeated_plain_integer_repair(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    prediction = voted_prediction(
+        chosen_index=1,
+        gold_sense_keys=[FIRST_SENSE_KEY],
+        is_correct=True,
+    )
+    call_ids: list[CallID] = [CALL_ID, SEMANTIC_REASK_CALL_ID]
+    votes: list[VoteRecord] = [
+        prediction.votes[0].model_copy(
+            update={CALL_IDS_FIELD: call_ids},
+        )
+    ]
+    prediction = prediction.model_copy(update={VOTES_FIELD: votes})
+    reask_call = success_call(
+        raw_output=duplicated_plain_output_for_sense_index(sense_index=2),
+        call_id=SEMANTIC_REASK_CALL_ID,
+    ).model_copy(
+        update={
+            ATTEMPT_INDEX_FIELD: 2,
+            ATTEMPT_KIND_FIELD: AttemptKind.SEMANTIC_REASK,
+        },
+    )
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=2,
+        prompt_id="p002",
+    )
+    write_run_artifacts(
+        run_dir=run_dir,
+        metadata=metadata,
+        predictions=[prediction],
+        calls=[
+            success_call(raw_output=duplicated_plain_output_for_sense_index(sense_index=1)),
+            reask_call,
+        ],
+    )
+
+    report = verify_run_directory(
+        run_dir=run_dir,
+        prompt=load_prompt_definition(path=P002_PROMPT_PATH),
+    )
 
     assert report.has_errors() is False
 
