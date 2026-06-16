@@ -61,7 +61,19 @@ ELAPSED_SECONDS_FIELD: str = "elapsed_seconds"
 TOTALS_FIELD: str = "totals"
 LATENCY_SECONDS_FIELD: str = "latency_seconds"
 HF_REVISION_FIELD: str = "hf_revision"
+REASONING_EFFORT_FIELD: str = "reasoning_effort"
+SERVE_COMMAND_FIELD: str = "serve_command"
 USAGE_FIELD: str = "usage"
+GEMMA_31B_MODEL: str = "google/gemma-4-31B-it"
+GEMMA_THINKING_SERVE_COMMAND: str = (
+    "exec vllm serve google/gemma-4-31B-it "
+    "--reasoning-parser gemma4 "
+    "--default-chat-template-kwargs '{\"enable_thinking\": true}'"
+)
+GEMMA_NO_THINKING_SERVE_COMMAND: str = (
+    "exec vllm serve google/gemma-4-31B-it "
+    "--default-chat-template-kwargs '{\"enable_thinking\": false}'"
+)
 
 
 def raw_output_for_sense_index(*, sense_index: int) -> str:
@@ -694,6 +706,76 @@ def test_verify_self_hosted_run_with_revision_passes_provenance(tmp_path: Path) 
         accuracy=1.0,
         call_count=1,
         model=self_hosted_model(),
+        machine=fixture_machine(),
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.MODEL_PROVENANCE not in issue_rules(report=report)
+
+
+def test_verify_gemma_thinking_requires_reasoning_metadata(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    model = self_hosted_model(model_name=GEMMA_31B_MODEL).model_copy(
+        update={
+            SERVE_COMMAND_FIELD: GEMMA_THINKING_SERVE_COMMAND,
+            REASONING_EFFORT_FIELD: None,
+        }
+    )
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        model=model,
+        machine=fixture_machine(),
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.MODEL_PROVENANCE in issue_rules(report=report)
+    assert any("model.reasoning_effort='reasoning'" in issue.message for issue in report.issues)
+
+
+def test_verify_gemma_matching_reasoning_metadata_passes(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    model = self_hosted_model(model_name=GEMMA_31B_MODEL).model_copy(
+        update={
+            SERVE_COMMAND_FIELD: GEMMA_THINKING_SERVE_COMMAND,
+            REASONING_EFFORT_FIELD: "reasoning",
+        }
+    )
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        model=model,
+        machine=fixture_machine(),
+    )
+    _write_voted_run(run_dir=run_dir, metadata=metadata)
+
+    report = verify_run_directory(run_dir=run_dir)
+
+    assert RunValidationRule.MODEL_PROVENANCE not in issue_rules(report=report)
+
+
+def test_verify_gemma_matching_no_reasoning_metadata_passes(tmp_path: Path) -> None:
+    run_dir = tmp_path / RUN_DIR_NAME
+    model = self_hosted_model(model_name=GEMMA_31B_MODEL).model_copy(
+        update={
+            SERVE_COMMAND_FIELD: GEMMA_NO_THINKING_SERVE_COMMAND,
+            REASONING_EFFORT_FIELD: "no reasoning",
+        }
+    )
+    metadata = make_metadata(
+        item_count=1,
+        correct_count=1,
+        accuracy=1.0,
+        call_count=1,
+        model=model,
         machine=fixture_machine(),
     )
     _write_voted_run(run_dir=run_dir, metadata=metadata)
