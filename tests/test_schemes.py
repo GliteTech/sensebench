@@ -44,15 +44,18 @@ def _item(
     )
 
 
-def test_scheme_registry_has_six_schemes() -> None:
-    assert len(SCHEMES) == 6
+def test_scheme_registry_has_nine_schemes() -> None:
+    assert len(SCHEMES) == 9
     assert set(SCHEME_IDS) == {
         "lexen_fine",
         "lexen_coarse",
+        "lexen_csi",
         "maru2022_fine",
         "maru2022_coarse",
+        "maru2022_csi",
         "raganato_fine",
         "raganato_coarse",
+        "raganato_csi",
     }
     assert DEFAULT_SCHEME_ID == "lexen_fine"
     assert set(SCHEME_BY_ID) == set(SCHEME_IDS)
