@@ -336,7 +336,7 @@ def _template_env() -> Environment:
     ]
     env.globals["scheme_granularities"] = [
         {"value": granularity.value, "label": GRANULARITY_LABELS[granularity]}
-        for granularity in (Granularity.FINE, Granularity.COARSE)
+        for granularity in (Granularity.FINE, Granularity.COARSE, Granularity.CSI)
     ]
     env.globals["default_scheme_id"] = DEFAULT_SCHEME_ID
     return env
