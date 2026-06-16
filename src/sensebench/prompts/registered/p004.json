@@ -1,0 +1,38 @@
+{
+  "schema_version": "sensebench-prompt-v1",
+  "id": "p004",
+  "name": "5+1 Context, Randomized WordNet Glosses",
+  "description": "English fine-grained Word Sense Disambiguation prompt matching p001 except candidate senses are deterministically randomized per item instead of ordered by WordNet frequency. The target sentence uses 5 preceding and 1 following sentence of detokenized context, the target is marked with <t>...</t>, candidate senses include WordNet sense keys, definitions, synonyms, and usage examples, and the model returns JSON with sense_index.",
+  "template_kind": "chat_messages",
+  "template": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are an English linguist performing fine-grained Word Sense Disambiguation. WordNet glosses are schematic. Use the sentence context, the examples, and the synonyms to choose the best indexed sense. Do not hedge. Choose the single best indexed sense."
+      },
+      {
+        "role": "user",
+        "content": "Target lemma: {{target_lemma}}\nTarget surface form: {{target_text}}\nContext:\n{{context}}\n\nCandidate senses:\n{{candidate_senses}}\n\nInstructions:\n1. Choose the single best indexed sense for the target word in context.\n2. WordNet glosses are schematic; use the context, synonyms, and examples together.\n3. Do not answer with a WordNet sense key.\n4. Return only a JSON object exactly like {\"sense_index\": 3}."
+      }
+    ]
+  },
+  "params": {
+    "previous_sentences": 5,
+    "next_sentences": 1,
+    "target_marker": "xml_t",
+    "sense_order": "random_fixed",
+    "candidate_format": "compact_labeled_inline",
+    "include_wordnet_id": true,
+    "wordnet_id_kind": "sense_key",
+    "include_definition": true,
+    "include_examples": true,
+    "examples_max_per_sense": 2,
+    "include_pos": false,
+    "include_synonyms": true,
+    "synonyms_max_per_sense": 6,
+    "detokenize": true
+  },
+  "output": {
+    "mode": "json_sense_index"
+  }
+}
