@@ -1,0 +1,34 @@
+{
+  "schema_version": "sensebench-prompt-v1",
+  "id": "p003",
+  "name": "p002 + 5+1 Context + Synonyms + Two Examples",
+  "description": "Workhorse English Word Sense Disambiguation prompt selected from the p021 ablation candidate: based on p002 with the p001 context window, synonyms, and a second candidate example per sense added while keeping no target metadata, no WordNet sense keys, and plain-number output.",
+  "template_kind": "chat_messages",
+  "template": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Which numbered sense of \"{{target_lemma}}\" (marked with <t></t>) is used in the context below? Return only the number of the correct sense.\n\nContext: {{context}}\n\nSenses:\n{{candidate_senses}}"
+      }
+    ]
+  },
+  "params": {
+    "previous_sentences": 5,
+    "next_sentences": 1,
+    "target_marker": "xml_t",
+    "sense_order": "frequency",
+    "candidate_format": "compact_labeled_inline",
+    "include_wordnet_id": false,
+    "wordnet_id_kind": "none",
+    "include_definition": true,
+    "include_examples": true,
+    "examples_max_per_sense": 2,
+    "include_pos": false,
+    "include_synonyms": true,
+    "synonyms_max_per_sense": 6,
+    "detokenize": true
+  },
+  "output": {
+    "mode": "plain_sense_index"
+  }
+}
