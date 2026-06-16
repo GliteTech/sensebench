@@ -31,7 +31,7 @@
     "source_kind": "open_source",
     "license": "gemma",
     "model_url": "https://huggingface.co/google/gemma-4-E2B-it",
-    "reasoning_effort": null,
+    "reasoning_effort": "no reasoning",
     "hf_revision": "70af34e20bd4b7a91f0de6b22675850c43922a03",
     "quantization": "fp8",
     "inference_engine": "vllm",
