@@ -149,6 +149,10 @@ SITE_JS_EXPORT_COLUMNS_MARKER: str = "EXPORT_COLUMNS"
 SITE_JS_DOWNLOAD_CSV_MARKER: str = "function downloadCsv"
 DESCRIPTIVE_GLITE_CSV_PREFIX: str = "lexen_glite_coarse"
 DESCRIPTIVE_CSI_CSV_PREFIX: str = "lexen_csi_coarse"
+LABEL_SCHEMES_ROUTE_PREFIX: str = "label-schemes"
+LABEL_SCHEME_TABLE_CLASS: str = "label-scheme-table"
+LABEL_SCHEME_TABLE_WRAP_CLASS: str = "label-scheme-table-wrap"
+LABEL_SCHEME_CSI_DATA_LABEL: str = 'data-label="CSI coarse-grained (Lacerra 2020)"'
 BUILT_BY_GLITE_TEXT: str = "Built by Glite"
 EXPECTED_BASELINE_COUNT: int = 4
 ECHARTS_VENDOR_PATH: Path = Path("vendor") / "echarts.min.js"
@@ -410,6 +414,12 @@ def test_build_site_emits_static_pages_and_data(
         encoding="utf-8"
     )
     assert "prompts/p001/" in run_html
+    label_schemes_page = output_dir / LABEL_SCHEMES_ROUTE_PREFIX / INDEX_HTML_FILENAME
+    assert label_schemes_page.exists()
+    label_schemes_html = label_schemes_page.read_text(encoding="utf-8")
+    assert LABEL_SCHEME_TABLE_CLASS in label_schemes_html
+    assert LABEL_SCHEME_TABLE_WRAP_CLASS in label_schemes_html
+    assert LABEL_SCHEME_CSI_DATA_LABEL in label_schemes_html
 
     site_data = SiteData.model_validate_json(
         (output_dir / SITE_DATA_DIRNAME / LEADERBOARD_JSON_PATH).read_text(encoding="utf-8")

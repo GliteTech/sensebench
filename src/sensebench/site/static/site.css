@@ -1184,6 +1184,91 @@ mark {
   font-size: 0.8rem;
 }
 
+.label-scheme-table-wrap {
+  overflow-x: visible;
+}
+
+.label-scheme-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.label-scheme-table th,
+.label-scheme-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.label-scheme-table th:first-child,
+.label-scheme-table td:first-child {
+  width: 22%;
+}
+
+@media (max-width: 700px) {
+  .label-scheme-table,
+  .label-scheme-table tbody,
+  .label-scheme-table tr,
+  .label-scheme-table th,
+  .label-scheme-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .label-scheme-table th:first-child,
+  .label-scheme-table td:first-child {
+    width: 100%;
+  }
+
+  .label-scheme-table thead {
+    display: none;
+  }
+
+  .label-scheme-table tbody {
+    display: grid;
+    gap: 12px;
+  }
+
+  .label-scheme-table tr {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .label-scheme-table th[scope="row"] {
+    border-bottom: 0;
+    padding: 0 0 8px;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+
+  .label-scheme-table td {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.42fr) minmax(0, 1fr);
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    padding: 8px 0;
+  }
+
+  .label-scheme-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .label-scheme-table td:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .label-scheme-table td {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
 .dt-sub {
   display: block;
   color: var(--muted);
