@@ -52,7 +52,7 @@
       </select>
     </label>
   </div>
-  <p class="scheme-bar-note">Re-scores the entire leaderboard — table, chart, Pareto frontier, ranks, and pairwise tests — against the chosen gold labels and sense granularity. Default is lexEN v1 · WordNet fine-grained. <a href="{{ base_path }}label-schemes/">What do these mean? →</a></p>
+  <p class="scheme-bar-note">Re-scores the entire leaderboard — table, chart, Pareto frontier, ranks, and pairwise tests — against the chosen gold labels and sense granularity. Default is lexEN v1 · WordNet fine-grained. <a href="{{ base_path }}label-schemes/">What do these mean? →</a> <a href="{{ base_path }}coarsening/">About coarsening →</a></p>
 </section>
 
 <section class="toolbar" aria-label="Leaderboard controls">
@@ -265,7 +265,7 @@
   <h2>Method Notes</h2>
   <p>Public rows are rebuilt from verified run artifacts in the repository. Accuracy is recomputed from predictions, and official runs are checked against the registered dataset hash and prompt ID.</p>
   <p>The ± value under each accuracy is half the width of a fixed-seed bootstrap 95% confidence interval. The small range under each rank lists the positions a run could plausibly occupy among the visible rows given overlapping intervals.</p>
-  <p>The <strong>Score against</strong> and <strong>Sense granularity</strong> controls re-score every run and baseline against one of six label sets: the lexEN v1, Maru 2022 (ALLamended), or original Raganato 2017 gold labels, each at WordNet 3.0 fine-grained sense or at the coarser Glite concept level. A prediction is coarse-correct when its WordNet sense maps to the same Glite concept as a gold sense (so coarse accuracy is always at least the fine-grained accuracy). The default and official score is lexEN v1 · WordNet fine-grained. See <a href="{{ base_path }}label-schemes/">label schemes</a> for what each option means.</p>
+  <p>The <strong>Score against</strong> and <strong>Sense granularity</strong> controls re-score every run and baseline against one of nine label sets: the lexEN v1, Maru 2022 (ALLamended), or original Raganato 2017 gold labels, each at WordNet 3.0 fine-grained sense or at one of two coarse concept levels — Glite or CSI. A prediction is coarse-correct when its WordNet sense maps to the same coarse concept as a gold sense (so coarse accuracy is always at least the fine-grained accuracy). The default and official score is lexEN v1 · WordNet fine-grained. See <a href="{{ base_path }}label-schemes/">label schemes</a> and <a href="{{ base_path }}coarsening/">coarsening</a> for what each option means.</p>
   <p>The Pareto frontier uses the visible rows and the selected chart metric (cost per million items or machine-hours per 1M items): higher accuracy is better, and a lower metric value is better. Starred rows are on the frontier.</p>
   <p>Machine-hours per 1M items is recorded for self-hosted runs only. It measures the per-item evaluation loop on the recorded machine, excluding model and asset loading; cloud API runs are excluded from that chart.</p>
   <p>Reference baselines are classic WSD systems scored from per-item predictions on the same dataset items; dashed chart lines show them for context.</p>
