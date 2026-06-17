@@ -1,8 +1,8 @@
 {
   "schema_version": "sensebench-run-v2",
   "run_id": "gpt-5.5-none-reasoning-p003-lexen-v1-20260617",
-  "created_at": "2026-06-17T11:29:06.305785+00:00",
-  "git_commit": "0dc5efa96637288a1e61ef0a75c06425d8fa9108",
+  "created_at": "2026-06-17T11:35:31.119736+00:00",
+  "git_commit": "3f26a5091c2185160fe1cb8f848e5092b71412d3",
   "runner": {
     "github_handle": "vassiliphilippov",
     "name": "Vassili Philippov",
@@ -36,7 +36,7 @@
     "endpoint_base_url": null
   },
   "sampling": {
-    "temperature": null,
+    "temperature": 0.0,
     "top_p": null,
     "max_tokens": 8192,
     "seed": null,
@@ -54,16 +54,16 @@
     "concurrency": 96,
     "warmup_call_count": 0,
     "timing": {
-      "benchmark_started_at": "2026-06-17T11:27:33.279550+00:00",
-      "benchmark_ended_at": "2026-06-17T11:29:06.303002+00:00",
-      "benchmark_seconds": 93.0233792080544,
-      "setup_seconds": 1.0800912079866976
+      "benchmark_started_at": "2026-06-17T11:34:13.698123+00:00",
+      "benchmark_ended_at": "2026-06-17T11:35:31.118451+00:00",
+      "benchmark_seconds": 77.42026429099496,
+      "setup_seconds": 1.1375424999278039
     }
   },
   "totals": {
     "item_count": 4861,
-    "correct_count": 4515,
-    "accuracy": 0.9288212301995474,
+    "correct_count": 4539,
+    "accuracy": 0.9337584859082493,
     "call_count": 4861,
     "usage": {
       "input_tokens": 2080031,
@@ -82,6 +82,6 @@
       "output_unit_price_usd": 0.00003,
       "source": "litellm_estimate"
     },
-    "elapsed_seconds": 93.0233792080544
+    "elapsed_seconds": 77.42026429099496
   }
 }
