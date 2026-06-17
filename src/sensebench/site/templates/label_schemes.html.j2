@@ -7,7 +7,9 @@
   <p>
     SenseBench scores a model's predicted WordNet sense against a gold answer key. The leaderboard's
     two selectors let you choose <strong>which gold answer key</strong> and at <strong>what sense
-    granularity</strong> — six combinations in all. This page explains what each one means.
+    granularity</strong> — nine combinations in all. This page explains what each one means; see
+    <a href="{{ base_path }}coarsening/">coarsening</a> for a deeper guide to the two coarse
+    inventories.
   </p>
 </section>
 
@@ -59,11 +61,22 @@
       maps to the same Glite concept as a gold sense. Because every fine-grained hit is also a coarse
       hit, coarse accuracy is always at least the fine-grained accuracy for the same gold set.
     </li>
+    <li>
+      <strong>CSI coarse-grained (Lacerra 2020)</strong> — an independent, third-party coarsening
+      that groups WordNet synsets into 45 broad semantic domains
+      (<a href="https://sapienzanlp.github.io/csi/" rel="noopener">CSI</a>), included so coarse
+      results can be checked against an inventory the dataset authors do not control. Same
+      coarse-correct rule as Glite, with the CSI map swapped in.
+    </li>
   </ul>
+  <p>
+    Both coarse inventories are explained in depth on the
+    <a href="{{ base_path }}coarsening/">coarsening</a> page.
+  </p>
 </section>
 
 <section class="doc-section">
-  <h2>The six schemes</h2>
+  <h2>The nine schemes</h2>
   <div class="table-scroll">
     <table>
       <thead>
@@ -87,7 +100,7 @@
   <p>
     The default and official SenseBench score is <strong>lexEN v1 · WordNet fine-grained</strong>.
     Switching the selectors on the <a href="{{ base_path }}">leaderboard</a> re-scores every run and
-    reference baseline live; each <a href="{{ base_path }}runs/">run page</a> reports all six numbers
+    reference baseline live; each <a href="{{ base_path }}runs/">run page</a> reports all nine numbers
     in one table.
   </p>
 </section>
