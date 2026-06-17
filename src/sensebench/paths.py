@@ -23,6 +23,12 @@ GLITE_CONCEPT_MAP_FILENAME: str = "wordnet_sense_key_to_glite_concept.jsonl"
 GLITE_ALIASES_FILENAME: str = "lexen_report_aliases.json"
 GLITE_CONCEPT_MAP_PATH: Path = GLITE_COARSENING_DIR / GLITE_CONCEPT_MAP_FILENAME
 GLITE_ALIASES_PATH: Path = GLITE_COARSENING_DIR / GLITE_ALIASES_FILENAME
+# CSI coarse-sense mapping (Lacerra 2020) vendored from the lexEN CSI add-on (coarsenings/csi/).
+CSI_COARSENING_DIR: Path = PACKAGE_DIR / "datasets" / "csi"
+CSI_CONCEPT_MAP_FILENAME: str = "wordnet_sense_key_to_csi_concept.jsonl"
+CSI_ALIASES_FILENAME: str = "csi_aliases.json"
+CSI_CONCEPT_MAP_PATH: Path = CSI_COARSENING_DIR / CSI_CONCEPT_MAP_FILENAME
+CSI_ALIASES_PATH: Path = CSI_COARSENING_DIR / CSI_ALIASES_FILENAME
 # Workflow paths resolve against the current working directory.
 LOCAL_RUNS_DIR: Path = Path("runs")
 SUBMITTED_RESULTS_DIR: Path = Path("results")

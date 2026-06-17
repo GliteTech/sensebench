@@ -1,13 +1,14 @@
-"""Scoring schemes: re-score a prediction against any of six label sets.
+"""Scoring schemes: re-score a prediction against any of nine label sets.
 
 A scheme is one of three gold label sources -- lexEN v1, Maru 2022 (ALLamended), and the
-original Raganato 2017 ALL labels -- crossed with two sense granularities -- WordNet
-fine-grained sense keys and Glite coarse-grained concepts. The lexEN WordNet fine-grained
-scheme is the default and the dataset's native gold.
+original Raganato 2017 ALL labels -- crossed with three sense granularities -- WordNet
+fine-grained sense keys, Glite coarse-grained concepts, and CSI coarse-grained concepts
+(Lacerra et al. 2020, a public third-party inventory). The lexEN WordNet fine-grained scheme
+is the default and the dataset's native gold.
 
 Fine-grained correctness reuses the WordNet matcher (`prediction_is_correct`). Coarse
-correctness maps the predicted sense key and the gold keys through the vendored Glite
-concept map and tests concept membership; it also inherits a fine-grained hit, so coarse
+correctness maps the predicted sense key and the gold keys through a vendored concept map
+(Glite or CSI) and tests concept membership; it also inherits a fine-grained hit, so coarse
 accuracy is always at least the fine-grained accuracy for the same gold source.
 """
 
@@ -17,10 +18,16 @@ import json
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 from typing import assert_never
 
 from sensebench.datasets.models import SenseKey, WsdItem
-from sensebench.paths import GLITE_ALIASES_PATH, GLITE_CONCEPT_MAP_PATH
+from sensebench.paths import (
+    CSI_ALIASES_PATH,
+    CSI_CONCEPT_MAP_PATH,
+    GLITE_ALIASES_PATH,
+    GLITE_CONCEPT_MAP_PATH,
+)
 from sensebench.runner.evaluate import prediction_is_correct
 
 MARU2022_SENSE_KEYS_METADATA_KEY: str = "maru2022_sense_keys"
@@ -37,6 +44,7 @@ class GoldSource(StrEnum):
 class Granularity(StrEnum):
     FINE = "fine"
     COARSE = "coarse"
+    CSI = "csi"
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,13 +65,14 @@ GOLD_SOURCE_LABELS: dict[GoldSource, str] = {
 GRANULARITY_LABELS: dict[Granularity, str] = {
     Granularity.FINE: "WordNet fine-grained",
     Granularity.COARSE: "Glite coarse-grained",
+    Granularity.CSI: "CSI coarse-grained (Lacerra 2020)",
 }
 
 
 def _build_schemes() -> tuple[Scheme, ...]:
     schemes: list[Scheme] = []
     for source in (GoldSource.LEXEN, GoldSource.MARU2022, GoldSource.RAGANATO):
-        for granularity in (Granularity.FINE, Granularity.COARSE):
+        for granularity in (Granularity.FINE, Granularity.COARSE, Granularity.CSI):
             gold_label = GOLD_SOURCE_LABELS[source]
             granularity_label = GRANULARITY_LABELS[granularity]
             schemes.append(
@@ -100,10 +109,10 @@ class ConceptMap:
         return f"{UNMAPPED_CONCEPT_PREFIX}{sense_key}"
 
 
-@lru_cache(maxsize=1)
-def load_concept_map() -> ConceptMap:
+def _read_concept_map(*, concept_map_path: Path, aliases_path: Path) -> ConceptMap:
+    """Load a vendored sense-key -> concept map: a forward-map JSONL plus an alias JSON."""
     direct: dict[SenseKey, str] = {}
-    with GLITE_CONCEPT_MAP_PATH.open(encoding="utf-8") as handle:
+    with concept_map_path.open(encoding="utf-8") as handle:
         for raw_line in handle:
             line = raw_line.strip()
             if len(line) == 0:
@@ -111,10 +120,24 @@ def load_concept_map() -> ConceptMap:
             row = json.loads(line)
             direct[row["sense_key"]] = row["concept_id"]
     aliases: dict[SenseKey, str] = {}
-    payload = json.loads(GLITE_ALIASES_PATH.read_text(encoding="utf-8"))
+    payload = json.loads(aliases_path.read_text(encoding="utf-8"))
     for alias in payload["aliases"]:
         aliases[alias["source_sense_key"]] = alias["concept_id"]
     return ConceptMap(direct=direct, aliases=aliases)
+
+
+@lru_cache(maxsize=1)
+def load_concept_map() -> ConceptMap:
+    """Vendored Glite sense-key -> concept map (the lexEN coarsening)."""
+    return _read_concept_map(
+        concept_map_path=GLITE_CONCEPT_MAP_PATH, aliases_path=GLITE_ALIASES_PATH
+    )
+
+
+@lru_cache(maxsize=1)
+def load_concept_map_csi() -> ConceptMap:
+    """Vendored CSI (Lacerra 2020) sense-key -> concept map; same schema as Glite."""
+    return _read_concept_map(concept_map_path=CSI_CONCEPT_MAP_PATH, aliases_path=CSI_ALIASES_PATH)
 
 
 def gold_fine_keys(*, item: WsdItem, gold_source: GoldSource) -> list[SenseKey]:
@@ -162,8 +185,11 @@ def scheme_correct(
         return True
     if predicted_sense_key is None:
         return False
-    predicted_concept = concept_map.concept_for(predicted_sense_key)
-    gold_concepts = {concept_map.concept_for(key) for key in gold_keys}
+    # COARSE uses the passed (Glite) map; CSI self-resolves its own vendored map, so the
+    # CSI schemes score correctly even though callers pass the Glite map for all schemes.
+    cmap = load_concept_map_csi() if scheme.granularity == Granularity.CSI else concept_map
+    predicted_concept = cmap.concept_for(predicted_sense_key)
+    gold_concepts = {cmap.concept_for(key) for key in gold_keys}
     return predicted_concept in gold_concepts
 
 
