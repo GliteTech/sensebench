@@ -1,0 +1,105 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "vllm-nemotron-3-super-120b-fp8-h200-p003-lexen-v1-20260617",
+  "created_at": "2026-06-17T08:49:01.056118+00:00",
+  "git_commit": null,
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p003",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "self_hosted_llm",
+    "display_name": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B",
+    "requested_model": "hosted_vllm/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B",
+    "resolved_model": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B",
+    "resolved_model_counts": {
+      "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": 4861
+    },
+    "llm_vendor": "NVIDIA",
+    "source_kind": "open_source",
+    "license": "nvidia-open",
+    "model_url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B",
+    "hf_revision": "7d7e5797b8a3c7abbab54033b6004e93e8b6bc91",
+    "quantization": "fp8",
+    "inference_engine": "vllm",
+    "inference_engine_version": "0.22.1",
+    "container_image": "vllm/vllm-openai:v0.22.1",
+    "serve_command": "exec vllm serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8 --port 8000 --served-model-name nvidia/NVIDIA-Nemotron-3-Super-120B-A12B --max-model-len 8192 --gpu-memory-utilization 0.90 --trust-remote-code --max-num-seqs 64 --default-chat-template-kwargs \\{\\\"enable_thinking\\\":\\ false\\} --revision 7d7e5797b8a3c7abbab54033b6004e93e8b6bc91",
+    "endpoint_base_url": "http://localhost:8000/v1"
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": null,
+    "max_tokens": 2048,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit"
+  },
+  "machine": {
+    "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+    "cpu_model": "Intel(R) Xeon(R) Platinum 8480+",
+    "cpu_cores": 224,
+    "ram_gib": 2015.3,
+    "gpu": {
+      "name": "NVIDIA H200",
+      "count": 1,
+      "vram_mib_per_gpu": 143771,
+      "driver_version": "595.71.05",
+      "cuda_version": "13.2"
+    },
+    "provider": "vast.ai",
+    "instance_id": "41296802",
+    "hourly_rate_usd": 3.578399122807017
+  },
+  "execution": {
+    "concurrency": 64,
+    "warmup_call_count": 8,
+    "timing": {
+      "benchmark_started_at": "2026-06-17T08:47:15.706661+00:00",
+      "benchmark_ended_at": "2026-06-17T08:49:01.049933+00:00",
+      "benchmark_seconds": 105.34326708409935,
+      "setup_seconds": 3.092218219069764
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4080,
+    "accuracy": 0.8393334704793253,
+    "call_count": 4861,
+    "usage": {
+      "input_tokens": 2198386,
+      "cached_input_tokens": null,
+      "output_tokens": 9874,
+      "reasoning_output_tokens": null
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 0.10471118181315735,
+      "input_uncached_usd": null,
+      "input_cached_usd": null,
+      "output_usd": null,
+      "input_uncached_unit_price_usd": null,
+      "input_cached_unit_price_usd": null,
+      "output_unit_price_usd": null,
+      "source": "machine_time_estimate"
+    },
+    "elapsed_seconds": 105.34326708409935
+  }
+}
