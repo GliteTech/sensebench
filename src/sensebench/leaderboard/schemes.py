@@ -127,7 +127,7 @@ def load_concept_map() -> ConceptMap:
 
 @lru_cache(maxsize=1)
 def load_concept_map_csi() -> ConceptMap:
-    """Vendored CSI (Lacerra et al. 2020) sense-key -> composite-concept map; same schema as Glite."""
+    """Vendored CSI (Lacerra 2020) sense-key -> composite-concept map; same schema as Glite."""
     direct: dict[SenseKey, str] = {}
     with CSI_CONCEPT_MAP_PATH.open(encoding="utf-8") as handle:
         for raw_line in handle:
