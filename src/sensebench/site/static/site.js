@@ -44,19 +44,18 @@
     generatedAt: null
   };
 
-  // Scheme ids in display order; the official default (lexen_fine) is first. The download
-  // reads accuracy from these immutable scheme_scores, never the top-level accuracy field
-  // (which applyScheme() rewrites in place for whichever scheme the dropdowns select).
-  const EXPORT_SCHEME_IDS = [
-    "lexen_fine",
-    "lexen_coarse",
-    "lexen_csi",
-    "maru2022_fine",
-    "maru2022_coarse",
-    "maru2022_csi",
-    "raganato_fine",
-    "raganato_coarse",
-    "raganato_csi"
+  // Scoring schemes in CSV display order. `schemeId` is the internal key in scheme_scores;
+  // `columnPrefix` is intentionally more explicit for downloaded CSV headers.
+  const EXPORT_SCHEMES = [
+    { schemeId: "lexen_fine", columnPrefix: "lexen_wordnet_fine" },
+    { schemeId: "lexen_coarse", columnPrefix: "lexen_glite_coarse" },
+    { schemeId: "lexen_csi", columnPrefix: "lexen_csi_coarse" },
+    { schemeId: "maru2022_fine", columnPrefix: "maru2022_wordnet_fine" },
+    { schemeId: "maru2022_coarse", columnPrefix: "maru2022_glite_coarse" },
+    { schemeId: "maru2022_csi", columnPrefix: "maru2022_csi_coarse" },
+    { schemeId: "raganato_fine", columnPrefix: "raganato2017_wordnet_fine" },
+    { schemeId: "raganato_coarse", columnPrefix: "raganato2017_glite_coarse" },
+    { schemeId: "raganato_csi", columnPrefix: "raganato2017_csi_coarse" }
   ];
   const DEFAULT_SCHEME_ID = "lexen_fine";
 
@@ -1382,23 +1381,23 @@
       { header: "dataset_content_hash", get: (entry) => entry.dataset_content_hash },
       { header: "item_count", get: (entry) => entry.item_count }
     ];
-    for (const schemeId of EXPORT_SCHEME_IDS) {
+    for (const { schemeId, columnPrefix } of EXPORT_SCHEMES) {
       columns.push({
-        header: `${schemeId}_accuracy`,
+        header: `${columnPrefix}_accuracy`,
         get: (entry) => {
           const score = schemeScore(entry, schemeId);
           return score ? score.accuracy : null;
         }
       });
       columns.push({
-        header: `${schemeId}_ci_low`,
+        header: `${columnPrefix}_ci_low`,
         get: (entry) => {
           const score = schemeScore(entry, schemeId);
           return score && score.accuracy_ci ? score.accuracy_ci.low : null;
         }
       });
       columns.push({
-        header: `${schemeId}_ci_high`,
+        header: `${columnPrefix}_ci_high`,
         get: (entry) => {
           const score = schemeScore(entry, schemeId);
           return score && score.accuracy_ci ? score.accuracy_ci.high : null;
@@ -1505,7 +1504,7 @@
 
   // Faithful per-entry dump for JSON: clone (so state.entries is untouched), then pin the
   // top-level accuracy fields to the default scheme so they are deterministic; scheme_scores
-  // already carries all six. Drop presentation-only keys.
+  // already carries every scheme. Drop presentation-only keys.
   function cleanEntryForJson(entry) {
     const clone = cloneEntry(entry);
     const headline = schemeScore(clone, DEFAULT_SCHEME_ID);

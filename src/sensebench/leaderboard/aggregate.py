@@ -355,7 +355,7 @@ def _scheme_scores(
     predictions: list[PredictionRecord],
     dataset: DatasetBundle | None,
 ) -> dict[str, SchemeScore]:
-    """Score every prediction under all six schemes by joining to the dataset items.
+    """Score every prediction under all schemes by joining to the dataset items.
 
     When `dataset` is None (non-official build, no dataset to re-score against) only the
     default lexEN WordNet fine-grained scheme is computed, from the run's frozen `is_correct`.

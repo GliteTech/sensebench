@@ -21,21 +21,21 @@
   </dl>
 </section>
 
-<section class="doc-section">
+<section class="doc-section prompt-code-section">
   <h2>Rendering Parameters</h2>
-  <pre><code>{{ params_json }}</code></pre>
+  <pre class="prompt-code"><code>{{ params_json }}</code></pre>
 </section>
 
-<section class="doc-section">
+<section class="doc-section prompt-code-section">
   <h2>Messages</h2>
   {% for message in prompt.template.messages %}
   <h3>{{ message.role.value }}</h3>
-  <pre><code>{{ message.content }}</code></pre>
+  <pre class="prompt-code"><code>{{ message.content }}</code></pre>
   {% endfor %}
 </section>
 
 {% if prompt_examples %}
-<section class="doc-section">
+<section class="doc-section prompt-code-section">
   <h2>Rendered Item Examples</h2>
   <p class="note">
     This prompt rendered against {{ prompt_examples|length }} sample item{{ "s" if prompt_examples|length != 1 else "" }}
@@ -48,7 +48,7 @@
     <p class="cell-secondary">lemma <strong>{{ example.lemma }}</strong> · pos <strong>{{ example.pos }}</strong> · {{ example.candidate_count }} candidate senses</p>
     {% for message in example.messages %}
     <h4>{{ message.role }}</h4>
-    <pre><code>{{ message.content }}</code></pre>
+    <pre class="prompt-code"><code>{{ message.content }}</code></pre>
     {% endfor %}
   </div>
   {% endfor %}
