@@ -24,9 +24,9 @@
   <ul>
     <li>
       <strong>Many WordNet distinctions are redundant for applications.</strong> Telling a
-      dictionary-construction or language-learning system that <em>plan</em> means
-      "a series of steps" rather than "an arrangement scheme" rarely matters; telling it apart from
-      "a scale drawing of a structure" does.
+      dictionary-construction or language-learning system that <em>volume</em> means
+      "the amount of 3-D space" rather than "a relative amount" rarely matters; telling those apart
+      from "the loudness of a sound" does.
     </li>
     <li>
       <strong>Fine senses are often not reliably separable.</strong> On the hard, human-reviewed
@@ -68,44 +68,86 @@
 </section>
 
 <section class="doc-section">
-  <h2>An example</h2>
+  <h2>Examples</h2>
   <p>
-    The noun <em>plan</em> has three WordNet senses. Glite groups the two abstract senses together and
-    keeps the concrete "drawing" sense apart; CSI assigns each to a different semantic domain. Against
-    the Glite scheme, predicting "a series of steps" when the gold is "an arrangement scheme" is a
-    fine-grained miss but a coarse hit; against fine WordNet it is simply wrong.
+    The four words below each have five or six WordNet senses. In every case Glite groups them
+    <strong>exactly the way the consensus of five professional dictionaries</strong> (Merriam-Webster,
+    Collins, Cambridge, Oxford Learner's, Longman) does. Within a Glite group, a fine-grained miss
+    still counts as a <strong>coarse hit</strong>; crossing a group boundary is wrong at both levels.
+    The right-hand note shows where CSI — a domain-based inventory — groups the senses differently.
   </p>
+
+  <h3><em>party</em> (noun) — 5 senses</h3>
   <div class="table-scroll">
     <table>
-      <thead>
-        <tr>
-          <th>WordNet sense (noun <em>plan</em>)</th>
-          <th>Glite concept</th>
-          <th>CSI domain</th>
-        </tr>
-      </thead>
+      <thead><tr><th>WordNet sense</th><th>Glite group&nbsp;= dictionary consensus</th></tr></thead>
       <tbody>
-        <tr>
-          <td><code>plan%1:09:00::</code> — a series of steps to be carried out</td>
-          <td><strong>plan A</strong> (abstract plan)</td>
-          <td>General</td>
-        </tr>
-        <tr>
-          <td><code>plan%1:09:01::</code> — an arrangement scheme</td>
-          <td><strong>plan A</strong> (abstract plan)</td>
-          <td>Space &amp; touch / textile &amp; fashion</td>
-        </tr>
-        <tr>
-          <td><code>plan%1:06:00::</code> — scale drawing of a structure</td>
-          <td><strong>plan B</strong> (drawing)</td>
-          <td>Art, architecture &amp; archaeology</td>
-        </tr>
+        <tr><td>an organization to gain political power</td><td><strong>political party</strong></td></tr>
+        <tr><td>a group of people gathered together for pleasure</td><td><strong>a party</strong> (social)</td></tr>
+        <tr><td>an occasion for social interaction and entertainment</td><td><strong>a party</strong> (social)</td></tr>
+        <tr><td>a band of people associated temporarily in an activity</td><td><strong>search / working party</strong></td></tr>
+        <tr><td>a person involved in legal proceedings</td><td><strong>legal party</strong></td></tr>
       </tbody>
     </table>
   </div>
+  <p class="note">Glite and the dictionaries merge the social <em>group</em> and the social
+  <em>occasion</em> into one everyday "party" and keep political, search-party, and legal apart. CSI
+  groups them the same way here.</p>
+
+  <h3><em>volume</em> (noun) — 6 senses</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>WordNet sense</th><th>Glite group&nbsp;= dictionary consensus</th></tr></thead>
+      <tbody>
+        <tr><td>the amount of 3-D space occupied by an object</td><td><strong>quantity / amount</strong></td></tr>
+        <tr><td>a relative amount</td><td><strong>quantity / amount</strong></td></tr>
+        <tr><td>a physical book (pages bound together)</td><td><strong>a book</strong></td></tr>
+        <tr><td>a publication that is one of a set</td><td><strong>a book</strong> (in a set)</td></tr>
+        <tr><td>the property of being great in magnitude (bulk)</td><td><strong>bulk</strong></td></tr>
+        <tr><td>the magnitude of sound</td><td><strong>loudness</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Glite and the dictionaries merge the two amount senses and the two book senses. CSI
+  instead pairs "3-D space" with "bulk" (both <em>size</em>) and splits the books apart.</p>
+
+  <h3><em>care</em> (verb) — 5 senses</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>WordNet sense</th><th>Glite group&nbsp;= dictionary consensus</th></tr></thead>
+      <tbody>
+        <tr><td>feel concern or interest</td><td><strong>care about</strong></td></tr>
+        <tr><td>be concerned with</td><td><strong>care about</strong></td></tr>
+        <tr><td>provide care for</td><td><strong>look after / be in charge of</strong></td></tr>
+        <tr><td>be in charge of, act on, or dispose of</td><td><strong>look after / be in charge of</strong></td></tr>
+        <tr><td>prefer or wish to do something</td><td><strong>care to</strong> (wish)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Glite and the dictionaries pair "feel concern" with "be concerned with", and "provide
+  care for" with "be in charge of". CSI instead lumps the "wish" sense in with the concern senses.</p>
+
+  <h3><em>replacement</em> (noun) — 6 senses</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>WordNet sense</th><th>Glite group&nbsp;= dictionary consensus</th></tr></thead>
+      <tbody>
+        <tr><td>the act of furnishing an equivalent</td><td><strong>the act of replacing</strong></td></tr>
+        <tr><td>an event in which one thing is substituted for another</td><td><strong>the act of replacing</strong></td></tr>
+        <tr><td>filling again by supplying what has been used up</td><td><strong>the act of replacing</strong></td></tr>
+        <tr><td>someone who takes the place of another (surrogate)</td><td><strong>the replacing person / thing</strong></td></tr>
+        <tr><td>a person or thing that can take the place of another</td><td><strong>the replacing person / thing</strong></td></tr>
+        <tr><td>a person who follows next in order (successor)</td><td><strong>the replacing person / thing</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Glite and the dictionaries make one clean cut — the <em>act</em> of replacing vs. the
+  <em>person or thing</em> that does the replacing. CSI scatters the six senses across five domains.</p>
+
   <p>
-    Glite merges the first two senses (2 concepts for 3 senses); CSI keeps all three distinct. Coarse
-    inventories differ in exactly this way — how aggressively they merge — which is why SenseBench
+    These are typical: across 100 polysemous words, Glite reproduces the professional-dictionary
+    grouping more closely than any other public inventory. Coarse inventories differ mainly in
+    <em>how aggressively</em> and <em>along which lines</em> they merge — which is why SenseBench
     offers more than one and reports them side by side.
   </p>
 </section>
