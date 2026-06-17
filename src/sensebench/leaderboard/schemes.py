@@ -18,6 +18,7 @@ import json
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 from typing import assert_never
 
 from sensebench.datasets.models import SenseKey, WsdItem
@@ -108,10 +109,10 @@ class ConceptMap:
         return f"{UNMAPPED_CONCEPT_PREFIX}{sense_key}"
 
 
-@lru_cache(maxsize=1)
-def load_concept_map() -> ConceptMap:
+def _read_concept_map(*, concept_map_path: Path, aliases_path: Path) -> ConceptMap:
+    """Load a vendored sense-key -> concept map: a forward-map JSONL plus an alias JSON."""
     direct: dict[SenseKey, str] = {}
-    with GLITE_CONCEPT_MAP_PATH.open(encoding="utf-8") as handle:
+    with concept_map_path.open(encoding="utf-8") as handle:
         for raw_line in handle:
             line = raw_line.strip()
             if len(line) == 0:
@@ -119,35 +120,24 @@ def load_concept_map() -> ConceptMap:
             row = json.loads(line)
             direct[row["sense_key"]] = row["concept_id"]
     aliases: dict[SenseKey, str] = {}
-    payload = json.loads(GLITE_ALIASES_PATH.read_text(encoding="utf-8"))
+    payload = json.loads(aliases_path.read_text(encoding="utf-8"))
     for alias in payload["aliases"]:
         aliases[alias["source_sense_key"]] = alias["concept_id"]
     return ConceptMap(direct=direct, aliases=aliases)
+
+
+@lru_cache(maxsize=1)
+def load_concept_map() -> ConceptMap:
+    """Vendored Glite sense-key -> concept map (the lexEN coarsening)."""
+    return _read_concept_map(
+        concept_map_path=GLITE_CONCEPT_MAP_PATH, aliases_path=GLITE_ALIASES_PATH
+    )
 
 
 @lru_cache(maxsize=1)
 def load_concept_map_csi() -> ConceptMap:
-    """Vendored CSI (Lacerra 2020) sense-key -> composite-concept map; same schema as Glite."""
-    direct: dict[SenseKey, str] = {}
-    with CSI_CONCEPT_MAP_PATH.open(encoding="utf-8") as handle:
-        for raw_line in handle:
-            line = raw_line.strip()
-            if len(line) == 0:
-                continue
-            row = json.loads(line)
-            direct[row["sense_key"]] = row["concept_id"]
-    aliases: dict[SenseKey, str] = {}
-    payload = json.loads(CSI_ALIASES_PATH.read_text(encoding="utf-8"))
-    for alias in payload["aliases"]:
-        aliases[alias["source_sense_key"]] = alias["concept_id"]
-    return ConceptMap(direct=direct, aliases=aliases)
-
-
-def coarse_concept_map(granularity: Granularity) -> ConceptMap:
-    """The vendored concept map backing a coarse granularity (Glite or CSI)."""
-    if granularity == Granularity.CSI:
-        return load_concept_map_csi()
-    return load_concept_map()
+    """Vendored CSI (Lacerra 2020) sense-key -> concept map; same schema as Glite."""
+    return _read_concept_map(concept_map_path=CSI_CONCEPT_MAP_PATH, aliases_path=CSI_ALIASES_PATH)
 
 
 def gold_fine_keys(*, item: WsdItem, gold_source: GoldSource) -> list[SenseKey]:
