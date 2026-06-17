@@ -1,0 +1,181 @@
+{% extends "base.html.j2" %}
+
+{% block content %}
+<section class="page-title">
+  <p class="eyebrow">concepts</p>
+  <h1>Sense coarsening</h1>
+  <p>
+    WordNet splits many words into very fine senses that are hard to tell apart — even for expert
+    lexicographers. <strong>Coarsening</strong> groups those narrow senses into broader, more
+    application-oriented concepts, and SenseBench can score every run at the fine level or under one
+    of two coarse inventories. This page explains what coarsening is, how it changes WSD results, and
+    how each inventory — <a href="#glite">Glite</a> and <a href="#csi">CSI</a> — works.
+  </p>
+</section>
+
+<section class="doc-section">
+  <h2>What is sense coarsening?</h2>
+  <p>
+    A coarsening is a map from WordNet 3.0 sense keys to broader <em>concepts</em>. Several WordNet
+    senses of a word can map to one concept, so a prediction is <strong>coarse-correct</strong> when
+    its WordNet sense lands in the same concept as a gold sense — even if it is not the exact fine
+    sense. Coarsening matters for two reasons:
+  </p>
+  <ul>
+    <li>
+      <strong>Many WordNet distinctions are redundant for applications.</strong> Telling a
+      dictionary-construction or language-learning system that <em>plan</em> means
+      "a series of steps" rather than "an arrangement scheme" rarely matters; telling it apart from
+      "a scale drawing of a structure" does.
+    </li>
+    <li>
+      <strong>Fine senses are often not reliably separable.</strong> On the hard, human-reviewed
+      lexEN items, expert annotators frequently disagree on the exact fine sense yet agree on the
+      coarse concept — so fine-grained scoring penalises models for distinctions the experts
+      themselves do not make consistently.
+    </li>
+  </ul>
+</section>
+
+<section class="doc-section">
+  <h2>How coarsening affects WSD results</h2>
+  <ul>
+    <li>
+      <strong>Coarse accuracy is always at least the fine accuracy.</strong> Every exact (fine) hit
+      is also a coarse hit, and coarsening can only turn some fine misses into hits, never the
+      reverse. So switching the granularity selector up can only raise a run's score.
+    </li>
+    <li>
+      <strong>The lift is substantial.</strong> On the full lexEN-v1 set, frontier models score
+      around 95% fine-grained and around 98% under Glite coarse. On the hard reviewed subset the gap
+      is much larger — roughly 66% fine versus 78–88% coarse depending on the inventory — which shows
+      that most remaining "errors" are fine sense splits, not genuine disambiguation failures.
+    </li>
+    <li>
+      <strong>Rankings are largely preserved.</strong> Coarsening lifts strong and weak systems
+      together, so the order of models on the leaderboard changes little when you switch granularity.
+    </li>
+    <li>
+      <strong>It is computed live, from raw predictions.</strong> Coarse scores are not baked into a
+      run; SenseBench re-maps each model's predicted sense key through the chosen concept map at build
+      time. Use the <strong>granularity</strong> selector on the
+      <a href="{{ base_path }}">leaderboard</a> to switch between fine, Glite, and CSI; each
+      <a href="{{ base_path }}runs/">run page</a> reports all schemes together. See
+      <a href="{{ base_path }}label-schemes/">label schemes</a> for how granularity combines with the
+      gold-label selector.
+    </li>
+  </ul>
+</section>
+
+<section class="doc-section">
+  <h2>An example</h2>
+  <p>
+    The noun <em>plan</em> has three WordNet senses. Glite groups the two abstract senses together and
+    keeps the concrete "drawing" sense apart; CSI assigns each to a different semantic domain. Against
+    the Glite scheme, predicting "a series of steps" when the gold is "an arrangement scheme" is a
+    fine-grained miss but a coarse hit; against fine WordNet it is simply wrong.
+  </p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>WordNet sense (noun <em>plan</em>)</th>
+          <th>Glite concept</th>
+          <th>CSI domain</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>plan%1:09:00::</code> — a series of steps to be carried out</td>
+          <td><strong>plan A</strong> (abstract plan)</td>
+          <td>General</td>
+        </tr>
+        <tr>
+          <td><code>plan%1:09:01::</code> — an arrangement scheme</td>
+          <td><strong>plan A</strong> (abstract plan)</td>
+          <td>Space &amp; touch / textile &amp; fashion</td>
+        </tr>
+        <tr>
+          <td><code>plan%1:06:00::</code> — scale drawing of a structure</td>
+          <td><strong>plan B</strong> (drawing)</td>
+          <td>Art, architecture &amp; archaeology</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Glite merges the first two senses (2 concepts for 3 senses); CSI keeps all three distinct. Coarse
+    inventories differ in exactly this way — how aggressively they merge — which is why SenseBench
+    offers more than one and reports them side by side.
+  </p>
+</section>
+
+<section class="doc-section" id="glite">
+  <h2>Glite coarse-grained</h2>
+  <p>
+    <strong>Glite</strong> is a learner-dictionary sense inventory built by
+    <a href="https://glite.ai/" rel="noopener">Glite</a>. Its concepts are the entries of the
+    <a href="https://glitedictionary.com" rel="noopener">Glite Dictionary</a> — a dictionary designed
+    for English learners, where senses are grouped at the granularity a reader actually needs. Because
+    the groupings come from a real, externally published dictionary rather than an automatic rule,
+    Glite's coarsening is principled: across 100 polysemous words it reproduces the sense grouping of
+    major professional dictionaries more closely than any other public inventory.
+  </p>
+  <ul>
+    <li>
+      <strong>How it works.</strong> A vendored map sends each WordNet 3.0 sense key to a Glite
+      concept id (for example <code>ct:ct7gsDQ2G22wWJNkuNk4fplan</code>). Senses of a word that the
+      Glite Dictionary treats as one meaning share a concept id; a prediction is coarse-correct when
+      its sense key maps to the same Glite concept as a gold sense.
+    </li>
+    <li>
+      <strong>Coverage.</strong> The public map covers about 95% of the WordNet sense keys lexEN
+      references. A sense key with no Glite concept is scored as its own singleton class
+      (<code>unmapped:&lt;key&gt;</code>) and is never silently merged, so incomplete coverage can
+      only lower coarse accuracy, never inflate it.
+    </li>
+    <li>
+      <strong>Role.</strong> Glite coarse is the default coarse scheme and pairs with the lexEN gold,
+      whose review used the same Glite groupings. The map is vendored from the
+      <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN release</a>.
+    </li>
+  </ul>
+  <p>
+    Learn more at the <a href="https://glitedictionary.com" rel="noopener">Glite Dictionary</a> and
+    <a href="https://glite.ai/" rel="noopener">glite.ai</a>.
+  </p>
+</section>
+
+<section class="doc-section" id="csi">
+  <h2>CSI coarse-grained (Lacerra 2020)</h2>
+  <p>
+    <strong>CSI</strong> — the Coarse Sense Inventory of
+    <a href="https://sapienzanlp.github.io/csi/" rel="noopener">Lacerra, Bevilacqua, Pasini &amp;
+    Navigli (AAAI 2020)</a> — is an independent, third-party coarsening that groups every WordNet
+    synset into one of <strong>45 broad semantic domains</strong> (for example <em>biology</em>,
+    <em>law &amp; crime</em>, <em>art, architecture &amp; archaeology</em>). It is included so that
+    SenseBench's coarse results can be audited against an inventory that the dataset's authors do not
+    control.
+  </p>
+  <ul>
+    <li>
+      <strong>How it works.</strong> The released <code>wn_synset2csi</code> mapping assigns each
+      WordNet 3.0 synset to its CSI domain(s). SenseBench vendors a sense-key&nbsp;→&nbsp;concept map
+      derived from it: a synset with several domains is reduced to one <em>composite</em> label
+      (<code>csi:&lt;sorted domains&gt;</code>), a conservative single-class partition, so it plugs
+      into the same scoring contract as Glite with the CSI map swapped in.
+    </li>
+    <li>
+      <strong>Coverage.</strong> CSI maps about 79% of the referenced WordNet keys (uncovered keys
+      become <code>unmapped:</code> singletons). Because its 45 domains are broader than Glite's
+      dictionary concepts, CSI tends to split a word into <em>more</em> classes overall but groups
+      cross-topic senses differently.
+    </li>
+    <li>
+      <strong>License.</strong> CSI is distributed under
+      <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" rel="noopener">CC&nbsp;BY-NC-SA
+      4.0</a>; the vendored subset keeps the same terms with attribution to the original authors.
+    </li>
+  </ul>
+</section>
+{% endblock %}
