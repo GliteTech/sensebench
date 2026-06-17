@@ -147,6 +147,8 @@ TABLE_DOWNLOADS_CLASS: str = "table-downloads"
 SITE_JS_FILENAME: str = "site.js"
 SITE_JS_EXPORT_COLUMNS_MARKER: str = "EXPORT_COLUMNS"
 SITE_JS_DOWNLOAD_CSV_MARKER: str = "function downloadCsv"
+DESCRIPTIVE_GLITE_CSV_PREFIX: str = "lexen_glite_coarse"
+DESCRIPTIVE_CSI_CSV_PREFIX: str = "lexen_csi_coarse"
 BUILT_BY_GLITE_TEXT: str = "Built by Glite"
 EXPECTED_BASELINE_COUNT: int = 4
 ECHARTS_VENDOR_PATH: Path = Path("vendor") / "echarts.min.js"
@@ -393,12 +395,14 @@ def test_build_site_emits_static_pages_and_data(
     prompts_index_html = prompts_index.read_text(encoding="utf-8")
     assert "prompts/p001/" in prompts_index_html
     assert "prompts/p002/" in prompts_index_html
+    assert "prompt-table" in prompts_index_html
     p001_page = output_dir / PROMPTS_ROUTE_PREFIX / "p001" / INDEX_HTML_FILENAME
     assert p001_page.exists()
     assert (output_dir / PROMPTS_ROUTE_PREFIX / "p001" / "p001.json").exists()
     p001_html = p001_page.read_text(encoding="utf-8")
     assert "Rendered Item Examples" in p001_html
     assert "prompts/p001/p001.json" in p001_html
+    assert "prompt-code" in p001_html
     # Nav exposes Prompts, and prompt mentions link to the prompt page.
     index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
     assert ">Prompts</a>" in index_html
@@ -507,6 +511,8 @@ def test_build_site_emits_static_pages_and_data(
     site_js = (output_dir / SITE_ASSETS_DIRNAME / SITE_JS_FILENAME).read_text(encoding="utf-8")
     assert SITE_JS_EXPORT_COLUMNS_MARKER in site_js
     assert SITE_JS_DOWNLOAD_CSV_MARKER in site_js
+    assert DESCRIPTIVE_GLITE_CSV_PREFIX in site_js
+    assert DESCRIPTIVE_CSI_CSV_PREFIX in site_js
     # TestVendor has no bundled logo, so the colored-initial fallback renders.
     assert 'class="vendor-initial' in index_html
 
