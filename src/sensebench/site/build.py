@@ -1458,8 +1458,26 @@ def _render_label_schemes(*, env: Environment, output_dir: Path, base_url: str) 
         base_url=base_url,
         title="Label schemes — SenseBench",
         description=(
-            "The six gold-label and sense-granularity scoring schemes "
+            "The nine gold-label and sense-granularity scoring schemes "
             "on the SenseBench leaderboard."
+        ),
+        path=path,
+        context={},
+    )
+    _write_text(path=_page_file_path(output_dir=output_dir, route=path), text=html_text)
+    return path
+
+
+def _render_coarsening(*, env: Environment, output_dir: Path, base_url: str) -> str:
+    path = "coarsening/"
+    html_text = _render(
+        env=env,
+        template_name="coarsening.html.j2",
+        base_url=base_url,
+        title="Sense coarsening — SenseBench",
+        description=(
+            "What sense coarsening is, how it changes WSD results, and how the Glite and CSI "
+            "coarse-grained inventories work."
         ),
         path=path,
         context={},
@@ -1571,6 +1589,7 @@ def build_site(
     )
     paths.extend(_render_static_pages(env=env, output_dir=output_dir, base_url=base_url))
     paths.append(_render_label_schemes(env=env, output_dir=output_dir, base_url=base_url))
+    paths.append(_render_coarsening(env=env, output_dir=output_dir, base_url=base_url))
     _render_404(env=env, output_dir=output_dir, base_url=base_url)
     _write_text(
         path=output_dir / SITEMAP_FILENAME,
