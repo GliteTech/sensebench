@@ -77,8 +77,8 @@
 
 <section class="doc-section">
   <h2>The nine schemes</h2>
-  <div class="table-scroll">
-    <table>
+  <div class="table-scroll label-scheme-table-wrap">
+    <table class="label-scheme-table">
       <thead>
         <tr>
           <th>Score against</th>
@@ -90,7 +90,7 @@
         <tr>
           <th scope="row">{{ source.label }}</th>
           {% for granularity in scheme_granularities %}
-          <td>{{ source.label }} · {{ granularity.label }}</td>
+          <td data-label="{{ granularity.label }}">{{ source.label }} · {{ granularity.label }}</td>
           {% endfor %}
         </tr>
         {% endfor %}
