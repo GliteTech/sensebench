@@ -50,10 +50,13 @@
   const EXPORT_SCHEME_IDS = [
     "lexen_fine",
     "lexen_coarse",
+    "lexen_csi",
     "maru2022_fine",
     "maru2022_coarse",
+    "maru2022_csi",
     "raganato_fine",
-    "raganato_coarse"
+    "raganato_coarse",
+    "raganato_csi"
   ];
   const DEFAULT_SCHEME_ID = "lexen_fine";
 
