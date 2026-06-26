@@ -55,6 +55,7 @@ from sensebench.leaderboard.schemes import (
 )
 from sensebench.paths import (
     CALLS_FILENAME,
+    CNAME_FILENAME,
     DEFAULT_LEXEN_RELEASE_ID,
     INDEX_HTML_FILENAME,
     LEADERBOARD_JSON_PATH,
@@ -89,7 +90,8 @@ from sensebench.runs.models import (
 )
 from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses
 
-DEFAULT_SITE_BASE_URL: str = "https://glitetech.github.io/sensebench/"
+DEFAULT_CUSTOM_DOMAIN: str = "sense-bench.com"
+DEFAULT_SITE_BASE_URL: str = f"https://{DEFAULT_CUSTOM_DOMAIN}/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
 SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v7"
 RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v7"
@@ -1603,4 +1605,5 @@ def build_site(
             f"Sitemap: {_absolute_url(base_url=base_url, path=SITEMAP_FILENAME)}\n"
         ),
     )
+    _write_text(path=output_dir / CNAME_FILENAME, text=f"{DEFAULT_CUSTOM_DOMAIN}\n")
     return output_dir

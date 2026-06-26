@@ -14,6 +14,7 @@ from sensebench.leaderboard.aggregate import LeaderboardBuildError
 from sensebench.leaderboard.baselines import MFS_BASELINE_LABEL, BaselineKind
 from sensebench.paths import (
     CALLS_FILENAME,
+    CNAME_FILENAME,
     DEFAULT_LEXEN_RELEASE_ID,
     INDEX_HTML_FILENAME,
     LEADERBOARD_JSON_PATH,
@@ -68,6 +69,7 @@ from sensebench.runs.models import (
     VoteStatus,
 )
 from sensebench.site.build import (
+    DEFAULT_CUSTOM_DOMAIN,
     PROMPTS_ROUTE_PREFIX,
     RunDetail,
     SiteData,
@@ -391,6 +393,9 @@ def test_build_site_emits_static_pages_and_data(
     assert (output_dir / RUN_ARTIFACT_ROOT / run_id / PREDICTIONS_FILENAME).exists()
     assert (output_dir / RUN_ARTIFACT_ROOT / run_id / CALLS_FILENAME).exists()
     assert (output_dir / SITE_ASSETS_DIRNAME / ECHARTS_VENDOR_PATH).exists()
+    assert (output_dir / CNAME_FILENAME).read_text(encoding="utf-8") == (
+        f"{DEFAULT_CUSTOM_DOMAIN}\n"
+    )
     assert run_id in (output_dir / "sitemap.xml").read_text(encoding="utf-8")
 
     # Prompts index + per-prompt pages (details, rendered examples, JSON download).
