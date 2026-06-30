@@ -127,6 +127,32 @@ def test_extract_plain_accepts_fenced_integer() -> None:
     assert extracted.sense_index == VALID_SENSE_INDEX, "fenced integer sense index is parsed"
 
 
+def test_extract_plain_accepts_bold_wrapped_integer() -> None:
+    extracted = extract_sense_index(
+        text=f"**{VALID_SENSE_INDEX}**",
+        output_mode=OutputMode.PLAIN_SENSE_INDEX,
+        candidate_count=CANDIDATE_COUNT,
+    )
+
+    assert isinstance(extracted, ValidSenseIndexExtraction), "bold-wrapped integer extraction succeeds"
+    assert extracted.sense_index == VALID_SENSE_INDEX, "bold-wrapped integer sense index is parsed"
+
+
+def test_extract_plain_rejects_bold_integer_with_trailing_prose() -> None:
+    extracted = extract_sense_index(
+        text=f"**{VALID_SENSE_INDEX}**\n\nThis matches the context.",
+        output_mode=OutputMode.PLAIN_SENSE_INDEX,
+        candidate_count=CANDIDATE_COUNT,
+    )
+
+    assert isinstance(extracted, InvalidSenseIndexExtraction), (
+        "bold integer followed by prose is still rejected"
+    )
+    assert extracted.invalid_reason == InvalidOutputReason.PLAIN_NOT_INTEGER, (
+        "trailing prose is not forgiven by the bold-integer allowance"
+    )
+
+
 def test_extract_plain_repairs_duplicated_integer_when_full_index_is_out_of_range() -> None:
     extracted = extract_sense_index(
         text="22",
