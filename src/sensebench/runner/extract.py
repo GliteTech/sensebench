@@ -27,6 +27,10 @@ PLAIN_ANSWER_LABEL_PATTERN: Pattern[str] = compile(
     r"\A(?:answer|index)\s*[:=]\s*(?P<value>\d+)\.?\Z",
     IGNORECASE,
 )
+# Some models wrap an otherwise-bare integer in markdown emphasis (e.g. "**1**"). Output
+# with anything beyond the integer and the emphasis markers still falls through to
+# PLAIN_NOT_INTEGER — this only forgives the formatting, not trailing prose.
+PLAIN_BOLD_INTEGER_PATTERN: Pattern[str] = compile(r"\A\*{1,2}(?P<value>\d+)\.?\*{1,2}\Z")
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,8 +202,15 @@ def _candidate_json_texts(*, text: str) -> list[str]:
     return candidates
 
 
+_LABELED_SENSE_INDEX_PATTERNS: list[Pattern[str]] = [
+    SENSE_INDEX_LABEL_PATTERN,
+    PLAIN_ANSWER_LABEL_PATTERN,
+    PLAIN_BOLD_INTEGER_PATTERN,
+]
+
+
 def _labeled_sense_index(*, text: str) -> int | None:
-    for pattern in [SENSE_INDEX_LABEL_PATTERN, PLAIN_ANSWER_LABEL_PATTERN]:
+    for pattern in _LABELED_SENSE_INDEX_PATTERNS:
         match = pattern.fullmatch(text)
         if match is not None:
             return int(match.group("value"))
