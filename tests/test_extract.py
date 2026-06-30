@@ -134,8 +134,8 @@ def test_extract_plain_accepts_bold_wrapped_integer() -> None:
         candidate_count=CANDIDATE_COUNT,
     )
 
-    assert isinstance(extracted, ValidSenseIndexExtraction), "bold-wrapped integer extraction succeeds"
-    assert extracted.sense_index == VALID_SENSE_INDEX, "bold-wrapped integer sense index is parsed"
+    assert isinstance(extracted, ValidSenseIndexExtraction), "bold-wrapped integer is accepted"
+    assert extracted.sense_index == VALID_SENSE_INDEX, "bold-wrapped sense index is parsed"
 
 
 def test_extract_plain_rejects_bold_integer_with_trailing_prose() -> None:

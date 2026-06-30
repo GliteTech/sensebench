@@ -202,8 +202,15 @@ def _candidate_json_texts(*, text: str) -> list[str]:
     return candidates
 
 
+_LABELED_SENSE_INDEX_PATTERNS: list[Pattern[str]] = [
+    SENSE_INDEX_LABEL_PATTERN,
+    PLAIN_ANSWER_LABEL_PATTERN,
+    PLAIN_BOLD_INTEGER_PATTERN,
+]
+
+
 def _labeled_sense_index(*, text: str) -> int | None:
-    for pattern in [SENSE_INDEX_LABEL_PATTERN, PLAIN_ANSWER_LABEL_PATTERN, PLAIN_BOLD_INTEGER_PATTERN]:
+    for pattern in _LABELED_SENSE_INDEX_PATTERNS:
         match = pattern.fullmatch(text)
         if match is not None:
             return int(match.group("value"))
