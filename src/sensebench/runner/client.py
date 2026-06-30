@@ -19,6 +19,50 @@ from sensebench.runs.models import (
     TokenUsage,
 )
 
+# litellm's pinned version predates these models' release, so it has no registry entry
+# for them and refuses to translate `reasoning_effort` into Anthropic's native `thinking`
+# param (UnsupportedParamsError). Hand it the same shape of entry it would otherwise ship
+# itself. Pricing is Anthropic's published introductory Sonnet 5 rate, $2/$10 per MTok
+# in/out, in effect through 2026-08-31 (see platform.claude.com/docs/en/docs/about-claude/
+# pricing); standard pricing reverts to $3/$15 on 2026-09-01 and this entry must be
+# updated then. Drop this whole override once litellm's pin is upgraded past a release
+# that recognizes the model natively.
+_MODEL_INFO_OVERRIDES: dict[str, dict[str, object]] = {
+    # Bare key, mirroring litellm's own convention for known Anthropic models (e.g.
+    # "claude-opus-4-8") — both the no-provider model routing and the adaptive-thinking
+    # capability check resolve the bare id, not an "anthropic/"-prefixed one.
+    "claude-sonnet-5": {
+        "litellm_provider": "anthropic",
+        "mode": "chat",
+        "max_input_tokens": 1_000_000,
+        "max_output_tokens": 64_000,
+        "max_tokens": 64_000,
+        "input_cost_per_token": 2e-06,
+        "output_cost_per_token": 1e-05,
+        "cache_read_input_token_cost": 2e-07,
+        "cache_creation_input_token_cost": 2.5e-06,
+        "cache_creation_input_token_cost_above_1hr": 4e-06,
+        "supports_reasoning": True,
+        "supports_adaptive_thinking": True,
+        "supports_xhigh_reasoning_effort": True,
+        "supports_max_reasoning_effort": True,
+        "supports_vision": True,
+        "supports_function_calling": True,
+        "supports_tool_choice": True,
+        "supports_prompt_caching": True,
+    },
+}
+_model_overrides_registered: bool = False
+
+
+def _ensure_model_overrides_registered(*, litellm_module: Any) -> None:
+    global _model_overrides_registered
+    if _model_overrides_registered:
+        return
+    litellm_module.register_model(_MODEL_INFO_OVERRIDES)
+    _model_overrides_registered = True
+
+
 DEFAULT_TRANSPORT_RETRIES: int = 2
 DEFAULT_RETRY_SLEEP_SECONDS: float = 1.0
 ROLE_FIELD: str = "role"
@@ -247,6 +291,7 @@ class LiteLlmClient:
         import litellm
 
         litellm.suppress_debug_info = True
+        _ensure_model_overrides_registered(litellm_module=litellm)
         started = time.monotonic()
         retry_count = 0
         last_error: Exception | None = None
