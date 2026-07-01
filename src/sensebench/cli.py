@@ -47,13 +47,16 @@ from sensebench.runner.endpoint import (
     served_model_id,
 )
 from sensebench.runner.machine import collect_machine_info
+from sensebench.runner.repair import repair_run
 from sensebench.runner.run import CompletedRun, RunConfig, preflight_model, run_benchmark
+from sensebench.runs.loaders import load_run_directory
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
     SELF_HOSTED_LLM_KIND,
     CloudLlmReference,
     MachineInfo,
     ModelHostingKind,
+    ModelReference,
     ModelSourceKind,
     PredictionStatus,
     RunMetadata,
@@ -443,6 +446,35 @@ def _model_reference(*, args: argparse.Namespace) -> CloudLlmReference | SelfHos
     assert_never(hosting_kind)
 
 
+def _fallback_model_reference(
+    *, args: argparse.Namespace, original_model: ModelReference
+) -> CloudLlmReference:
+    vendor = (
+        args.fallback_vendor if args.fallback_vendor is not None else original_model.llm_vendor
+    )
+    api_provider = args.fallback_api_provider
+    if api_provider is None and isinstance(original_model, CloudLlmReference):
+        api_provider = original_model.api_provider
+    source_kind = (
+        ModelSourceKind(str(args.fallback_source_kind))
+        if args.fallback_source_kind is not None
+        else original_model.source_kind
+    )
+    return CloudLlmReference(
+        kind=CLOUD_LLM_KIND,
+        display_name=str(args.fallback_model),
+        requested_model=str(args.fallback_model),
+        resolved_model=None,
+        llm_vendor=vendor,
+        api_provider=api_provider,
+        source_kind=source_kind,
+        license=args.fallback_license,
+        model_url=args.fallback_model_url,
+        reasoning_effort=args.fallback_reasoning_effort,
+        endpoint_base_url=args.fallback_endpoint_base_url,
+    )
+
+
 def _sampling(*, args: argparse.Namespace) -> SamplingParameters:
     return SamplingParameters(
         temperature=args.temperature,
@@ -575,6 +607,67 @@ async def _run_async(*, args: argparse.Namespace) -> int:
 
 def _cmd_run(*, args: argparse.Namespace) -> int:
     return asyncio.run(_run_async(args=args))
+
+
+async def _repair_async(*, args: argparse.Namespace) -> int:
+    _load_local_env()
+    loaded = load_run_directory(run_dir=Path(args.run_dir))
+    dataset = _resolve_dataset(args=args)
+    assert dataset is not None, "repair-run requires --dataset or --dataset-jsonl"
+    fallback_model = _fallback_model_reference(args=args, original_model=loaded.metadata.model)
+    output_root = Path(args.output_root)
+    new_run_id = _optional_arg(value=args.run_id)
+    if new_run_id is None:
+        new_run_id = (
+            f"{loaded.metadata.run_id}-fallback-{_slugify(value=str(args.fallback_model))}"
+        )
+    fallback_config = RunConfig(
+        run_id=new_run_id,
+        output_root=output_root,
+        dataset=dataset,
+        prompt=_load_prompt(prompt=loaded.metadata.prompt.id),
+        model=fallback_model,
+        runner=loaded.metadata.runner,
+        sampling=SamplingParameters(
+            temperature=args.fallback_temperature,
+            top_p=args.fallback_top_p,
+            max_tokens=args.fallback_max_tokens,
+            seed=args.fallback_seed,
+        ),
+        votes_per_item=loaded.metadata.policy.votes_per_item,
+        semantic_reasks_per_invalid_vote=loaded.metadata.policy.semantic_reasks_per_invalid_vote,
+        shuffle_senses_per_vote=loaded.metadata.policy.shuffle_senses_per_vote,
+        concurrency=_resolved_concurrency(args=args, hosting_kind=ModelHostingKind.CLOUD_API),
+        machine=None,
+        warmup_calls=0,
+    )
+    to_repair_count = sum(
+        1
+        for prediction in loaded.predictions
+        if prediction.status == PredictionStatus.NO_VALID_VOTE
+    )
+    print(
+        f"repair: {to_repair_count} failed item(s) of {len(loaded.predictions)} "
+        f"to re-evaluate with {fallback_model.requested_model}",
+        file=sys.stderr,
+    )
+    client = LiteLlmClient()
+    if to_repair_count > 0 and not bool(args.skip_preflight):
+        await preflight_model(config=fallback_config, client=client)
+        print(f"preflight OK: {fallback_model.requested_model}", file=sys.stderr)
+    new_run_dir = await repair_run(
+        loaded=loaded,
+        fallback_config=fallback_config,
+        client=client,
+        new_run_id=new_run_id,
+        output_root=output_root,
+    )
+    print(f"repaired run written to {new_run_dir}", file=sys.stderr)
+    return 0
+
+
+def _cmd_repair_run(*, args: argparse.Namespace) -> int:
+    return asyncio.run(_repair_async(args=args))
 
 
 def _cmd_set_runner(*, args: argparse.Namespace) -> int:
@@ -768,6 +861,46 @@ def _build_parser() -> argparse.ArgumentParser:
     set_runner_parser.add_argument("--runner-name")
     set_runner_parser.add_argument("--runner-contact")
     set_runner_parser.set_defaults(func=_cmd_set_runner)
+
+    repair_parser = subparsers.add_parser(
+        "repair-run",
+        help=(
+            "Re-evaluate a completed run's no_valid_vote items with a fallback model and "
+            "write the merged result as a new run directory; the original run is untouched."
+        ),
+    )
+    repair_parser.add_argument("run_dir")
+    _add_dataset_args(parser=repair_parser, default_release=DEFAULT_LEXEN_RELEASE_ID)
+    repair_parser.add_argument("--fallback-model", required=True)
+    repair_parser.add_argument("--fallback-reasoning-effort")
+    repair_parser.add_argument("--fallback-max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
+    repair_parser.add_argument("--fallback-temperature", type=float)
+    repair_parser.add_argument("--fallback-top-p", type=float)
+    repair_parser.add_argument("--fallback-seed", type=int)
+    repair_parser.add_argument(
+        "--fallback-vendor",
+        default=None,
+        help="Defaults to the original run's model.llm_vendor when omitted.",
+    )
+    repair_parser.add_argument(
+        "--fallback-api-provider",
+        default=None,
+        help="Defaults to the original run's model.api_provider when omitted.",
+    )
+    repair_parser.add_argument(
+        "--fallback-source-kind",
+        choices=[kind.value for kind in ModelSourceKind],
+        default=None,
+        help="Defaults to the original run's model.source_kind when omitted.",
+    )
+    repair_parser.add_argument("--fallback-license")
+    repair_parser.add_argument("--fallback-model-url")
+    repair_parser.add_argument("--fallback-endpoint-base-url")
+    repair_parser.add_argument("--run-id", default=None, help="New run identifier.")
+    repair_parser.add_argument("--output-root", default=str(LOCAL_RUNS_DIR))
+    repair_parser.add_argument("--concurrency", type=_positive_int, default=None)
+    repair_parser.add_argument("--skip-preflight", action="store_true")
+    repair_parser.set_defaults(func=_cmd_repair_run)
 
     leaderboard_parser = subparsers.add_parser("leaderboard", help="Emit leaderboard.json.")
     leaderboard_parser.add_argument("--results-dir", default=str(SUBMITTED_RESULTS_DIR))

@@ -141,7 +141,7 @@ def _llm_parameters(*, sampling: SamplingParameters) -> dict[str, object]:
     return parameters
 
 
-def _completion_parameters(*, config: RunConfig) -> dict[str, object]:
+def completion_parameters(*, config: RunConfig) -> dict[str, object]:
     parameters: dict[str, object] = _llm_parameters(sampling=config.sampling)
     if config.model.endpoint_base_url is not None:
         parameters[LLM_API_BASE_PARAMETER] = config.model.endpoint_base_url
@@ -255,7 +255,7 @@ async def _evaluate_one(
         model=_requested_model_id(model=config.model),
         votes_per_item=config.votes_per_item,
         semantic_reasks_per_invalid_vote=config.semantic_reasks_per_invalid_vote,
-        llm_parameters=_completion_parameters(config=config),
+        llm_parameters=completion_parameters(config=config),
     )
     render_for_vote: Callable[[int], RenderedTask] | None = None
     if config.shuffle_senses_per_vote:
@@ -380,7 +380,7 @@ def _preflight_request(*, config: RunConfig, call_id: str) -> CompletionRequest:
         attempt_kind=AttemptKind.INITIAL,
         model=_requested_model_id(model=config.model),
         messages=[ChatMessage(role=MessageRole.USER, content=PREFLIGHT_PROMPT)],
-        parameters=_completion_parameters(config=config),
+        parameters=completion_parameters(config=config),
     )
 
 
