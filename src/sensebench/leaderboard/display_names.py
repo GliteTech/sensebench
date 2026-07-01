@@ -32,6 +32,7 @@ _EXPLICIT_NAMES: dict[str, str] = {
     "claude-opus-4-7": "Claude Opus 4.7",
     "claude-opus-4-6": "Claude Opus 4.6",
     "claude-sonnet-5": "Claude Sonnet 5",
+    "claude-fable-5+fallback:claude-opus-4-8": "Claude Fable 5 (+ Opus 4.8 fallback)",
     "claude-sonnet-4-6": "Claude Sonnet 4.6",
     "claude-haiku-4-5": "Claude Haiku 4.5",
     # Google (AI Studio gemini/ prefix)

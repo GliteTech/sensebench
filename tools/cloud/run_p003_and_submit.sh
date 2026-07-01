@@ -176,6 +176,12 @@ claude_sonnet_5_runs() {
   reason_run claude-sonnet-5 claude-sonnet-5 xhigh  16384 "$ca" Anthropic proprietary Anthropic
 }
 
+claude_fable_5_runs() {
+  export STREAM=anthropic
+  local ca="${ANTHROPIC_CONCURRENCY:-16}"
+  reason_run claude-fable-5 claude-fable-5 xhigh  16384 "$ca" Anthropic proprietary Anthropic
+}
+
 openrouter_runs() {
   export STREAM=openrouter
   local cr="${OPENROUTER_CONCURRENCY:-32}"
@@ -195,9 +201,10 @@ case "${1:-}" in
   gemini) gemini_runs ;;
   anthropic) anthropic_runs ;;
   claude-sonnet-5) claude_sonnet_5_runs ;;
+  claude-fable-5) claude_fable_5_runs ;;
   openrouter) openrouter_runs ;;
   all) openai_runs; gemini_runs; anthropic_runs; openrouter_runs ;;
-  *) echo "usage: $0 <openai|gemini|anthropic|openrouter|claude-sonnet-5|all>"; exit 2 ;;
+  *) echo "usage: $0 <openai|gemini|anthropic|openrouter|claude-sonnet-5|claude-fable-5|all>"; exit 2 ;;
 esac
 
 note "STREAM ${1:-?} DONE. Running total: \$$(cat "$COSTFILE")"
