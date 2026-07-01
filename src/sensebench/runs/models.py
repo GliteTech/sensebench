@@ -243,6 +243,7 @@ class RunTotals(StrictRunModel):
     usage: TokenUsage
     cost: CostBreakdown
     elapsed_seconds: NonNegativeFloat | None = None
+    fallback_used_count: NonNegativeInt = 0
 
 
 class RunnerIdentity(StrictRunModel):
@@ -260,6 +261,7 @@ class RunMetadata(StrictRunModel):
     dataset: DatasetReference
     prompt: PromptReference
     model: ModelReference
+    fallback_model: ModelReference | None = None
     sampling: SamplingParameters
     policy: RunPolicy
     machine: MachineInfo | None = None
