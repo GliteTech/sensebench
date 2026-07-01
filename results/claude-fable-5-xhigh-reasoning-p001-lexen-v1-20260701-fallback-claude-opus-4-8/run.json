@@ -1,0 +1,102 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "claude-fable-5-xhigh-reasoning-p001-lexen-v1-20260701-fallback-claude-opus-4-8",
+  "created_at": "2026-07-01T21:52:21.405001+00:00",
+  "git_commit": "98b44a9e4557ad73fac4763ab3291c73d26a2281",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p001",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "claude-fable-5+fallback:claude-opus-4-8",
+    "requested_model": "claude-fable-5",
+    "resolved_model": "claude-fable-5",
+    "resolved_model_counts": {
+      "claude-fable-5": 5166
+    },
+    "llm_vendor": "Anthropic",
+    "api_provider": "Anthropic",
+    "source_kind": "proprietary",
+    "license": null,
+    "model_url": null,
+    "reasoning_effort": "xhigh",
+    "endpoint_base_url": null
+  },
+  "fallback_model": {
+    "kind": "cloud_llm",
+    "display_name": "claude-opus-4-8",
+    "requested_model": "claude-opus-4-8",
+    "resolved_model": null,
+    "resolved_model_counts": {},
+    "llm_vendor": "Anthropic",
+    "api_provider": "Anthropic",
+    "source_kind": "proprietary",
+    "license": null,
+    "model_url": null,
+    "reasoning_effort": "max",
+    "endpoint_base_url": null
+  },
+  "sampling": {
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": 16384,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit",
+    "shuffle_senses_per_vote": false
+  },
+  "machine": null,
+  "execution": {
+    "concurrency": 16,
+    "warmup_call_count": 0,
+    "timing": {
+      "benchmark_started_at": "2026-07-01T20:54:48.699168+00:00",
+      "benchmark_ended_at": "2026-07-01T21:52:21.389282+00:00",
+      "benchmark_seconds": 1822.113215249963,
+      "setup_seconds": 1.3082959579769522
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4628,
+    "accuracy": 0.9520674758280189,
+    "call_count": 4869,
+    "usage": {
+      "input_tokens": 4416385,
+      "cached_input_tokens": 0,
+      "output_tokens": 662830,
+      "reasoning_output_tokens": 0
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 70.75177000000001,
+      "input_uncached_usd": 42.739845,
+      "input_cached_usd": 0.0,
+      "output_usd": 28.011925,
+      "input_uncached_unit_price_usd": null,
+      "input_cached_unit_price_usd": null,
+      "output_unit_price_usd": null,
+      "source": "litellm_estimate"
+    },
+    "elapsed_seconds": 1822.113215249963,
+    "fallback_used_count": 297
+  }
+}
