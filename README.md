@@ -226,9 +226,9 @@ sensebench site build --results-dir results --output-dir _site --strict
 ```
 
 The generated site includes an interactive leaderboard with bootstrap confidence intervals and rank
-ranges, Pareto charts, reference baselines (MFS, BEM, ESCHER, ConSeC) scored on the same items,
-paired statistical run comparisons, static run-detail pages, dataset and prompt reference pages,
-submission instructions, a sitemap, and static JSON under `_site/data/`.
+ranges, Pareto charts, reference baselines (MFS, BEM, ESCHER, ConSeC, Glite LENS) scored on the same
+items, paired statistical run comparisons, static run-detail pages, dataset and prompt reference
+pages, submission instructions, a sitemap, and static JSON under `_site/data/`.
 
 ## Development
 
