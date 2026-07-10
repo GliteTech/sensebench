@@ -25,7 +25,12 @@ from sensebench.leaderboard.schemes import (
     load_concept_map,
     scheme_correct,
 )
-from sensebench.paths import BEM_BASELINE_PATH, CONSEC_BASELINE_PATH, ESCHER_BASELINE_PATH
+from sensebench.paths import (
+    BEM_BASELINE_PATH,
+    CONSEC_BASELINE_PATH,
+    ESCHER_BASELINE_PATH,
+    GLITE_LENS_BASELINE_PATH,
+)
 from sensebench.runner.evaluate import prediction_is_correct
 from sensebench.wordnet import get_candidate_senses, wordnet_version
 
@@ -92,7 +97,8 @@ BASELINE_PREDICTION_SPECS: tuple[BaselinePredictionSpec, ...] = (
         kind=BaselineKind.REPRODUCED_PREDICTIONS,
         source_note=(
             "ESCHER (Barba et al. 2021; SemCor training); predictions reproduced by Glite, "
-            "scored on this dataset's items."
+            "79.6 F1 on Raganato ALL (-1.1 of the published 80.7 F1), scored on this "
+            "dataset's items."
         ),
         source_url="https://github.com/SapienzaNLP/esc",
     ),
@@ -102,9 +108,24 @@ BASELINE_PREDICTION_SPECS: tuple[BaselinePredictionSpec, ...] = (
         kind=BaselineKind.REPRODUCED_PREDICTIONS,
         source_note=(
             "ConSeC (Barba et al. 2021); predictions reproduced by Glite (SemCor + WordNet "
-            "Gloss+Examples training, 82.9 F1 on Raganato ALL), scored on this dataset's items."
+            "Gloss+Examples training, 82.9 F1 on Raganato ALL, -0.3 of the published "
+            "83.2 F1), scored on this dataset's items."
         ),
         source_url="https://github.com/SapienzaNLP/consec",
+    ),
+    BaselinePredictionSpec(
+        label="Glite LENS",
+        path=GLITE_LENS_BASELINE_PATH,
+        kind=BaselineKind.PUBLISHED_PREDICTIONS,
+        source_note=(
+            "Glite LENS (ModernBERT bi-encoder); shipped seed-42 predictions trained on "
+            "SemCor-GPT5.5, the GPT-5.5-relabeled corpus rather than original SemCor "
+            "(83.7 F1 on Raganato ALL; 3-seed mean 83.6). This row demonstrates the "
+            "relabel-and-retrain result, so the LENS-ESCHER margin is not an architecture-only "
+            "comparison; because its training labels share a model family with the lexEN "
+            "triage, its lexEN score is confirmatory under the paper's Section 6.4 rule."
+        ),
+        source_url="https://github.com/GliteTech/glite-lens",
     ),
 )
 
