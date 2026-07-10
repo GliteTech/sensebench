@@ -208,6 +208,8 @@ def test_repair_run_replaces_only_failed_items_and_records_fallback(tmp_path: Pa
     assert repaired.metadata.totals.fallback_used_count == 1
     assert repaired.metadata.fallback_model is not None
     assert repaired.metadata.fallback_model.requested_model == FALLBACK_MODEL
+    assert repaired.metadata.model.resolved_model_counts == {PRIMARY_MODEL: 1}
+    assert repaired.metadata.fallback_model.resolved_model_counts == {FALLBACK_MODEL: 1}
     assert repaired.metadata.model.display_name == f"{PRIMARY_MODEL}+fallback:{FALLBACK_MODEL}"
 
     repaired_good = next(p for p in repaired.predictions if p.item_id == GOOD_ITEM_ID)
@@ -289,6 +291,9 @@ def test_repair_run_is_a_noop_when_nothing_failed(tmp_path: Path) -> None:
     assert repaired.metadata.model.display_name == PRIMARY_MODEL, (
         "no fallback used, no display-name change"
     )
+    assert repaired.metadata.model.resolved_model_counts == {PRIMARY_MODEL: 2}
+    assert repaired.metadata.fallback_model is not None
+    assert repaired.metadata.fallback_model.resolved_model_counts == {}
     assert repaired.metadata.totals.item_count == loaded.metadata.totals.item_count
     assert repaired.metadata.totals.correct_count == loaded.metadata.totals.correct_count
 

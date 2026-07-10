@@ -25,7 +25,7 @@
     "requested_model": "claude-fable-5",
     "resolved_model": "claude-fable-5",
     "resolved_model_counts": {
-      "claude-fable-5": 5166
+      "claude-fable-5": 4572
     },
     "llm_vendor": "Anthropic",
     "api_provider": "Anthropic",
@@ -39,8 +39,10 @@
     "kind": "cloud_llm",
     "display_name": "claude-opus-4-8",
     "requested_model": "claude-opus-4-8",
-    "resolved_model": null,
-    "resolved_model_counts": {},
+    "resolved_model": "claude-opus-4-8",
+    "resolved_model_counts": {
+      "claude-opus-4-8": 297
+    },
     "llm_vendor": "Anthropic",
     "api_provider": "Anthropic",
     "source_kind": "proprietary",
