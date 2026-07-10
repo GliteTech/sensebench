@@ -14,7 +14,12 @@ from sensebench.runner.client import CompletionClient
 from sensebench.runner.costs import sum_costs
 from sensebench.runner.evaluate import EvaluationConfig, evaluate_item
 from sensebench.runner.models import ItemEvaluation
-from sensebench.runner.run import RunConfig, completion_parameters, git_commit
+from sensebench.runner.run import (
+    RunConfig,
+    _model_with_resolved_snapshots,
+    completion_parameters,
+    git_commit,
+)
 from sensebench.runner.writer import write_run_artifacts
 from sensebench.runs.loaders import LoadedRun
 from sensebench.runs.models import (
@@ -137,15 +142,20 @@ async def repair_run(
 
     merged_predictions: list[PredictionRecord] = []
     merged_calls: list[CallRecord] = []
+    primary_calls: list[CallRecord] = []
+    fallback_calls: list[CallRecord] = []
     for prediction in loaded.predictions:
         evaluation = repaired_by_item_id.get(prediction.item_id)
         if evaluation is None:
             merged_predictions.append(prediction)
             for vote in prediction.votes:
-                merged_calls.extend(calls_by_id[call_id] for call_id in vote.call_ids)
+                vote_calls = [calls_by_id[call_id] for call_id in vote.call_ids]
+                merged_calls.extend(vote_calls)
+                primary_calls.extend(vote_calls)
         else:
             merged_predictions.append(evaluation.prediction)
             merged_calls.extend(evaluation.calls)
+            fallback_calls.extend(evaluation.calls)
 
     item_count = len(merged_predictions)
     correct_count = sum(1 for prediction in merged_predictions if prediction.is_correct is True)
@@ -182,6 +192,11 @@ async def repair_run(
                 ),
             },
         )
+    primary_model = _model_with_resolved_snapshots(model=primary_model, calls=primary_calls)
+    fallback_model = _model_with_resolved_snapshots(
+        model=fallback_config.model,
+        calls=fallback_calls,
+    )
 
     metadata = RunMetadata(
         schema_version=loaded.metadata.schema_version,
@@ -192,7 +207,7 @@ async def repair_run(
         dataset=loaded.metadata.dataset,
         prompt=loaded.metadata.prompt,
         model=primary_model,
-        fallback_model=fallback_config.model,
+        fallback_model=fallback_model,
         sampling=loaded.metadata.sampling,
         policy=loaded.metadata.policy,
         machine=loaded.metadata.machine,
