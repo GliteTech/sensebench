@@ -11,7 +11,11 @@ from sensebench.datasets.loaders import load_jsonl_dataset
 from sensebench.datasets.models import DatasetBundle, DatasetID
 from sensebench.datasets.releases import DatasetRelease
 from sensebench.leaderboard.aggregate import LeaderboardBuildError
-from sensebench.leaderboard.baselines import MFS_BASELINE_LABEL, BaselineKind
+from sensebench.leaderboard.baselines import (
+    BASELINE_PREDICTION_SPECS,
+    MFS_BASELINE_LABEL,
+    BaselineKind,
+)
 from sensebench.paths import (
     CALLS_FILENAME,
     CNAME_FILENAME,
@@ -156,7 +160,7 @@ LABEL_SCHEME_TABLE_CLASS: str = "label-scheme-table"
 LABEL_SCHEME_TABLE_WRAP_CLASS: str = "label-scheme-table-wrap"
 LABEL_SCHEME_CSI_DATA_LABEL: str = 'data-label="CSI coarse-grained (Lacerra 2020)"'
 BUILT_BY_GLITE_TEXT: str = "Built by Glite"
-EXPECTED_BASELINE_COUNT: int = 4
+EXPECTED_BASELINE_COUNT: int = 1 + len(BASELINE_PREDICTION_SPECS)
 ECHARTS_VENDOR_PATH: Path = Path("vendor") / "echarts.min.js"
 BAD_CONTENT_HASH: str = "sha256:bad"
 GET_DATASET_RELEASE_ATTR: str = "get_dataset_release"

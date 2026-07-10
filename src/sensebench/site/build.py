@@ -1086,9 +1086,9 @@ def _static_pages() -> list[StaticPage]:
                         "The compare view tests paired per-item differences between runs on "
                         "the same dataset version with McNemar's test, which is far more "
                         "sensitive than comparing overlapping intervals.",
-                        "Reference baselines (MFS, BEM, ESCHER, ConSeC) are scored from "
-                        "per-item system predictions on exactly the same dataset items as "
-                        "the model runs.",
+                        "Reference baselines (MFS, BEM, ESCHER, ConSeC, Glite LENS) are "
+                        "scored from per-item system predictions on exactly the same dataset "
+                        "items as the model runs.",
                     ),
                 ),
                 PageSection(
