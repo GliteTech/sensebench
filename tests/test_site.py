@@ -159,6 +159,10 @@ DOWNLOAD_JSON_BUTTON_ID: str = "download-json"
 TABLE_DOWNLOADS_CLASS: str = "table-downloads"
 SITE_JS_FILENAME: str = "site.js"
 SITE_JS_EXPORT_COLUMNS_MARKER: str = "EXPORT_COLUMNS"
+SITE_JS_SPOT_PRICED_MARKER: str = "function isSpotPriced"
+SITE_JS_SPOT_PRICED_CELL_MARKER: str = "spotPricedNoteHtml(entry)"
+SITE_JS_FRONTIER_BADGE_MARKER: str = "function frontierBadgeHtml"
+COST_FLAG_CLASS: str = "cost-flag"
 SITE_JS_DOWNLOAD_CSV_MARKER: str = "function downloadCsv"
 DESCRIPTIVE_GLITE_CSV_PREFIX: str = "lexen_glite_coarse"
 DESCRIPTIVE_CSI_CSV_PREFIX: str = "lexen_csi_coarse"
@@ -542,6 +546,17 @@ def test_build_site_emits_static_pages_and_data(
     assert SITE_JS_DOWNLOAD_CSV_MARKER in site_js
     assert DESCRIPTIVE_GLITE_CSV_PREFIX in site_js
     assert DESCRIPTIVE_CSI_CSV_PREFIX in site_js
+    assert SITE_JS_SPOT_PRICED_MARKER in site_js
+    assert SITE_JS_SPOT_PRICED_CELL_MARKER in site_js, (
+        "the cost cell must flag rows that are not priced at a reference rate"
+    )
+    assert SITE_JS_FRONTIER_BADGE_MARKER in site_js, (
+        "the frontier star must carry the caveat when the row is not reference-priced"
+    )
+    assert COST_FLAG_CLASS in (output_dir / SITE_ASSETS_DIRNAME / "site.css").read_text(
+        encoding="utf-8"
+    )
+    assert COST_FLAG_CLASS in index_html, "method notes must explain the cost flag they reference"
     # TestVendor has no bundled logo, so the colored-initial fallback renders.
     assert 'class="vendor-initial' in index_html
 

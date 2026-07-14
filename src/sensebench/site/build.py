@@ -1171,9 +1171,20 @@ def _static_pages() -> list[StaticPage]:
                         "the live spot market, so they will drift from current prices "
                         "until they are next revised.",
                         "Each run keeps the rate it actually paid and the cost computed "
-                        "from it; run detail pages show both figures. A machine-time run "
-                        "on a GPU class with no reference rate keeps the cost computed "
-                        "from the rate paid.",
+                        "from it; run detail pages show both figures.",
+                        "A machine-time run on a GPU class we have no reference rate for "
+                        "is the one exception: it keeps the cost computed from the rate "
+                        "its machine was rented at, and its cost is marked with an "
+                        "asterisk on the leaderboard. Such a row carries the same spot "
+                        "price distortion described above and is not on the same basis as "
+                        "the reference-priced rows, so treat its cost, and its position "
+                        "on the cost axis of the Pareto charts, as indicative only.",
+                        "Such a run is still eligible for the Pareto frontier, because "
+                        "excluding it would hide a result rather than qualify it. Its "
+                        "frontier star is marked with an asterisk instead: a cheap rental "
+                        "can put a row on the frontier that a reference-priced run would "
+                        "not reach, so a marked star is a claim about the rental price as "
+                        "much as about the model.",
                     ),
                 ),
                 PageSection(

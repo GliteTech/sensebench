@@ -58,6 +58,7 @@
     { schemeId: "raganato_csi", columnPrefix: "raganato2017_csi_coarse" }
   ];
   const DEFAULT_SCHEME_ID = "lexen_fine";
+  const MACHINE_TIME_COST_SOURCE = "machine_time_estimate";
 
   const runDetailCache = new Map();
   let pairwiseToken = 0;
@@ -353,6 +354,42 @@
     return entry.gpu;
   }
 
+  // A machine-time run whose GPU class has no reference rate keeps the cost computed from the
+  // rate its machine was rented at, so its cost is not on the same basis as the rows around it.
+  function isSpotPriced(entry) {
+    return (
+      entry.cost_source === MACHINE_TIME_COST_SOURCE && entry.reference_hourly_rate_usd == null
+    );
+  }
+
+  // Just the reason, no trailing consequence: each caller states the consequence for its own
+  // claim (a cost cell and a frontier star are saying different things).
+  function spotPricedReason(entry) {
+    const gpu = entry.gpu ? `${entry.gpu} ` : "";
+    const rate = entry.hourly_rate_usd != null ? ` ($${entry.hourly_rate_usd.toFixed(2)}/h)` : "";
+    return `priced at the rate this machine was rented at${rate}, because ${gpu}has no reference rate`;
+  }
+
+  function spotPricedNoteHtml(entry) {
+    if (!isSpotPriced(entry)) {
+      return "";
+    }
+    const title = `Cost is ${spotPricedReason(entry)} — not on the same basis as the other rows.`;
+    return `<span class="cost-flag" title="${escapeHtml(title)}">*</span>`;
+  }
+
+  // A spot-priced row can still reach the frontier, but the star claims "best accuracy for the
+  // cost" — a claim its cost cannot support, so the badge carries the caveat with it.
+  function frontierBadgeHtml(entry) {
+    if (!isSpotPriced(entry)) {
+      return '<span class="badge badge-frontier" title="On the accuracy-cost Pareto frontier">★</span>';
+    }
+    const title =
+      `On the accuracy-cost Pareto frontier, but this run is ${spotPricedReason(entry)}, ` +
+      `so its place on the frontier is not comparable with the other rows.`;
+    return `<span class="badge badge-frontier" title="${escapeHtml(title)}">★*</span>`;
+  }
+
   function logoHtml(entry) {
     if (entry.logo_slug) {
       return `<img class="vendor-logo" src="${basePath}assets/logos/${escapeHtml(entry.logo_slug)}.svg" alt="" width="18" height="18" loading="lazy">`;
@@ -619,9 +656,7 @@
         if (gpu != null) {
           vendorParts.push(escapeHtml(gpu));
         }
-        const frontierHtml = row.onFrontier
-          ? '<span class="badge badge-frontier" title="On the accuracy-cost Pareto frontier">★</span>'
-          : "";
+        const frontierHtml = row.onFrontier ? frontierBadgeHtml(entry) : "";
         return `<tr>
           <td class="col-rank"><div class="cell-primary">${row.displayRank}</div>${rangeHtml}</td>
           <td class="col-compare"><input class="compare-checkbox" type="checkbox" data-run-id="${escapeHtml(entry.run_id)}"${checked}${disabled}></td>
@@ -631,7 +666,7 @@
             <div class="cell-secondary provenance-mobile"><a href="${basePath}prompts/${encodeURIComponent(entry.prompt_id)}/">${escapeHtml(entry.prompt_id)}</a></div>
           </td>
           <td class="col-accuracy"><div class="cell-primary">${frontierHtml ? frontierHtml + " " : ""}${formatPercent(entry.accuracy)}</div>${ciHtml}</td>
-          <td class="col-cost">${formatMoney(entry.cost_per_million_items)}</td>
+          <td class="col-cost">${formatMoney(entry.cost_per_million_items)}${spotPricedNoteHtml(entry)}</td>
           <td class="col-prompt"><a href="${basePath}prompts/${encodeURIComponent(entry.prompt_id)}/">${escapeHtml(entry.prompt_id)}</a></td>
         </tr>`;
       })
@@ -840,6 +875,11 @@
             }
             if (entry.quantization) {
               lines.push(`Quantization: ${escapeHtml(entry.quantization)}`);
+            }
+            if (metric === X_METRICS.cost_per_million_items && isSpotPriced(entry)) {
+              lines.push(
+                `<em>* Cost is ${escapeHtml(spotPricedReason(entry))} — not on the same basis as the other points.</em>`
+              );
             }
             return lines.join("<br>");
           }
