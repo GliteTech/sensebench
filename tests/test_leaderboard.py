@@ -3,6 +3,8 @@ from __future__ import annotations
 from json import dumps
 from pathlib import Path
 
+from pytest import approx
+
 from sensebench.leaderboard.aggregate import (
     OFFICIAL_SEMANTIC_REASKS,
     OFFICIAL_VOTES_PER_ITEM,
@@ -13,8 +15,12 @@ from sensebench.leaderboard.aggregate import (
 )
 from sensebench.paths import LEADERBOARD_JSON_PATH, RUN_METADATA_FILENAME, SUBMITTED_RESULTS_DIR
 from sensebench.prompts.models import SENSE_INDEX_FIELD, PromptID
+from sensebench.runner.costs import SECONDS_PER_HOUR
 from sensebench.runner.writer import write_run_artifacts
 from sensebench.runs.models import (
+    CostBreakdown,
+    CostSourceKind,
+    MachineInfo,
     ModelHostingKind,
     MonosemousPolicyKind,
     RunID,
@@ -47,12 +53,19 @@ CORRUPT_RUN_ID: RunID = "run-corrupt"
 ANONYMOUS_RUN_ID: RunID = "run-anonymous"
 SECOND_PROMPT_RUN_ID: RunID = "run-second-prompt"
 SELF_HOSTED_RUN_ID: RunID = "run-self-hosted"
+MACHINE_TIME_RUN_ID: RunID = "run-machine-time"
+UNPRICED_GPU_RUN_ID: RunID = "run-unpriced-gpu"
 SECOND_PROMPT_ID: PromptID = "p002"
 PLAIN_SENSE_OUTPUT: str = "2"
 GITHUB_HANDLE_ISSUE_TEXT: str = "runner.github_handle"
 VOTES_PER_ITEM_ISSUE_TEXT: str = "votes_per_item"
 SEMANTIC_REASKS_ISSUE_TEXT: str = "semantic_reasks"
 EXPECTED_GPU_LABEL: str = "H100 80GB"
+EXPECTED_REFERENCE_HOURLY_RATE_USD: float = 2.26
+UNPRICED_GPU_NAME: str = "NVIDIA L40S"
+UNPRICED_GPU_LABEL: str = "L40S"
+GPU_NAME_FIELD: str = "name"
+MACHINE_GPU_FIELD: str = "gpu"
 
 
 def raw_output_for_sense_index(*, sense_index: int) -> str:
@@ -187,6 +200,103 @@ def test_self_hosted_run_populates_machine_fields(tmp_path: Path) -> None:
     assert entry.benchmark_seconds == FIXTURE_BENCHMARK_SECONDS
     assert entry.seconds_per_item == FIXTURE_BENCHMARK_SECONDS
     assert entry.concurrency == FIXTURE_CONCURRENCY
+
+
+def _write_machine_time_run(
+    *,
+    results_dir: Path,
+    run_id: RunID,
+    machine: MachineInfo,
+) -> None:
+    """Write a self-hosted run whose cost is machine time priced at the rate actually paid."""
+    actual_cost_usd = FIXTURE_BENCHMARK_SECONDS * FIXTURE_HOURLY_RATE_USD / SECONDS_PER_HOUR
+    write_run_artifacts(
+        run_dir=results_dir / run_id,
+        metadata=make_metadata(
+            item_count=1,
+            correct_count=1,
+            accuracy=1.0,
+            call_count=1,
+            run_id=run_id,
+            model=self_hosted_model(),
+            machine=machine,
+            cost=CostBreakdown(
+                total_usd=actual_cost_usd,
+                source=CostSourceKind.MACHINE_TIME_ESTIMATE,
+            ),
+        ),
+        predictions=[
+            voted_prediction(chosen_index=2, gold_sense_keys=[SECOND_SENSE_KEY], is_correct=True)
+        ],
+        calls=[success_call(raw_output=raw_output_for_sense_index(sense_index=2))],
+    )
+
+
+def test_machine_time_run_is_compared_at_the_reference_rate(tmp_path: Path) -> None:
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    _write_machine_time_run(
+        results_dir=results_dir,
+        run_id=MACHINE_TIME_RUN_ID,
+        machine=fixture_machine(),
+    )
+
+    collection = collect_leaderboard_entries(results_dir=results_dir, official=False)
+
+    entry = collection.entries[0]
+    actual_cost_usd = FIXTURE_BENCHMARK_SECONDS * FIXTURE_HOURLY_RATE_USD / SECONDS_PER_HOUR
+    reference_cost_usd = (
+        FIXTURE_BENCHMARK_SECONDS * EXPECTED_REFERENCE_HOURLY_RATE_USD / SECONDS_PER_HOUR
+    )
+    assert entry.hourly_rate_usd == FIXTURE_HOURLY_RATE_USD, "the rate actually paid is preserved"
+    assert entry.reference_hourly_rate_usd == EXPECTED_REFERENCE_HOURLY_RATE_USD
+    assert entry.cost_usd == approx(actual_cost_usd), "actual run cost stays at the rate paid"
+    assert entry.reference_cost_usd == approx(reference_cost_usd)
+    assert entry.reference_cost_usd != approx(entry.cost_usd), (
+        "this fixture rented above the reference rate, so the two costs must differ"
+    )
+    assert entry.cost_per_million_items == approx(reference_cost_usd * 1_000_000), (
+        "the cross-model comparison metric is priced at the reference rate, not the rate paid"
+    )
+
+
+def test_machine_time_run_on_unpriced_gpu_keeps_actual_cost(tmp_path: Path) -> None:
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    machine = fixture_machine()
+    assert machine.gpu is not None
+    unpriced_gpu = machine.gpu.model_copy(update={GPU_NAME_FIELD: UNPRICED_GPU_NAME})
+    _write_machine_time_run(
+        results_dir=results_dir,
+        run_id=UNPRICED_GPU_RUN_ID,
+        machine=machine.model_copy(update={MACHINE_GPU_FIELD: unpriced_gpu}),
+    )
+
+    collection = collect_leaderboard_entries(results_dir=results_dir, official=False)
+
+    entry = collection.entries[0]
+    actual_cost_usd = FIXTURE_BENCHMARK_SECONDS * FIXTURE_HOURLY_RATE_USD / SECONDS_PER_HOUR
+    assert entry.gpu == UNPRICED_GPU_LABEL
+    assert entry.reference_hourly_rate_usd is None
+    assert entry.reference_cost_usd is None, "a GPU class with no reference rate is not re-priced"
+    assert entry.cost_per_million_items == approx(actual_cost_usd * 1_000_000), (
+        "cost falls back to the rate actually paid rather than dropping off the board"
+    )
+
+
+def test_cloud_run_cost_is_not_re_priced(tmp_path: Path) -> None:
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    _write_run(
+        run_dir=results_dir / GOOD_RUN_ID,
+        run_id=GOOD_RUN_ID,
+        chosen_index=2,
+        raw_output=raw_output_for_sense_index(sense_index=2),
+    )
+
+    collection = collect_leaderboard_entries(results_dir=results_dir, official=False)
+
+    entry = collection.entries[0]
+    assert entry.reference_hourly_rate_usd is None
+    assert entry.reference_cost_usd is None, "cloud runs bill at published list prices already"
+    assert entry.cost_per_million_items == approx((entry.cost_usd or 0.0) * 1_000_000)
 
 
 def test_best_group_key_collapses_prompts_and_runs(tmp_path: Path) -> None:

@@ -16,6 +16,10 @@ from sensebench.leaderboard.baselines import (
     MFS_BASELINE_LABEL,
     BaselineKind,
 )
+from sensebench.leaderboard.gpu import (
+    GPU_REFERENCE_HOURLY_RATE_USD,
+    GPU_REFERENCE_RATES_AS_OF,
+)
 from sensebench.paths import (
     CALLS_FILENAME,
     CNAME_FILENAME,
@@ -78,6 +82,8 @@ from sensebench.site.build import (
     RunDetail,
     SiteData,
     _format_money,
+    _reference_rate_sentence,
+    _static_pages,
     build_site,
 )
 from sensebench.wordnet import get_candidate_senses
@@ -120,7 +126,8 @@ LATENCY_SECONDS: float = 0.5
 TEST_CONCURRENCY: int = 8
 EXPECTED_COST_PER_MILLION_ITEMS: float = 20_000.0
 EXPECTED_TOKENS_PER_ITEM: float = 110.0
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v7"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v8"
+METHODOLOGY_SLUG: str = "methodology"
 RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v7"
 TARGET_ART_TEXT: str = "art"
 TARGET_LEMMA_TEXT: str = "Target lemma: art"
@@ -419,6 +426,9 @@ def test_build_site_emits_static_pages_and_data(
     # Nav exposes Prompts, and prompt mentions link to the prompt page.
     index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
     assert ">Prompts</a>" in index_html
+    assert _reference_rate_sentence() in index_html, (
+        "the leaderboard's own method notes must state the rates its cost column is priced at"
+    )
     run_html = (output_dir / SITE_RUNS_DIRNAME / run_id / INDEX_HTML_FILENAME).read_text(
         encoding="utf-8"
     )
@@ -611,6 +621,42 @@ def test_build_site_self_hosted_run(
     assert run_detail.metadata.machine is not None
     assert run_detail.metadata.machine.gpu is not None
     assert run_detail.metadata.machine.gpu.name == FIXTURE_GPU_NAME
+
+
+def test_methodology_page_names_every_reference_rate() -> None:
+    """The published methodology must state the rates the leaderboard actually prices at."""
+    methodology = next(page for page in _static_pages() if page.slug == METHODOLOGY_SLUG)
+    prose = " ".join(
+        paragraph for section in methodology.sections for paragraph in section.paragraphs
+    )
+
+    for label, rate in GPU_REFERENCE_HOURLY_RATE_USD.items():
+        assert f"${rate:.2f}/h for {label}" in prose, (
+            f"methodology does not state the {label} reference rate readers are being "
+            "ranked by"
+        )
+    assert GPU_REFERENCE_RATES_AS_OF in prose, "methodology does not date the reference rates"
+
+
+def test_reference_rate_sentence_is_derived_from_the_registry() -> None:
+    sentence = _reference_rate_sentence()
+
+    assert len(GPU_REFERENCE_HOURLY_RATE_USD) > 0
+    for label, rate in GPU_REFERENCE_HOURLY_RATE_USD.items():
+        assert f"${rate:.2f}/h for {label}" in sentence
+    assert GPU_REFERENCE_RATES_AS_OF in sentence, (
+        "readers cannot tell how stale the rates are without an as-of date"
+    )
+
+
+def test_reference_rate_sentence_lists_rates_cheapest_first() -> None:
+    sentence = _reference_rate_sentence()
+    positions = [
+        sentence.index(f"${rate:.2f}/h for {label}")
+        for label, rate in sorted(GPU_REFERENCE_HOURLY_RATE_USD.items(), key=lambda i: i[1])
+    ]
+
+    assert positions == sorted(positions), "rates should read as a price ladder"
 
 
 def test_format_money_rounds_by_magnitude() -> None:

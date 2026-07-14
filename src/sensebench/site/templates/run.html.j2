@@ -27,7 +27,7 @@
       <dd>{{ entry.cost_usd|money }}</dd>
     </div>
     <div>
-      <dt>Cost / M items</dt>
+      <dt>Cost / M items{% if entry.reference_cost_usd is not none %} <span class="dt-sub">at {{ entry.reference_hourly_rate_usd|money }}/h reference rate</span>{% endif %}</dt>
       <dd>{{ entry.cost_per_million_items|money }}</dd>
     </div>
   </dl>
@@ -124,7 +124,8 @@
       <dt>Calls</dt><dd>{{ entry.call_count }}</dd>
       <dt>Total tokens</dt><dd>{{ entry.total_tokens|num }}</dd>
       <dt>Tokens / item</dt><dd>{{ entry.tokens_per_item|num }}</dd>
-      <dt>Total cost</dt><dd>{{ entry.cost_usd|money }}</dd>
+      <dt>Total cost</dt><dd>{{ entry.cost_usd|money }}{% if entry.reference_cost_usd is not none %} at {{ metadata.machine.hourly_rate_usd|money }}/h paid{% endif %}</dd>
+      {% if entry.reference_cost_usd is not none %}<dt>Total cost at reference rate</dt><dd>{{ entry.reference_cost_usd|money }} at {{ entry.reference_hourly_rate_usd|money }}/h</dd>{% endif %}
       <dt>Cost / M items</dt><dd>{{ entry.cost_per_million_items|money }}</dd>
       <dt>Cost source</dt><dd>{{ entry.cost_source }}</dd>
       <dt>Elapsed</dt><dd>{{ entry.elapsed_seconds|seconds }}</dd>
@@ -152,7 +153,8 @@
       <dt>RAM</dt><dd>{% if metadata.machine.ram_gib is not none %}{{ metadata.machine.ram_gib|num }} GiB{% else %}n/a{% endif %}</dd>
       <dt>Platform</dt><dd>{{ metadata.machine.platform or "n/a" }}</dd>
       <dt>Provider</dt><dd>{{ metadata.machine.provider or "n/a" }}{% if metadata.machine.instance_id %} ({{ metadata.machine.instance_id }}){% endif %}</dd>
-      <dt>Hourly rate</dt><dd>{% if metadata.machine.hourly_rate_usd is not none %}{{ metadata.machine.hourly_rate_usd|money }}/h{% else %}n/a{% endif %}</dd>
+      <dt>Hourly rate paid</dt><dd>{% if metadata.machine.hourly_rate_usd is not none %}{{ metadata.machine.hourly_rate_usd|money }}/h{% else %}n/a{% endif %}</dd>
+      <dt>Reference rate</dt><dd>{% if entry.reference_hourly_rate_usd is not none %}{{ entry.reference_hourly_rate_usd|money }}/h{% else %}n/a{% endif %}</dd>
       <dt>Benchmark time</dt><dd>{{ entry.benchmark_seconds|seconds }}</dd>
       <dt>Machine-hours / 1M items</dt><dd>{{ entry.machine_hours_per_million_items|machine_hours }}</dd>
       <dt>Concurrency</dt><dd>{{ entry.concurrency|num }}</dd>
@@ -201,7 +203,7 @@
 
 <section class="cost-panel">
   <h2>Cost And Token Breakdown</h2>
-  <p class="note">Actual recorded run cost: {{ entry.cost_usd|money }}. Cost estimate source: {{ entry.cost_source }}.{% if entry.cost_source == "machine_time_estimate" %} Cost is estimated from machine time multiplied by the recorded hourly rate.{% endif %}</p>
+  <p class="note">Actual recorded run cost: {{ entry.cost_usd|money }}. Cost estimate source: {{ entry.cost_source }}.{% if entry.cost_source == "machine_time_estimate" %} Cost is estimated from machine time multiplied by the hourly rate this machine was actually rented at ({{ metadata.machine.hourly_rate_usd|money }}/h).{% if entry.reference_cost_usd is not none %} Rented GPU prices move between rentals, so the leaderboard instead compares this run at the {{ entry.reference_hourly_rate_usd|money }}/h reference rate for {{ entry.gpu }}, giving {{ entry.reference_cost_usd|money }} ({{ entry.cost_per_million_items|money }} / M items).{% endif %}{% endif %}</p>
   <div class="table-scroll">
     <table>
       <thead>

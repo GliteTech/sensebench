@@ -162,6 +162,39 @@ localhost, and `--hourly-rate-usd` enables the machine-time cost metric. See
 [docs/self_hosted.md](docs/self_hosted.md) for the full operator runbook, including the vast.ai
 batch tooling under `tools/self_hosted/`.
 
+### GPUs and reference rates
+
+Self-hosted results on the leaderboard were produced on rented single-GPU vast.ai instances of
+these classes. Reference rates were last computed on **2026-07-14**:
+
+| GPU | VRAM | Reference rate | Rate actually paid |
+| --- | --- | --- | --- |
+| A100 80GB | 80 GB HBM2e | $1.09/h | $1.09/h |
+| H100 80GB | 80 GB HBM3 | $2.26/h | $1.60/h – $2.54/h |
+| H200 141GB | 141 GB HBM3e | $3.66/h | $3.58/h – $3.82/h |
+| B300 288GB | 288 GB HBM3e | $6.72/h | $6.72/h |
+
+A run records the rate its machine was actually rented at, and its cost in `run.json` is machine
+time multiplied by that rate — the figure the run's artifacts can be verified against. Spot prices
+move between rentals, though, so the rate a model happened to get says more about the hour it ran
+than about the model. Pricing every model at whatever the market charged that day makes actual cost
+useless for comparing models against each other.
+
+The leaderboard therefore prices machine-time runs at a fixed **reference rate** per GPU class, and
+that is what its cost-per-million-items column, Pareto charts, and cost ranking use. Each reference
+rate is the mean of what we paid for that class across distinct rentals; the rates are frozen
+constants in `src/sensebench/leaderboard/gpu.py`, so adding a run never silently re-prices the runs
+already on the board. They are not tracked against the live spot market, so they drift from current
+prices until revised — `GPU_REFERENCE_RATES_AS_OF` records when they were last computed, and moves
+in the same commit as any rate change. Run detail pages show both figures. Re-derive the table from
+the submitted runs with:
+
+```bash
+uv run python tools/compute_gpu_rates.py --check
+```
+
+Machine-time runs on a GPU class with no reference rate keep the cost computed from the rate paid.
+
 ## Verify a run
 
 Verification replays the full chain — prompt rendering, answer extraction, vote decisions, and
