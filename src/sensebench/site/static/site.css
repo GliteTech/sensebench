@@ -770,6 +770,13 @@ mark {
   color: var(--accent);
 }
 
+.cost-flag {
+  margin-left: 2px;
+  color: var(--muted);
+  cursor: help;
+  font-weight: 700;
+}
+
 .model-link {
   font-weight: 600;
   color: inherit;

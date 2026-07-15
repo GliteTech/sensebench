@@ -41,6 +41,10 @@ from sensebench.leaderboard.aggregate import (
     collect_leaderboard_entries,
 )
 from sensebench.leaderboard.baselines import Baseline, BaselineKind, score_baselines
+from sensebench.leaderboard.gpu import (
+    GPU_REFERENCE_HOURLY_RATE_USD,
+    GPU_REFERENCE_RATES_AS_OF,
+)
 from sensebench.leaderboard.schemes import (
     DEFAULT_SCHEME_ID,
     GOLD_SOURCE_LABELS,
@@ -93,7 +97,7 @@ from sensebench.wordnet import SenseCandidate, SynsetID, get_candidate_senses
 DEFAULT_CUSTOM_DOMAIN: str = "sense-bench.com"
 DEFAULT_SITE_BASE_URL: str = f"https://{DEFAULT_CUSTOM_DOMAIN}/"
 DEFAULT_REPOSITORY_TREE_URL: str = "https://github.com/GliteTech/sensebench/tree/main"
-SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v7"
+SITE_DATA_SCHEMA_VERSION: str = "sensebench-site-data-v8"
 RUN_DETAIL_SCHEMA_VERSION: str = "sensebench-run-detail-v7"
 MAX_ERROR_EXAMPLES: int = 12
 PACKAGE_NAME: str = "sensebench.site"
@@ -134,6 +138,7 @@ REPOSITORY_ARTIFACT_URL_CONTEXT_KEY: str = "repository_artifact_url"
 ENTRIES_CONTEXT_KEY: str = "entries"
 SITE_DATA_CONTEXT_KEY: str = "site_data"
 DATASETS_CONTEXT_KEY: str = "datasets"
+REFERENCE_RATE_SENTENCE_CONTEXT_KEY: str = "reference_rate_sentence"
 ASSET_VERSION_GLOBAL_KEY: str = "asset_version"
 SOURCE_DATASET_METADATA_KEY: str = "source_dataset"
 ERROR_BUCKET_GROUP: str = "Error"
@@ -1042,6 +1047,17 @@ def _render(
     )
 
 
+def _reference_rate_sentence() -> str:
+    """Name every reference rate and when it was set, read from the registry so prose cannot go
+    stale. Rates are listed cheapest first rather than by label, so the list reads as a price
+    ladder."""
+    rates = ", ".join(
+        f"${rate:.2f}/h for {label}"
+        for label, rate in sorted(GPU_REFERENCE_HOURLY_RATE_USD.items(), key=lambda item: item[1])
+    )
+    return f"As of {GPU_REFERENCE_RATES_AS_OF} the reference rates are {rates}."
+
+
 def _static_pages() -> list[StaticPage]:
     return [
         StaticPage(
@@ -1105,7 +1121,10 @@ def _static_pages() -> list[StaticPage]:
                     title="Ranking",
                     paragraphs=(
                         "Runs sort by higher accuracy, then lower cost per million items "
-                        "when available, then newer creation time.",
+                        "when available, then newer creation time. For self-hosted runs "
+                        "that cost is priced at a fixed reference rate per GPU class "
+                        "rather than at the rate the machine was rented at; see Reference "
+                        "GPU Rates below.",
                         "The default leaderboard view lists every verified run; the "
                         "collapsed view keeps only the best verified run per model and "
                         "dataset version, across prompts and reasoning efforts.",
@@ -1122,9 +1141,50 @@ def _static_pages() -> list[StaticPage]:
                         "item count, scaled to one million items and expressed in machine "
                         "hours; it is comparable only across runs on the same GPU "
                         "configuration.",
-                        "When the machine's hourly rate is known, run cost is estimated "
-                        "as machine time multiplied by that rate (cost source "
-                        "machine_time_estimate); otherwise cost is unavailable.",
+                        "When the machine's hourly rate is known, the run's own recorded "
+                        "cost is machine time multiplied by the rate that machine was "
+                        "actually rented at (cost source machine_time_estimate); "
+                        "otherwise cost is unavailable.",
+                    ),
+                ),
+                PageSection(
+                    title="Reference GPU Rates",
+                    paragraphs=(
+                        "Rented GPU prices move between rentals: the same H100 class cost "
+                        "between $1.60/h and $2.54/h across the rentals behind this "
+                        "leaderboard. Pricing each model at whatever the spot market "
+                        "charged the hour it happened to run would say more about the "
+                        "timing of the rental than about the model, so actual cost is not "
+                        "comparable across self-hosted runs.",
+                        "The leaderboard therefore prices every machine-time run at a "
+                        "fixed reference rate for its GPU class, and that is what the "
+                        "cost per million items column, the cost axis of the Pareto "
+                        "charts, and the cost tiebreak in ranking use. "
+                        + _reference_rate_sentence(),
+                        "Each reference rate is the mean of what we paid for that GPU "
+                        "class across distinct rentals, so one long-lived instance "
+                        "serving many runs does not pull the rate toward its own price. "
+                        "The rates are frozen constants rather than a rebuild-time "
+                        "average, so a new submission never silently re-prices the runs "
+                        "already on the board. The as-of date above is when they were "
+                        "last recomputed from those rentals; they are not tracked against "
+                        "the live spot market, so they will drift from current prices "
+                        "until they are next revised.",
+                        "Each run keeps the rate it actually paid and the cost computed "
+                        "from it; run detail pages show both figures.",
+                        "A machine-time run on a GPU class we have no reference rate for "
+                        "is the one exception: it keeps the cost computed from the rate "
+                        "its machine was rented at, and its cost is marked with an "
+                        "asterisk on the leaderboard. Such a row carries the same spot "
+                        "price distortion described above and is not on the same basis as "
+                        "the reference-priced rows, so treat its cost, and its position "
+                        "on the cost axis of the Pareto charts, as indicative only.",
+                        "Such a run is still eligible for the Pareto frontier, because "
+                        "excluding it would hide a result rather than qualify it. Its "
+                        "frontier star is marked with an asterisk instead: a cheap rental "
+                        "can put a row on the frontier that a reference-priced run would "
+                        "not reach, so a marked star is a claim about the rental price as "
+                        "much as about the model.",
                     ),
                 ),
                 PageSection(
@@ -1508,6 +1568,7 @@ def _render_index(
             SITE_DATA_CONTEXT_KEY: site_data,
             DATASETS_CONTEXT_KEY: sorted(DATASET_RELEASES),
             FRONTIER_RUN_IDS_CONTEXT_KEY: frontier_run_ids,
+            REFERENCE_RATE_SENTENCE_CONTEXT_KEY: _reference_rate_sentence(),
         },
     )
     _write_text(path=output_dir / INDEX_HTML_FILENAME, text=html_text)

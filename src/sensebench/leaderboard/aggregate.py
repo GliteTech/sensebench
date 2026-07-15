@@ -26,6 +26,7 @@ from sensebench.leaderboard.display_names import (
     vendor_initial,
     vendor_logo_slug,
 )
+from sensebench.leaderboard.gpu import gpu_label, reference_hourly_rate_usd
 from sensebench.leaderboard.schemes import (
     DEFAULT_SCHEME_ID,
     SCHEMES,
@@ -36,12 +37,15 @@ from sensebench.leaderboard.schemes import (
 from sensebench.paths import PROMPT_JSON_SUFFIX, PROMPT_REGISTRY_DIR, RUN_METADATA_FILENAME
 from sensebench.prompts.models import PromptDefinition, PromptID
 from sensebench.prompts.registry import load_prompt_definition
+from sensebench.runner.costs import machine_time_cost
 from sensebench.runs.loaders import LoadedRun, load_run_directory
 from sensebench.runs.models import (
     CLOUD_LLM_KIND,
     SELF_HOSTED_LLM_KIND,
     CloudLlmKind,
     CloudLlmReference,
+    CostBreakdown,
+    CostSourceKind,
     ModelHostingKind,
     ModelReference,
     PredictionRecord,
@@ -59,13 +63,12 @@ DEFAULT_BOOTSTRAP_RESAMPLES: int = 2000
 DEFAULT_BOOTSTRAP_SEED: int = 12345
 CONFIDENCE_LOW_PERCENTILE: float = 2.5
 CONFIDENCE_HIGH_PERCENTILE: float = 97.5
-LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v7"
+LEADERBOARD_SCHEMA_VERSION: str = "sensebench-leaderboard-v8"
 RUN_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-z0-9._-]+$")
 OFFICIAL_VOTES_PER_ITEM: int = 1
 OFFICIAL_SEMANTIC_REASKS: int = 1
 MISSING_DATASET_VERSION_GROUP_VALUE: str = "dataset_version:none"
 RANK_FIELD: str = "rank"
-GPU_NAME_PREFIXES_TO_STRIP: tuple[str, ...] = ("NVIDIA ", "GeForce ")
 
 
 class LeaderboardModel(BaseModel):
@@ -114,6 +117,7 @@ class LeaderboardEntry(LeaderboardModel):
     gpu: str | None
     gpu_count: int | None
     hourly_rate_usd: float | None
+    reference_hourly_rate_usd: float | None
     prompt_id: PromptID
     prompt_name: str | None
     dataset_id: DatasetID
@@ -140,6 +144,7 @@ class LeaderboardEntry(LeaderboardModel):
     tokens_per_item: float | None
     cost_source: str
     cost_usd: float | None
+    reference_cost_usd: float | None
     input_uncached_usd: float | None
     input_cached_usd: float | None
     output_usd: float | None
@@ -159,20 +164,6 @@ class LeaderboardFile(LeaderboardModel):
     schema_version: str
     generated_at: str
     entries: list[LeaderboardEntry]
-
-
-@dataclass(frozen=True, slots=True)
-class GpuLabelPattern:
-    substring: str
-    label: str
-
-
-GPU_LABEL_PATTERNS: tuple[GpuLabelPattern, ...] = (
-    GpuLabelPattern(substring="H200", label="H200 141GB"),
-    GpuLabelPattern(substring="H100", label="H100 80GB"),
-    GpuLabelPattern(substring="A100", label="A100 80GB"),
-    GpuLabelPattern(substring="RTX 4090", label="RTX 4090"),
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,14 +308,26 @@ def _self_hosted_model(*, model: ModelReference) -> SelfHostedLlmReference | Non
     return None
 
 
-def _gpu_label(*, name: str) -> str:
-    for pattern in GPU_LABEL_PATTERNS:
-        if pattern.substring in name:
-            return pattern.label
-    label = name
-    for prefix in GPU_NAME_PREFIXES_TO_STRIP:
-        label = label.removeprefix(prefix)
-    return label
+def _reference_cost_usd(
+    *,
+    cost: CostBreakdown,
+    benchmark_seconds: float | None,
+    hourly_rate_usd: float | None,
+) -> float | None:
+    """Re-price a machine-time run at its GPU class's reference rate.
+
+    Returns None when there is nothing to re-price: cloud runs are already billed at published
+    list prices, and a machine-time run on a GPU class with no reference rate keeps its actual
+    cost (see `sensebench.leaderboard.gpu`).
+    """
+    if cost.source != CostSourceKind.MACHINE_TIME_ESTIMATE:
+        return None
+    if benchmark_seconds is None or hourly_rate_usd is None:
+        return None
+    return machine_time_cost(
+        benchmark_seconds=benchmark_seconds,
+        hourly_rate_usd=hourly_rate_usd,
+    ).total_usd
 
 
 def _best_group_key(*, loaded: LoadedRun) -> str:
@@ -417,6 +420,14 @@ def _entry_for_run(
         if self_hosted is not None
         else None
     )
+    machine_gpu_label = gpu_label(name=machine_gpu.name) if machine_gpu is not None else None
+    reference_rate_usd = reference_hourly_rate_usd(gpu_label=machine_gpu_label)
+    reference_cost_usd = _reference_cost_usd(
+        cost=cost,
+        benchmark_seconds=benchmark_seconds,
+        hourly_rate_usd=reference_rate_usd,
+    )
+    comparable_cost_usd = reference_cost_usd if reference_cost_usd is not None else cost_usd
     return LeaderboardEntry(
         rank=rank,
         run_id=metadata.run_id,
@@ -446,9 +457,10 @@ def _entry_for_run(
             self_hosted.inference_engine_version if self_hosted is not None else None
         ),
         hf_revision=self_hosted.hf_revision if self_hosted is not None else None,
-        gpu=_gpu_label(name=machine_gpu.name) if machine_gpu is not None else None,
+        gpu=machine_gpu_label,
         gpu_count=machine_gpu.count if machine_gpu is not None else None,
         hourly_rate_usd=machine.hourly_rate_usd if machine is not None else None,
+        reference_hourly_rate_usd=reference_rate_usd,
         prompt_id=metadata.prompt.id,
         prompt_name=prompt.name if prompt is not None else None,
         dataset_id=metadata.dataset.dataset_id,
@@ -475,6 +487,7 @@ def _entry_for_run(
         tokens_per_item=_divide(numerator=total_tokens, denominator=item_count),
         cost_source=cost.source.value,
         cost_usd=cost_usd,
+        reference_cost_usd=reference_cost_usd,
         input_uncached_usd=cost.input_uncached_usd,
         input_cached_usd=cost.input_cached_usd,
         output_usd=cost.output_usd,
@@ -482,8 +495,8 @@ def _entry_for_run(
         input_cached_unit_price_usd=cost.input_cached_unit_price_usd,
         output_unit_price_usd=cost.output_unit_price_usd,
         cost_per_million_items=None
-        if cost_usd is None or item_count <= 0
-        else (cost_usd / item_count) * 1_000_000,
+        if comparable_cost_usd is None or item_count <= 0
+        else (comparable_cost_usd / item_count) * 1_000_000,
         elapsed_seconds=metadata.totals.elapsed_seconds,
         benchmark_seconds=benchmark_seconds,
         seconds_per_item=seconds_per_item,

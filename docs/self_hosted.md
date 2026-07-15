@@ -14,7 +14,9 @@ host env script does this).
 **Machine-time metric:** passing `--hourly-rate-usd` records the machine's hourly rate, and run cost
 is estimated from the wall-clock time the benchmark occupied the box. `--warmup-calls 8` issues
 unrecorded completions before the timed loop so engine warmup (compilation, caches) does not pollute
-the timing.
+the timing. Record the rate actually paid: the leaderboard keeps that figure but compares runs at a
+fixed reference rate per GPU class, so a cheap or expensive rental neither flatters nor penalizes the
+model (see [GPUs and reference rates](../README.md#gpus-and-reference-rates)).
 
 ## Tooling layout
 
