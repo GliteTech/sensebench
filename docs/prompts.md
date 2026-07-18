@@ -13,6 +13,8 @@ src/sensebench/prompts/
   registered/
     p001.json
     p002.json
+    p003.json
+    p004.json
 ```
 
 The `registered/` directory is the immutable prompt registry. The surrounding
@@ -46,12 +48,15 @@ Prompt identity is intentionally simple:
 ```text
 p001
 p002
+p003
+p004
 ```
 
-Both registered prompts render the context as detokenized natural English (`detokenize: true`).
+All registered prompts render the context as detokenized natural English (`detokenize: true`).
 `p001` is the 5+1-context prompt with WordNet sense keys, definitions, synonyms, and examples that
 returns JSON `sense_index`; `p002` is the minimal single-sentence prompt that returns a plain
-integer.
+integer; `p003` is the plain-integer workhorse prompt with the `p001` context window; `p004` is
+`p001` with deterministically randomized sense order.
 
 SenseBench does not use prompt versions. If a prompt changes, it receives a new ID. A prompt may
 optionally point to an older prompt with `supersedes`.
@@ -536,9 +541,23 @@ Minimal single-sentence context with `<t>...</t>` target marking, definitions an
 example per sense, frequency order, and plain integer output. The context is detokenized into
 natural English (`detokenize: true`).
 
-Both prompts share the same detokenized input; `p001` and `p002` together give a clean comparison of
-a rich JSON prompt against a minimal plain-integer prompt on identical context.
+`p003`
 
-Further prompts (for example a deterministic shuffled sense order, or a POS-augmented variant) can
-follow as new IDs to study output-format and sense-order effects without making any single release
-hard to audit.
+Workhorse prompt combining the `p002` plain-integer output with the `p001` 5+1 context window.
+Candidate senses are rendered compact-inline with definitions, synonyms, and up to two examples per
+sense, but no WordNet sense keys or POS. Frequency order, `<t>...</t>` target marking, detokenized
+context.
+
+`p004`
+
+Same evidence as `p001` (WordNet sense keys, definitions, synonyms, up to two examples per sense)
+in the 5+1 context window with JSON `sense_index` output, but candidate senses are ordered by a
+deterministic per-item shuffle (`sense_order: random_fixed`) instead of WordNet frequency, to
+measure sense-order effects.
+
+All four prompts share the same detokenized input. `p001` and `p002` compare a rich JSON prompt
+against a minimal plain-integer prompt; `p003` isolates the context-window and evidence factors at
+plain-integer output; `p004` isolates sense-order effects against `p001`.
+
+Further prompts (for example a POS-augmented variant) can follow as new IDs to study prompt-factor
+effects without making any single release hard to audit.
