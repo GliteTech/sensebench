@@ -125,6 +125,14 @@ BASELINE_KIND_LABELS: dict[BaselineKind, str] = {
 CORRECT_BIT: str = "1"
 INCORRECT_BIT: str = "0"
 MONEY_SMALL_VALUE_SIGNIFICANT_FIGURES: int = 3
+RUN_TITLE_SEPARATOR: str = " · "
+RUN_TITLE_SITE_SUFFIX: str = " | SenseBench"
+WSD_TASK_PHRASE: str = "word sense disambiguation"
+REASONING_EFFORT_LABEL_SUFFIX: str = "reasoning"
+OMITTED_REASONING_EFFORTS: frozenset[str] = frozenset({"none"})
+DATASET_VERSION_LABELS: dict[str, str] = {DEFAULT_LEXEN_RELEASE_ID: "lexEN v1"}
+UNKNOWN_DATASET_VERSION_LABEL: str = "an unregistered dataset"
+RUN_VERIFICATION_SENTENCE: str = "Verified from the stored raw API responses."
 PAGE_CONTEXT_KEY: str = "page"
 FRONTIER_RUN_IDS_CONTEXT_KEY: str = "frontier_run_ids"
 PROMPT_CONTEXT_KEY: str = "prompt"
@@ -394,6 +402,58 @@ def _format_baseline_kind(value: str) -> str:
     except ValueError:
         return value
     return BASELINE_KIND_LABELS.get(baseline_kind, value)
+
+
+def _reasoning_effort_label(effort: str | None) -> str | None:
+    if effort is None or effort in OMITTED_REASONING_EFFORTS:
+        return None
+    if effort.endswith(REASONING_EFFORT_LABEL_SUFFIX):
+        return effort
+    return f"{effort} {REASONING_EFFORT_LABEL_SUFFIX}"
+
+
+def _dataset_version_label(dataset_version: str | None) -> str:
+    if dataset_version is None:
+        return UNKNOWN_DATASET_VERSION_LABEL
+    return DATASET_VERSION_LABELS.get(dataset_version, dataset_version)
+
+
+def _hardware_labels(entry: LeaderboardEntry) -> list[str]:
+    return [value for value in (entry.quantization, entry.gpu) if value is not None]
+
+
+def _run_page_title(entry: LeaderboardEntry) -> str:
+    headline = (
+        f"{entry.display_label or entry.model} {WSD_TASK_PHRASE}"
+        f" — {_format_percent(entry.accuracy)}"
+        f" on {_dataset_version_label(entry.dataset_version)}"
+    )
+    effort_label = _reasoning_effort_label(entry.reasoning_effort)
+    qualifiers = [
+        *([] if effort_label is None else [effort_label]),
+        *_hardware_labels(entry),
+        entry.prompt_id,
+    ]
+    return RUN_TITLE_SEPARATOR.join([headline, *qualifiers]) + RUN_TITLE_SITE_SUFFIX
+
+
+def _run_page_description(entry: LeaderboardEntry) -> str:
+    hardware_labels = _hardware_labels(entry)
+    hardware_clause = "" if len(hardware_labels) == 0 else f" ({', '.join(hardware_labels)})"
+    model_label = f"{entry.display_label or entry.model}{hardware_clause}"
+    dataset_label = _dataset_version_label(entry.dataset_version)
+    if entry.accuracy is None:
+        return (
+            f"SenseBench run {entry.run_id}: {model_label} on {dataset_label}"
+            f" {WSD_TASK_PHRASE}, prompt {entry.prompt_id}. {RUN_VERIFICATION_SENTENCE}"
+        )
+    effort_label = _reasoning_effort_label(entry.reasoning_effort)
+    effort_clause = "" if effort_label is None else f" with {effort_label}"
+    return (
+        f"{model_label} scored {_format_percent(entry.accuracy)} on {dataset_label}"
+        f" {WSD_TASK_PHRASE} ({entry.correct_count:,} of {entry.item_count:,} items correct)"
+        f"{effort_clause}, prompt {entry.prompt_id}. {RUN_VERIFICATION_SENTENCE}"
+    )
 
 
 def _format_million_token_price(value: float | None) -> str:
@@ -1475,8 +1535,8 @@ def _render_run_pages(
             env=env,
             template_name="run.html.j2",
             base_url=base_url,
-            title=f"{entry.model} SenseBench Run",
-            description=f"Verified SenseBench run {entry.run_id}.",
+            title=_run_page_title(entry),
+            description=_run_page_description(entry),
             path=path,
             context={
                 DETAIL_CONTEXT_KEY: detail,

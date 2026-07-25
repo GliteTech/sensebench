@@ -79,10 +79,15 @@ from sensebench.runs.models import (
 from sensebench.site.build import (
     DEFAULT_CUSTOM_DOMAIN,
     PROMPTS_ROUTE_PREFIX,
+    UNKNOWN_DATASET_VERSION_LABEL,
     RunDetail,
     SiteData,
+    _dataset_version_label,
     _format_money,
+    _reasoning_effort_label,
     _reference_rate_sentence,
+    _run_page_description,
+    _run_page_title,
     _static_pages,
     build_site,
 )
@@ -148,6 +153,17 @@ QUANT_FILTER_ID: str = "quant-filter"
 X_METRIC_SELECT_ID: str = "x-metric-select"
 X_SCALE_SELECT_ID: str = "x-scale-select"
 MACHINE_TIMING_HEADING_TEXT: str = "Machine &amp; Timing"
+TITLE_OPEN_TAG: str = "<title>"
+TITLE_CLOSE_TAG: str = "</title>"
+WSD_TASK_PHRASE_TEXT: str = "word sense disambiguation"
+ITEMS_CORRECT_TEXT: str = "items correct"
+OMITTED_REASONING_EFFORT: str = "none"
+SELF_DESCRIBING_REASONING_EFFORT: str = "reasoning"
+XHIGH_REASONING_EFFORT: str = "xhigh"
+XHIGH_REASONING_EFFORT_LABEL: str = "xhigh reasoning"
+LEXEN_DISPLAY_LABEL: str = "lexEN v1"
+UNREGISTERED_DATASET_VERSION: str = "custom-v9"
+ALTERNATE_QUANTIZATION: str = "awq-int4"
 MACHINE_HOURS_TEXT: str = "Machine-hours / 1M items"
 SPEED_COLUMN_HEADER_TEXT: str = "Speed (s / item)"
 SPEED_SORT_BUTTON_TEXT: str = 'data-sort="seconds_per_item"'
@@ -707,3 +723,82 @@ def test_build_site_strict_rejects_wrong_dataset_hash(
             base_url=TEST_BASE_URL,
             strict=True,
         )
+
+
+def _page_title(html_text: str) -> str:
+    start = html_text.index(TITLE_OPEN_TAG) + len(TITLE_OPEN_TAG)
+    return html_text[start : html_text.index(TITLE_CLOSE_TAG, start)]
+
+
+def test_reasoning_effort_label_omits_absent_and_never_repeats_the_word() -> None:
+    assert _reasoning_effort_label(None) is None
+    assert _reasoning_effort_label(OMITTED_REASONING_EFFORT) is None
+    assert (
+        _reasoning_effort_label(SELF_DESCRIBING_REASONING_EFFORT)
+        == SELF_DESCRIBING_REASONING_EFFORT
+    )
+    assert _reasoning_effort_label(XHIGH_REASONING_EFFORT) == XHIGH_REASONING_EFFORT_LABEL
+
+
+def test_dataset_version_label_prefers_the_registered_display_name() -> None:
+    assert _dataset_version_label(DEFAULT_LEXEN_RELEASE_ID) == LEXEN_DISPLAY_LABEL
+    assert _dataset_version_label(UNREGISTERED_DATASET_VERSION) == UNREGISTERED_DATASET_VERSION
+    assert _dataset_version_label(None) == UNKNOWN_DATASET_VERSION_LABEL
+
+
+def test_run_page_titles_name_the_task_and_separate_hardware_variants(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    dataset = _dataset()
+    _patch_registered_dataset(monkeypatch=monkeypatch, dataset=dataset)
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    output_dir = tmp_path / SITE_OUTPUT_DIR
+    _write_verified_run(results_dir=results_dir, dataset=dataset, run_id=TEST_RUN_ID)
+    _write_verified_run(
+        results_dir=results_dir,
+        dataset=dataset,
+        run_id=SELF_HOSTED_RUN_ID,
+        model_name=SELF_HOSTED_MODEL_NAME,
+        self_hosted=True,
+    )
+
+    build_site(
+        results_dir=results_dir,
+        output_dir=output_dir,
+        base_url=TEST_BASE_URL,
+        strict=True,
+    )
+
+    cloud_title = _page_title(
+        (output_dir / SITE_RUNS_DIRNAME / TEST_RUN_ID / INDEX_HTML_FILENAME).read_text(
+            encoding="utf-8"
+        )
+    )
+    self_hosted_title = _page_title(
+        (output_dir / SITE_RUNS_DIRNAME / SELF_HOSTED_RUN_ID / INDEX_HTML_FILENAME).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert WSD_TASK_PHRASE_TEXT in cloud_title
+    assert WSD_TASK_PHRASE_TEXT in self_hosted_title
+    assert cloud_title != self_hosted_title
+    assert FIXTURE_QUANTIZATION in self_hosted_title
+    assert EXPECTED_GPU_LABEL in self_hosted_title
+
+    site_data = SiteData.model_validate_json(
+        (output_dir / SITE_DATA_DIRNAME / LEADERBOARD_JSON_PATH).read_text(encoding="utf-8")
+    )
+    self_hosted_entry = next(
+        entry for entry in site_data.entries if entry.run_id == SELF_HOSTED_RUN_ID
+    )
+    requantized_entry = self_hosted_entry.model_copy(
+        update={"quantization": ALTERNATE_QUANTIZATION}
+    )
+    assert _run_page_title(requantized_entry) != _run_page_title(self_hosted_entry)
+
+    description = _run_page_description(self_hosted_entry)
+    assert WSD_TASK_PHRASE_TEXT in description
+    assert ITEMS_CORRECT_TEXT in description
+    assert FIXTURE_QUANTIZATION in description

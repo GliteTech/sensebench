@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use SenseBench, cite this software and the lexEN dataset it evaluates against."
+title: "SenseBench: An Auditable Leaderboard for English Word Sense Disambiguation"
+abstract: "SenseBench evaluates how well language models disambiguate English words. A model is shown a target word in context together with its candidate WordNet senses and must answer with the index of the correct sense. Prompts are immutable registered definitions, dataset releases are pinned by SHA-256 content hash, and every submitted run is re-verified in CI from the stored raw API responses."
+authors:
+  - family-names: "Philippov"
+    given-names: "Vassili"
+  - name: "Glite Tech Ltd"
+version: "0.1.0"
+date-released: "2026-06-12"
+repository-code: "https://github.com/GliteTech/sensebench"
+url: "https://sense-bench.com"
+license: "Apache-2.0"
+keywords:
+  - "word sense disambiguation"
+  - "wordnet"
+  - "benchmark"
+  - "leaderboard"
+  - "llm evaluation"
+  - "lexen"
+  - "nlp"
