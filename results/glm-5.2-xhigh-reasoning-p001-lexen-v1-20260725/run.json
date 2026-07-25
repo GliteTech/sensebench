@@ -1,0 +1,89 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "glm-5.2-xhigh-reasoning-p001-lexen-v1-20260725",
+  "created_at": "2026-07-25T18:24:12.482226+00:00",
+  "git_commit": "7c7cca0275a242b8c1cdd00b1739cab55ac20596",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p001",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "openrouter/z-ai/glm-5.2",
+    "requested_model": "openrouter/z-ai/glm-5.2",
+    "resolved_model": "z-ai/glm-5.2",
+    "resolved_model_counts": {
+      "z-ai/glm-5.2": 4864
+    },
+    "llm_vendor": "Z.ai",
+    "api_provider": "OpenRouter",
+    "source_kind": "open_source",
+    "license": "MIT",
+    "model_url": "https://openrouter.ai/z-ai/glm-5.2",
+    "reasoning_effort": "xhigh",
+    "endpoint_base_url": null
+  },
+  "fallback_model": null,
+  "sampling": {
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": 32768,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit",
+    "shuffle_senses_per_vote": false
+  },
+  "machine": null,
+  "execution": {
+    "concurrency": 48,
+    "warmup_call_count": 0,
+    "timing": {
+      "benchmark_started_at": "2026-07-25T18:08:04.688274+00:00",
+      "benchmark_ended_at": "2026-07-25T18:24:12.477946+00:00",
+      "benchmark_seconds": 967.7920565837994,
+      "setup_seconds": 1.0464645000174642
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4526,
+    "accuracy": 0.9310841390660358,
+    "call_count": 4864,
+    "usage": {
+      "input_tokens": 3001760,
+      "cached_input_tokens": 1867030,
+      "output_tokens": 1772838,
+      "reasoning_output_tokens": 1723862
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 5.467933197363,
+      "input_uncached_usd": 1.195306068505,
+      "input_cached_usd": null,
+      "output_usd": 4.272627128858,
+      "input_uncached_unit_price_usd": null,
+      "input_cached_unit_price_usd": null,
+      "output_unit_price_usd": null,
+      "source": "provider_reported"
+    },
+    "elapsed_seconds": 967.7920565837994,
+    "fallback_used_count": 0
+  }
+}
