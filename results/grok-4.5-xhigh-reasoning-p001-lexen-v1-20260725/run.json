@@ -1,0 +1,89 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "grok-4.5-xhigh-reasoning-p001-lexen-v1-20260725",
+  "created_at": "2026-07-25T18:23:25.410184+00:00",
+  "git_commit": "7c7cca0275a242b8c1cdd00b1739cab55ac20596",
+  "runner": {
+    "github_handle": "vassiliphilippov",
+    "name": "Vassili Philippov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p001",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "openrouter/x-ai/grok-4.5",
+    "requested_model": "openrouter/x-ai/grok-4.5",
+    "resolved_model": "x-ai/grok-4.5",
+    "resolved_model_counts": {
+      "x-ai/grok-4.5": 4868
+    },
+    "llm_vendor": "xAI",
+    "api_provider": "OpenRouter",
+    "source_kind": "proprietary",
+    "license": null,
+    "model_url": "https://openrouter.ai/x-ai/grok-4.5",
+    "reasoning_effort": "xhigh",
+    "endpoint_base_url": null
+  },
+  "fallback_model": null,
+  "sampling": {
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": 32768,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit",
+    "shuffle_senses_per_vote": false
+  },
+  "machine": null,
+  "execution": {
+    "concurrency": 32,
+    "warmup_call_count": 0,
+    "timing": {
+      "benchmark_started_at": "2026-07-25T18:08:00.823391+00:00",
+      "benchmark_ended_at": "2026-07-25T18:23:25.407799+00:00",
+      "benchmark_seconds": 924.5866854586639,
+      "setup_seconds": 1.1216515409760177
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4562,
+    "accuracy": 0.9384900226290886,
+    "call_count": 4868,
+    "usage": {
+      "input_tokens": 3978993,
+      "cached_input_tokens": 1182592,
+      "output_tokens": 1688285,
+      "reasoning_output_tokens": 1649397
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 16.0772896,
+      "input_uncached_usd": 5.9475796,
+      "input_cached_usd": null,
+      "output_usd": 10.12971,
+      "input_uncached_unit_price_usd": null,
+      "input_cached_unit_price_usd": null,
+      "output_unit_price_usd": null,
+      "source": "provider_reported"
+    },
+    "elapsed_seconds": 924.5866854586639,
+    "fallback_used_count": 0
+  }
+}
