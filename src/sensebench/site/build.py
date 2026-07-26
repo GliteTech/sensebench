@@ -422,6 +422,10 @@ def _hardware_labels(entry: LeaderboardEntry) -> list[str]:
     return [value for value in (entry.quantization, entry.gpu) if value is not None]
 
 
+def _run_date_label(created_at: str) -> str:
+    return datetime.fromisoformat(created_at).date().isoformat()
+
+
 def _run_page_title(entry: LeaderboardEntry) -> str:
     headline = (
         f"{entry.display_label or entry.model} {WSD_TASK_PHRASE}"
@@ -433,6 +437,7 @@ def _run_page_title(entry: LeaderboardEntry) -> str:
         *([] if effort_label is None else [effort_label]),
         *_hardware_labels(entry),
         entry.prompt_id,
+        _run_date_label(entry.created_at),
     ]
     return RUN_TITLE_SEPARATOR.join([headline, *qualifiers]) + RUN_TITLE_SITE_SUFFIX
 
@@ -442,17 +447,20 @@ def _run_page_description(entry: LeaderboardEntry) -> str:
     hardware_clause = "" if len(hardware_labels) == 0 else f" ({', '.join(hardware_labels)})"
     model_label = f"{entry.display_label or entry.model}{hardware_clause}"
     dataset_label = _dataset_version_label(entry.dataset_version)
+    date_label = _run_date_label(entry.created_at)
     if entry.accuracy is None:
         return (
             f"SenseBench run {entry.run_id}: {model_label} on {dataset_label}"
-            f" {WSD_TASK_PHRASE}, prompt {entry.prompt_id}. {RUN_VERIFICATION_SENTENCE}"
+            f" {WSD_TASK_PHRASE}, prompt {entry.prompt_id}, {date_label}."
+            f" {RUN_VERIFICATION_SENTENCE}"
         )
     effort_label = _reasoning_effort_label(entry.reasoning_effort)
     effort_clause = "" if effort_label is None else f" with {effort_label}"
     return (
         f"{model_label} scored {_format_percent(entry.accuracy)} on {dataset_label}"
         f" {WSD_TASK_PHRASE} ({entry.correct_count:,} of {entry.item_count:,} items correct)"
-        f"{effort_clause}, prompt {entry.prompt_id}. {RUN_VERIFICATION_SENTENCE}"
+        f"{effort_clause}, prompt {entry.prompt_id}, {date_label}."
+        f" {RUN_VERIFICATION_SENTENCE}"
     )
 
 

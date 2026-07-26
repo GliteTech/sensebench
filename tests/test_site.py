@@ -164,6 +164,8 @@ XHIGH_REASONING_EFFORT_LABEL: str = "xhigh reasoning"
 LEXEN_DISPLAY_LABEL: str = "lexEN v1"
 UNREGISTERED_DATASET_VERSION: str = "custom-v9"
 ALTERNATE_QUANTIZATION: str = "awq-int4"
+RERUN_CREATED_AT: str = "2026-07-20T00:00:00+00:00"
+RERUN_DATE_LABEL: str = "2026-07-20"
 MACHINE_HOURS_TEXT: str = "Machine-hours / 1M items"
 SPEED_COLUMN_HEADER_TEXT: str = "Speed (s / item)"
 SPEED_SORT_BUTTON_TEXT: str = 'data-sort="seconds_per_item"'
@@ -797,6 +799,10 @@ def test_run_page_titles_name_the_task_and_separate_hardware_variants(
         update={"quantization": ALTERNATE_QUANTIZATION}
     )
     assert _run_page_title(requantized_entry) != _run_page_title(self_hosted_entry)
+
+    rerun_entry = self_hosted_entry.model_copy(update={"created_at": RERUN_CREATED_AT})
+    assert _run_page_title(rerun_entry) != _run_page_title(self_hosted_entry)
+    assert RERUN_DATE_LABEL in _run_page_title(rerun_entry)
 
     description = _run_page_description(self_hosted_entry)
     assert WSD_TASK_PHRASE_TEXT in description
