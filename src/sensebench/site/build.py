@@ -133,6 +133,14 @@ OMITTED_REASONING_EFFORTS: frozenset[str] = frozenset({"none"})
 DATASET_VERSION_LABELS: dict[str, str] = {DEFAULT_LEXEN_RELEASE_ID: "lexEN v1"}
 UNKNOWN_DATASET_VERSION_LABEL: str = "an unregistered dataset"
 RUN_VERIFICATION_SENTENCE: str = "Verified from the stored raw API responses."
+OG_IMAGE_FILENAME: str = "og-card.png"
+OG_IMAGE_WIDTH: str = "1200"
+OG_IMAGE_HEIGHT: str = "630"
+OG_IMAGE_ALT: str = (
+    "SenseBench cost-versus-accuracy chart: every verified run plotted by "
+    "US dollars per million items against word sense disambiguation accuracy, "
+    "with the Pareto frontier marked."
+)
 PAGE_CONTEXT_KEY: str = "page"
 FRONTIER_RUN_IDS_CONTEXT_KEY: str = "frontier_run_ids"
 PROMPT_CONTEXT_KEY: str = "prompt"
@@ -1108,6 +1116,13 @@ def _render(
     return template.render(
         base_path=_base_path(base_url=base_url),
         canonical_url=_absolute_url(base_url=base_url, path=path),
+        og_image_url=_absolute_url(
+            base_url=base_url,
+            path=f"{SITE_ASSETS_DIRNAME}/{OG_IMAGE_FILENAME}",
+        ),
+        og_image_width=OG_IMAGE_WIDTH,
+        og_image_height=OG_IMAGE_HEIGHT,
+        og_image_alt=OG_IMAGE_ALT,
         title=title,
         description=description,
         default_dataset_version=DEFAULT_LEXEN_RELEASE_ID,

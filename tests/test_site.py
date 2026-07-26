@@ -78,6 +78,7 @@ from sensebench.runs.models import (
 )
 from sensebench.site.build import (
     DEFAULT_CUSTOM_DOMAIN,
+    OG_IMAGE_FILENAME,
     PROMPTS_ROUTE_PREFIX,
     UNKNOWN_DATASET_VERSION_LABEL,
     RunDetail,
@@ -166,6 +167,9 @@ UNREGISTERED_DATASET_VERSION: str = "custom-v9"
 ALTERNATE_QUANTIZATION: str = "awq-int4"
 RERUN_CREATED_AT: str = "2026-07-20T00:00:00+00:00"
 RERUN_DATE_LABEL: str = "2026-07-20"
+LARGE_SHARE_CARD_TEXT: str = '<meta name="twitter:card" content="summary_large_image">'
+SMALL_SHARE_CARD_TEXT: str = '<meta name="twitter:card" content="summary">'
+OG_IMAGE_ABSOLUTE_URL: str = f"{TEST_BASE_URL}{SITE_ASSETS_DIRNAME}/{OG_IMAGE_FILENAME}"
 MACHINE_HOURS_TEXT: str = "Machine-hours / 1M items"
 SPEED_COLUMN_HEADER_TEXT: str = "Speed (s / item)"
 SPEED_SORT_BUTTON_TEXT: str = 'data-sort="seconds_per_item"'
@@ -730,6 +734,36 @@ def test_build_site_strict_rejects_wrong_dataset_hash(
 def _page_title(html_text: str) -> str:
     start = html_text.index(TITLE_OPEN_TAG) + len(TITLE_OPEN_TAG)
     return html_text[start : html_text.index(TITLE_CLOSE_TAG, start)]
+
+
+def test_pages_advertise_a_large_share_card(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    dataset = _dataset()
+    _patch_registered_dataset(monkeypatch=monkeypatch, dataset=dataset)
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    output_dir = tmp_path / SITE_OUTPUT_DIR
+    _write_verified_run(results_dir=results_dir, dataset=dataset, run_id=TEST_RUN_ID)
+
+    build_site(
+        results_dir=results_dir,
+        output_dir=output_dir,
+        base_url=TEST_BASE_URL,
+        strict=True,
+    )
+
+    index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
+    run_html = (output_dir / SITE_RUNS_DIRNAME / TEST_RUN_ID / INDEX_HTML_FILENAME).read_text(
+        encoding="utf-8"
+    )
+
+    for html_text in (index_html, run_html):
+        assert LARGE_SHARE_CARD_TEXT in html_text
+        assert SMALL_SHARE_CARD_TEXT not in html_text
+        assert OG_IMAGE_ABSOLUTE_URL in html_text
+
+    assert (output_dir / SITE_ASSETS_DIRNAME / OG_IMAGE_FILENAME).exists()
 
 
 def test_reasoning_effort_label_omits_absent_and_never_repeats_the_word() -> None:

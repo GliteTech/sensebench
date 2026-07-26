@@ -274,6 +274,17 @@ uv run python tools/verify_prompt.py --all
 uv run sensebench site build --results-dir results --output-dir _site --strict
 ```
 
+The social sharing card (`og:image`) is the paper's cost/accuracy Pareto figure with a header
+band above it. The figure is hand-curated in the paper repository, so it is committed here as
+`tools/assets/pareto-figure.png` rather than regenerated. To refresh it, re-render the figure
+there, trim its margins, overwrite the asset, and rebuild the card:
+
+```bash
+uv run python tools/make_og_card.py
+```
+
+The header carries no run or model counts, so the card does not go stale as runs are merged.
+
 ## About Glite
 
 SenseBench is built and maintained by [Glite](https://glite.ai), the company behind the Glite
