@@ -274,6 +274,17 @@ uv run python tools/verify_prompt.py --all
 uv run sensebench site build --results-dir results --output-dir _site --strict
 ```
 
+The social sharing card (`og:image`) is a generated cost/accuracy Pareto chart carrying the
+run and model counts, so it goes stale as runs are merged. Regenerate and commit it when the
+counts or the frontier change:
+
+```bash
+uv run sensebench leaderboard
+uv run python tools/make_og_card.py
+```
+
+CI warns, but does not fail, when the committed card no longer matches the leaderboard.
+
 ## About Glite
 
 SenseBench is built and maintained by [Glite](https://glite.ai), the company behind the Glite

@@ -79,6 +79,7 @@ python_functions = "test_*"
 [dependency-groups]
 dev = [
     "flowmark>=0.6.5",
+    "matplotlib>=3.9",
     "mypy>=1.13",
     "pre-commit>=4.0",
     "pytest>=8.0",

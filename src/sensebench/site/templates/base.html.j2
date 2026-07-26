@@ -10,7 +10,11 @@
     <meta property="og:description" content="{{ description }}">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ canonical_url }}">
-    <meta name="twitter:card" content="summary">
+    <meta property="og:image" content="{{ og_image_url }}?v={{ asset_version }}">
+    <meta property="og:image:width" content="{{ og_image_width }}">
+    <meta property="og:image:height" content="{{ og_image_height }}">
+    <meta property="og:image:alt" content="{{ og_image_alt }}">
+    <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" type="image/svg+xml" href="{{ base_path }}assets/favicon.svg?v={{ asset_version }}">
     <link rel="stylesheet" href="{{ base_path }}assets/site.css?v={{ asset_version }}">
   </head>

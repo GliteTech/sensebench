@@ -24,6 +24,11 @@ jobs:
           python-version: "3.12"
       - run: uv sync
       - run: uv run sensebench site build --results-dir results --output-dir _site --strict
+      - name: Check social card freshness
+        run: >
+          uv run python tools/make_og_card.py --check
+          --leaderboard-json _site/data/leaderboard.json
+          || echo "::warning::Social card counts are stale; regenerate with tools/make_og_card.py"
       - name: Upload pull request preview artifact
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
