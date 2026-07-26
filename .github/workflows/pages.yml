@@ -24,6 +24,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync
       - run: uv run sensebench site build --results-dir results --output-dir _site --strict
+      - run: uv run python tools/check_homepage_answer.py
       - name: Upload pull request preview artifact
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4

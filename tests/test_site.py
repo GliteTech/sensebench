@@ -20,6 +20,7 @@ from sensebench.leaderboard.gpu import (
     GPU_REFERENCE_HOURLY_RATE_USD,
     GPU_REFERENCE_RATES_AS_OF,
 )
+from sensebench.leaderboard.schemes import DEFAULT_SCHEME_ID
 from sensebench.paths import (
     CALLS_FILENAME,
     CNAME_FILENAME,
@@ -167,6 +168,11 @@ UNREGISTERED_DATASET_VERSION: str = "custom-v9"
 ALTERNATE_QUANTIZATION: str = "awq-int4"
 RERUN_CREATED_AT: str = "2026-07-20T00:00:00+00:00"
 RERUN_DATE_LABEL: str = "2026-07-20"
+ANSWER_BLOCK_MARKER: str = '<section class="answer-block"'
+ANSWER_HEADING_TEXT: str = "Which LLM is best at word sense disambiguation?"
+TITLE_HEAD_TERM: str = "Word Sense Disambiguation Leaderboard"
+DESCRIPTION_RUN_COUNT_TEXT: str = "1 audited runs"
+LEXEN_FINE_SCHEME_ID: str = "lexen_fine"
 LARGE_SHARE_CARD_TEXT: str = '<meta name="twitter:card" content="summary_large_image">'
 SMALL_SHARE_CARD_TEXT: str = '<meta name="twitter:card" content="summary">'
 OG_IMAGE_ABSOLUTE_URL: str = f"{TEST_BASE_URL}{SITE_ASSETS_DIRNAME}/{OG_IMAGE_FILENAME}"
@@ -734,6 +740,38 @@ def test_build_site_strict_rejects_wrong_dataset_hash(
 def _page_title(html_text: str) -> str:
     start = html_text.index(TITLE_OPEN_TAG) + len(TITLE_OPEN_TAG)
     return html_text[start : html_text.index(TITLE_CLOSE_TAG, start)]
+
+
+def test_homepage_answers_the_question_in_static_html(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    dataset = _dataset()
+    _patch_registered_dataset(monkeypatch=monkeypatch, dataset=dataset)
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    output_dir = tmp_path / SITE_OUTPUT_DIR
+    _write_verified_run(results_dir=results_dir, dataset=dataset, run_id=TEST_RUN_ID)
+
+    build_site(
+        results_dir=results_dir,
+        output_dir=output_dir,
+        base_url=TEST_BASE_URL,
+        strict=True,
+    )
+
+    index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
+
+    assert ANSWER_BLOCK_MARKER in index_html
+    assert ANSWER_HEADING_TEXT in index_html
+    assert TITLE_HEAD_TERM in _page_title(index_html)
+    # The description is generated, so it must carry live counts rather than prose.
+    assert DESCRIPTION_RUN_COUNT_TEXT in index_html
+
+
+def test_answer_block_scheme_qualifier_still_names_the_default() -> None:
+    # The block states default-scheme figures in prose. If the default moves, the prose
+    # silently becomes false, so pin it here rather than discovering it on the homepage.
+    assert DEFAULT_SCHEME_ID == LEXEN_FINE_SCHEME_ID
 
 
 def test_pages_advertise_a_large_share_card(

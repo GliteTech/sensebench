@@ -33,6 +33,33 @@
   </dl>
 </section>
 
+{#
+  Hand-written by an agent, not generated: the statistical-tie set and the ConSeC/LENS
+  training-data distinction are judgements a format string cannot make. Every figure is
+  guarded by test_homepage_answer_block_figures_match_the_leaderboard in tests/test_site.py,
+  so stale numbers fail CI. Rewrite with .agents/skills/write-homepage-answer.
+#}
+<section class="answer-block" aria-labelledby="answer-heading">
+  <h2 id="answer-heading">Which LLM is best at word sense disambiguation?</h2>
+  <p class="intro">
+    As of <time datetime="2026-07-25">25 July 2026</time>, the best verified result on
+    <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN v1</a> is
+    <strong>95.60%</strong> (95% CI 95.00–96.17), from
+    <a href="{{ base_path }}runs/gpt-5.5-xhigh-reasoning-p001-lexen-v1-20260617/">GPT-5.5 at xhigh
+    reasoning effort</a> under <a href="{{ base_path }}prompts/p001/">registered prompt p001</a> —
+    4,647 of 4,861 polysemous English items. Only Claude Fable 5 is statistically
+    indistinguishable from it (95.21%, McNemar p = 0.20); Gemini 3.1 Pro, GPT-5.6 and Claude
+    Opus 5 all fall significantly below. WordNet's most-frequent-sense heuristic scores 61.55%
+    on the same items; among supervised systems ConSeC, trained on the original human labels,
+    reaches 84.88%, while Glite's own LENS, retrained on model-relabelled SemCor, reaches
+    89.69%. Figures use the default labels — lexEN v1 gold at
+    <a href="{{ base_path }}label-schemes/">WordNet fine granularity</a>;
+    <a href="{{ base_path }}coarsening/">coarser sense inventories</a> score substantially
+    higher. Every number is recomputed in CI from the stored raw API responses.
+  </p>
+  <p class="note">198 verified runs · 63 models · latest run 25 July 2026</p>
+</section>
+
 <section class="scheme-bar" aria-label="Score labels">
   <div class="scheme-bar-controls">
     <label class="scheme-select">

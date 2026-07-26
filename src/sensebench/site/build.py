@@ -434,6 +434,18 @@ def _run_date_label(created_at: str) -> str:
     return datetime.fromisoformat(created_at).date().isoformat()
 
 
+def _index_description(*, summary: SiteSummary) -> str:
+    dataset_labels = ", ".join(
+        _dataset_version_label(version) for version in summary.dataset_versions
+    )
+    dataset_clause = "" if len(dataset_labels) == 0 else f" on {dataset_labels}"
+    return (
+        "Verified leaderboard for English word sense disambiguation: "
+        f"{summary.verified_run_count} audited runs across {summary.model_count} models"
+        f"{dataset_clause}. Top accuracy {_format_percent(summary.top_accuracy)}."
+    )
+
+
 def _run_page_title(entry: LeaderboardEntry) -> str:
     headline = (
         f"{entry.display_label or entry.model} {WSD_TASK_PHRASE}"
@@ -1644,8 +1656,8 @@ def _render_index(
         env=env,
         template_name="index.html.j2",
         base_url=base_url,
-        title="SenseBench Leaderboard",
-        description="Verified leaderboard for English word sense disambiguation with LLMs.",
+        title="SenseBench (WSD): LLM Word Sense Disambiguation Leaderboard",
+        description=_index_description(summary=site_data.summary),
         path=path,
         context={
             SITE_DATA_CONTEXT_KEY: site_data,
