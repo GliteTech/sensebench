@@ -3,7 +3,8 @@
 [![PyPI](https://img.shields.io/pypi/v/sensebench)](https://pypi.org/project/sensebench/)
 [![Python](https://img.shields.io/pypi/pyversions/sensebench)](https://pypi.org/project/sensebench/)
 [![CI](https://github.com/GliteTech/sensebench/actions/workflows/ci.yml/badge.svg)](https://github.com/GliteTech/sensebench/actions/workflows/ci.yml)
-[![License](https://img.shields.io/pypi/l/sensebench)](LICENSE)
+[![Code license](https://img.shields.io/pypi/l/sensebench?label=code)](LICENSE)
+[![Data license: CC BY-NC 4.0](https://img.shields.io/badge/data-CC%20BY--NC%204.0-lightgrey.svg)](https://github.com/GliteTech/lexen/blob/main/LICENSE)
 
 SenseBench is a benchmark and leaderboard for evaluating English word sense disambiguation (WSD) on
 [lexEN](https://github.com/GliteTech/lexen) and related datasets. A model is shown a target word in
@@ -213,6 +214,10 @@ and SemEval-2015 all-words tasks, with candidate senses drawn from WordNet 3.0. 
 suspicious items, changing 211 gold labels and removing 56 unresolvable items relative to the source
 set.
 
+The dataset is licensed separately from this software: **lexEN data is CC BY-NC 4.0**, inherited from
+[Maru et al. 2022](https://github.com/SapienzaNLP/wsd-hard-benchmark), and is released for research
+and non-commercial evaluation only. See [License](#license).
+
 Dataset releases are immutable JSONL exports published as
 [GitHub release assets](https://github.com/GliteTech/lexen/releases) and downloaded automatically on
 first use. Every release is pinned inside the package by URL, SHA-256 content hash, and item count,
@@ -295,4 +300,18 @@ resources for the WSD community.
 
 ## License
 
-Apache-2.0.
+Code Apache-2.0; lexEN data CC BY-NC 4.0 (inherited from Maru et al. 2022), research and
+non-commercial evaluation only.
+
+The two are licensed separately and the distinction matters:
+
+* **This software** — the `sensebench` package, the runner, the verifier, and the site builder — is
+  [Apache-2.0](LICENSE). Use it commercially if you wish.
+* **The lexEN dataset** is not ours to relicense. It derives from
+  [Maru et al. 2022](https://github.com/SapienzaNLP/wsd-hard-benchmark), distributed under
+  [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/), so lexEN inherits that
+  restriction. Full terms, including the provenance of every source package, are in the
+  [lexEN licence notice](https://github.com/GliteTech/lexen/blob/main/LICENSE).
+* **Run artifacts** submitted to `results/` are covered by this repository's Apache-2.0 licence.
+
+When a form asks for a single licence identifier for the *dataset*, the answer is `cc-by-nc-4.0`.

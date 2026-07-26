@@ -1178,6 +1178,20 @@ def _static_pages() -> list[StaticPage]:
                         "registered dataset and prompt.",
                     ),
                 ),
+                PageSection(
+                    title="Licensing",
+                    paragraphs=(
+                        "Code Apache-2.0; lexEN data CC BY-NC 4.0 (inherited from Maru et al. "
+                        "2022), research and non-commercial evaluation only.",
+                        "The software and the dataset are licensed separately. The SenseBench "
+                        "package, runner, verifier and site builder are Apache-2.0 and may be "
+                        "used commercially.",
+                        "The lexEN dataset derives from the Maru et al. 2022 benchmark, which "
+                        "is distributed under CC BY-NC 4.0, so lexEN inherits that restriction "
+                        "and is not ours to relicense. Submitted run artifacts are covered by "
+                        "the repository's Apache-2.0 licence.",
+                    ),
+                ),
             ),
         ),
         StaticPage(
