@@ -168,6 +168,10 @@ UNREGISTERED_DATASET_VERSION: str = "custom-v9"
 ALTERNATE_QUANTIZATION: str = "awq-int4"
 RERUN_CREATED_AT: str = "2026-07-20T00:00:00+00:00"
 RERUN_DATE_LABEL: str = "2026-07-20"
+FOOTER_LICENCE_TEXT: str = "Code Apache-2.0 · data"
+CC_BY_NC_URL: str = "https://creativecommons.org/licenses/by-nc/4.0/"
+LICENSING_SECTION_TITLE: str = "Licensing"
+ABOUT_SLUG: str = "about"
 ANSWER_BLOCK_MARKER: str = '<section class="answer-block"'
 ANSWER_HEADING_TEXT: str = "Which LLM is best at word sense disambiguation?"
 TITLE_HEAD_TERM: str = "Word Sense Disambiguation Leaderboard"
@@ -802,6 +806,38 @@ def test_pages_advertise_a_large_share_card(
         assert OG_IMAGE_ABSOLUTE_URL in html_text
 
     assert (output_dir / SITE_ASSETS_DIRNAME / OG_IMAGE_FILENAME).exists()
+
+
+def test_every_page_states_the_split_licence(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    # The dataset is CC BY-NC while the code is Apache-2.0. A reader who sees only the
+    # Apache badge reasonably concludes the data is permissive too, so the split has to
+    # be stated where people actually land, not only in the repository.
+    dataset = _dataset()
+    _patch_registered_dataset(monkeypatch=monkeypatch, dataset=dataset)
+    results_dir = tmp_path / SUBMITTED_RESULTS_DIR
+    output_dir = tmp_path / SITE_OUTPUT_DIR
+    _write_verified_run(results_dir=results_dir, dataset=dataset, run_id=TEST_RUN_ID)
+
+    build_site(
+        results_dir=results_dir,
+        output_dir=output_dir,
+        base_url=TEST_BASE_URL,
+        strict=True,
+    )
+
+    index_html = (output_dir / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
+    run_html = (output_dir / SITE_RUNS_DIRNAME / TEST_RUN_ID / INDEX_HTML_FILENAME).read_text(
+        encoding="utf-8"
+    )
+    about_html = (output_dir / ABOUT_SLUG / INDEX_HTML_FILENAME).read_text(encoding="utf-8")
+
+    for html_text in (index_html, run_html, about_html):
+        assert FOOTER_LICENCE_TEXT in html_text
+        assert CC_BY_NC_URL in html_text
+    assert LICENSING_SECTION_TITLE in about_html
 
 
 def test_reasoning_effort_label_omits_absent_and_never_repeats_the_word() -> None:
