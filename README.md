@@ -11,7 +11,7 @@ context plus its candidate WordNet senses and must answer with the index of the 
 Prompts are immutable, registered definitions; runs produce fully auditable artifacts that anyone
 can re-verify down to the raw API responses.
 
-**Live leaderboard:** <https://glitetech.github.io/sensebench/>
+**Live leaderboard:** <https://sense-bench.com/>
 
 ## Install
 

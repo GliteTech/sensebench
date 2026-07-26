@@ -125,7 +125,7 @@ BASELINE_PREDICTION_SPECS: tuple[BaselinePredictionSpec, ...] = (
             "comparison; because its training labels share a model family with the lexEN "
             "triage, its lexEN score is confirmatory under the paper's Section 6.4 rule."
         ),
-        source_url="https://github.com/GliteTech/glite-lens",
+        source_url="https://github.com/GliteTech/research-semcor-relabeling#glite-lens",
     ),
 )
 
