@@ -19,6 +19,24 @@ jobs:
       - run: uv run pytest -q
       - run: uv run python tools/verify_prompt.py --all
 
+  links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Scoped to the files that carry outbound links we control. The Glite LENS 404 lived
+      # in a Python string, not a markdown link, so baselines.py is included deliberately.
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          # --exclude-all-private drops the localhost vLLM example; the second exclude drops
+          # the literal `http://...` placeholder in the self-hosted docs.
+          args: >-
+            --no-progress --max-retries 3 --exclude-all-private
+            --exclude '^http://\.\.\.'
+            README.md docs src/sensebench/leaderboard/baselines.py
+          fail: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   package:
     runs-on: ubuntu-latest
     steps:
