@@ -44,7 +44,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/GliteTech/sensebench"
+Homepage = "https://sense-bench.com"
 Repository = "https://github.com/GliteTech/sensebench"
 Issues = "https://github.com/GliteTech/sensebench/issues"
 Company = "https://glite.ai"
