@@ -1,0 +1,89 @@
+{
+  "schema_version": "sensebench-run-v2",
+  "run_id": "gpt-6-luna-low-reasoning-p001-lexen-v1-20260925",
+  "created_at": "2026-09-25T07:37:21.529500+00:00",
+  "git_commit": "9040664a78ce4afacbe5400eaf6538ee664f3dea",
+  "runner": {
+    "github_handle": "emilkayumov",
+    "name": "Emil Kaiumov",
+    "contact": null
+  },
+  "dataset": {
+    "dataset_id": "lexen",
+    "dataset_version": "lexen-v1",
+    "dataset_revision": null,
+    "content_hash": "sha256:5fd4382b93f19087a1e31f6dd7d1db17c1eb17ff80fcbe1d3fdd55c0c3ecefe8",
+    "item_count": 4861
+  },
+  "prompt": {
+    "id": "p001",
+    "sensebench_version": "0.1.0"
+  },
+  "model": {
+    "kind": "cloud_llm",
+    "display_name": "gpt-6-luna",
+    "requested_model": "gpt-6-luna",
+    "resolved_model": "gpt-6-luna",
+    "resolved_model_counts": {
+      "gpt-6-luna": 4861
+    },
+    "llm_vendor": "OpenAI",
+    "api_provider": "OpenAI",
+    "source_kind": "proprietary",
+    "license": null,
+    "model_url": null,
+    "reasoning_effort": "low",
+    "endpoint_base_url": null
+  },
+  "fallback_model": null,
+  "sampling": {
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": 32768,
+    "seed": null,
+    "extra": {}
+  },
+  "policy": {
+    "votes_per_item": 1,
+    "semantic_reasks_per_invalid_vote": 1,
+    "tie_break": "earliest_vote",
+    "monosemous_policy": "short_circuit",
+    "shuffle_senses_per_vote": false
+  },
+  "machine": null,
+  "execution": {
+    "concurrency": 512,
+    "warmup_call_count": 0,
+    "timing": {
+      "benchmark_started_at": "2026-09-25T07:37:01.046247+00:00",
+      "benchmark_ended_at": "2026-09-25T07:37:21.528436+00:00",
+      "benchmark_seconds": 20.4822975830175,
+      "setup_seconds": 0.8635193340014666
+    }
+  },
+  "totals": {
+    "item_count": 4861,
+    "correct_count": 4412,
+    "accuracy": 0.9076321744497017,
+    "call_count": 4861,
+    "usage": {
+      "input_tokens": 2971464,
+      "cached_input_tokens": 407207,
+      "output_tokens": 196109,
+      "reasoning_output_tokens": 133264
+    },
+    "cost": {
+      "currency": "USD",
+      "total_usd": 0.35855227,
+      "input_uncached_usd": 0.2564257,
+      "input_cached_usd": 0.00407207,
+      "output_usd": 0.09805449999999999,
+      "input_uncached_unit_price_usd": 1e-7,
+      "input_cached_unit_price_usd": 1e-8,
+      "output_unit_price_usd": 5e-7,
+      "source": "litellm_estimate"
+    },
+    "elapsed_seconds": 20.4822975830175,
+    "fallback_used_count": 0
+  }
+}
