@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from pytest import approx
+from pytest import approx, mark
 
+from sensebench.datasets.models import ItemID
 from sensebench.runner.client import (
     COMPLETION_TOKENS_FIELD,
     INPUT_COST_PER_TOKEN_FIELD,
@@ -12,9 +13,11 @@ from sensebench.runner.client import (
     OUTPUT_COST_PER_TOKEN_FIELD,
     PROMPT_TOKENS_FIELD,
     USAGE_FIELD,
+    _completion_arguments,
     _cost_from_response,
 )
-from sensebench.runs.models import CostSourceKind, TokenUsage
+from sensebench.runner.models import CompletionRequest
+from sensebench.runs.models import AttemptKind, CallID, CostSourceKind, ModelID, TokenUsage
 
 PRICED_MODEL_ID: str = "test/model"
 PROVIDER_MODEL_ID: str = "qwen/qwen3-235b-a22b-04-28"
@@ -24,6 +27,54 @@ PROVIDER_COMPLETION_COST_USD: float = 0.1
 LITELLM_COMPLETION_COST_USD: float = 0.19
 INPUT_UNIT_PRICE_USD: float = 0.01
 OUTPUT_UNIT_PRICE_USD: float = 0.02
+LUNA_MODEL_ID: ModelID = "gpt-6-luna"
+REASONING_EFFORT_FIELD: str = "reasoning_effort"
+MAX_EFFORT: str = "max"
+TEST_CALL_ID: CallID = "test-call"
+TEST_ITEM_ID: ItemID = "test-item"
+MODEL_FIELD: str = "model"
+COMPLETION_LIMIT_FIELD: str = "max_completion_tokens"
+COMPLETION_LIMIT: int = 128000
+
+
+@mark.parametrize(argnames="model_id", argvalues=[LUNA_MODEL_ID, f"openai/{LUNA_MODEL_ID}"])
+def test_luna_max_uses_responses_without_losing_effort(model_id: ModelID) -> None:
+    request = CompletionRequest(
+        call_id=TEST_CALL_ID,
+        item_id=TEST_ITEM_ID,
+        vote_index=1,
+        attempt_index=1,
+        attempt_kind=AttemptKind.INITIAL,
+        model=model_id,
+        messages=[],
+        parameters={REASONING_EFFORT_FIELD: MAX_EFFORT, COMPLETION_LIMIT_FIELD: COMPLETION_LIMIT},
+    )
+
+    assert _completion_arguments(request=request) == {
+        MODEL_FIELD: "openai/responses/gpt-6-luna",
+        REASONING_EFFORT_FIELD: {"effort": MAX_EFFORT},
+        COMPLETION_LIMIT_FIELD: COMPLETION_LIMIT,
+    }
+    assert request.parameters[REASONING_EFFORT_FIELD] == MAX_EFFORT
+
+
+@mark.parametrize(argnames="effort", argvalues=["none", "low", "medium", "high", "xhigh"])
+def test_luna_other_efforts_keep_chat_completions(effort: str) -> None:
+    request = CompletionRequest(
+        call_id=TEST_CALL_ID,
+        item_id=TEST_ITEM_ID,
+        vote_index=1,
+        attempt_index=1,
+        attempt_kind=AttemptKind.INITIAL,
+        model=LUNA_MODEL_ID,
+        messages=[],
+        parameters={REASONING_EFFORT_FIELD: effort},
+    )
+
+    assert _completion_arguments(request=request) == {
+        MODEL_FIELD: LUNA_MODEL_ID,
+        REASONING_EFFORT_FIELD: effort,
+    }
 
 
 class _FailingCostLiteLlm:

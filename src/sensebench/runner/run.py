@@ -18,7 +18,7 @@ from sensebench.datasets.context import build_dataset_index
 from sensebench.datasets.models import DatasetBundle, DatasetIndex, WsdItem
 from sensebench.prompts.models import MessageRole, PromptDefinition
 from sensebench.prompts.render import ChatMessage, RenderedTask, render_task, vote_shuffle_seed
-from sensebench.runner.client import CompletionClient
+from sensebench.runner.client import LUNA_6_MODEL, CompletionClient
 from sensebench.runner.costs import machine_time_cost, sum_costs
 from sensebench.runner.evaluate import EvaluationConfig, evaluate_item
 from sensebench.runner.models import CompletionRequest, ItemEvaluation
@@ -63,6 +63,8 @@ LLM_MAX_TOKENS_PARAMETER: str = "max_tokens"
 LLM_SEED_PARAMETER: str = "seed"
 LLM_API_BASE_PARAMETER: str = "api_base"
 LLM_REASONING_EFFORT_PARAMETER: str = "reasoning_effort"
+HAIKU_5_5_MODEL: ModelID = "claude-haiku-5-5"
+NO_REASONING_EFFORT: str = "none"
 RESOLVED_MODEL_FIELD: str = "resolved_model"
 RESOLVED_MODEL_COUNTS_FIELD: str = "resolved_model_counts"
 
@@ -146,7 +148,25 @@ def completion_parameters(*, config: RunConfig) -> dict[str, object]:
     if config.model.endpoint_base_url is not None:
         parameters[LLM_API_BASE_PARAMETER] = config.model.endpoint_base_url
     if config.model.kind == CLOUD_LLM_KIND and config.model.reasoning_effort is not None:
-        parameters[LLM_REASONING_EFFORT_PARAMETER] = config.model.reasoning_effort
+        if (
+            config.model.requested_model.removeprefix("anthropic/") == HAIKU_5_5_MODEL
+            and config.model.reasoning_effort == NO_REASONING_EFFORT
+        ):
+            # LiteLLM maps "none" to an omitted thinking field. Haiku 5.5 defaults
+            # to adaptive thinking, so disabling it requires an explicit native value.
+            parameters["thinking"] = {"type": "disabled"}
+            parameters["output_config"] = {"effort": "medium"}
+        else:
+            parameters[LLM_REASONING_EFFORT_PARAMETER] = config.model.reasoning_effort
+    if (
+        config.model.kind == CLOUD_LLM_KIND
+        and config.model.requested_model.removeprefix("openai/") == LUNA_6_MODEL
+    ):
+        # Explicit native fields also support older LiteLLM releases that route
+        # Luna 6 through the generic GPT adapter. The limit includes reasoning.
+        parameters["allowed_openai_params"] = [LLM_REASONING_EFFORT_PARAMETER]
+        if LLM_MAX_TOKENS_PARAMETER in parameters:
+            parameters["max_completion_tokens"] = parameters.pop(LLM_MAX_TOKENS_PARAMETER)
     return parameters
 
 
