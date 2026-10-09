@@ -47,6 +47,22 @@ for prompt in "${PROMPT_IDS[@]}"; do
     fi
     if [[ ! -d "runs/$rid" && ! -d "results/$rid" ]]; then
       "${command[@]}"
+    else
+      existing_dir="runs/$rid"
+      [[ -d "results/$rid" ]] && existing_dir="results/$rid"
+      uv run python - "$existing_dir/run.json" "$run_max_tokens" <<'PY'
+from pathlib import Path
+from sys import argv
+
+from sensebench.runs.models import RunMetadata
+
+metadata = RunMetadata.model_validate_json(Path(argv[1]).read_text(encoding="utf-8"))
+if metadata.sampling.max_tokens != int(argv[2]):
+    raise SystemExit(
+        f"{metadata.run_id}: existing max_tokens={metadata.sampling.max_tokens}, "
+        f"requested max_tokens={argv[2]}; refusing to reuse this run"
+    )
+PY
     fi
     if [[ -n "${LIMIT:-}" ]]; then
       continue
