@@ -86,10 +86,29 @@ OPENROUTER_USAGE_COST_FIELD: str = "cost"
 OPENROUTER_COST_DETAILS_FIELD: str = "cost_details"
 OPENROUTER_PROMPT_COST_FIELD: str = "upstream_inference_prompt_cost"
 OPENROUTER_COMPLETIONS_COST_FIELD: str = "upstream_inference_completions_cost"
+LUNA_6_MODEL: ModelID = "gpt-6-luna"
+REASONING_EFFORT_FIELD: str = "reasoning_effort"
+MAX_REASONING_EFFORT: str = "max"
 
 
 class CompletionClient(Protocol):
     async def complete(self, *, request: CompletionRequest) -> CompletionResult: ...
+
+
+def _completion_arguments(*, request: CompletionRequest) -> dict[str, object]:
+    arguments: dict[str, object] = {**request.parameters, MODEL_FIELD: request.model}
+    if request.model.startswith(OPENROUTER_PREFIX):
+        # OpenRouter accepts the native field; Anthropic/Gemini need translation.
+        arguments["allowed_openai_params"] = [REASONING_EFFORT_FIELD]
+    if (
+        request.model.removeprefix("openai/") == LUNA_6_MODEL
+        and request.parameters.get(REASONING_EFFORT_FIELD) == MAX_REASONING_EFFORT
+    ):
+        # Luna's max effort requires Responses. A native dictionary also preserves
+        # max in older LiteLLM bridges that silently omit an unknown string effort.
+        arguments[MODEL_FIELD] = f"openai/responses/{LUNA_6_MODEL}"
+        arguments[REASONING_EFFORT_FIELD] = {"effort": MAX_REASONING_EFFORT}
+    return arguments
 
 
 def _messages_payload(*, request: CompletionRequest) -> list[dict[str, str]]:
@@ -297,18 +316,9 @@ class LiteLlmClient:
         last_error: Exception | None = None
         for attempt_number in range(self._max_transport_retries + 1):
             try:
-                extra_kwargs: dict[str, object] = {}
-                if request.model.startswith(OPENROUTER_PREFIX):
-                    # OpenRouter's litellm provider config omits reasoning_effort, so reasoning
-                    # models routed through it fail preflight. Whitelist it for OpenRouter only.
-                    # Native Anthropic/Gemini must NOT get this: litellm translates reasoning_effort
-                    # into provider thinking config for them, and raw passthrough is rejected.
-                    extra_kwargs["allowed_openai_params"] = ["reasoning_effort"]
                 response = await litellm.acompletion(
-                    model=request.model,
                     messages=_messages_payload(request=request),
-                    **extra_kwargs,
-                    **request.parameters,
+                    **_completion_arguments(request=request),
                 )
                 payload = _response_to_dict(response=response)
                 usage = _usage_from_payload(payload=payload)

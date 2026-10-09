@@ -19,6 +19,7 @@ OTHER_FAMILY: str = "Other"
 _EXPLICIT_NAMES: dict[str, str] = {
     # OpenAI
     "gpt-5.5": "GPT-5.5",
+    "gpt-6-luna": "GPT-6 Luna",
     "gpt-5.4-mini": "GPT-5.4 Mini",
     "gpt-5.4-nano": "GPT-5.4 Nano",
     "gpt-5-mini": "GPT-5 Mini",
@@ -35,6 +36,7 @@ _EXPLICIT_NAMES: dict[str, str] = {
     "claude-fable-5+fallback:claude-opus-4-8": "Claude Fable 5 (+ Opus 4.8 fallback)",
     "claude-sonnet-4-6": "Claude Sonnet 4.6",
     "claude-haiku-4-5": "Claude Haiku 4.5",
+    "claude-haiku-5-5": "Claude Haiku 5.5",
     # Google (AI Studio gemini/ prefix)
     "gemini/gemini-3.1-pro-preview": "Gemini 3.1 Pro",
     "gemini/gemini-3.5-flash": "Gemini 3.5 Flash",

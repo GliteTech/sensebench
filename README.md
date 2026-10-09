@@ -94,6 +94,45 @@ Each run directory contains:
 * `predictions.jsonl` — one record per item with candidates, votes, and correctness
 * `calls.jsonl.gz` — every raw API request and response
 
+### Running Claude Haiku 5.5
+
+Use `--model claude-haiku-5-5` with `ANTHROPIC_API_KEY`. The supported reasoning settings are
+`none`, `low`, `medium`, `high`, `xhigh`, and `max`. For this model, `none` explicitly disables
+thinking at Anthropic's default medium effort; the other settings use adaptive thinking. Omit
+temperature and top-p. See
+[Anthropic's effort documentation](https://platform.claude.com/docs/en/build-with-claude/effort).
+
+From a repository checkout, run all six settings on p001–p004 with:
+
+```bash
+bash tools/cloud/run_haiku_5_5.sh
+```
+
+The script preserves existing runs and copies verified full runs into `results/`. Semantic retries
+and formatting failures remain in the artifacts, with unresolved answers scored as incorrect;
+transport errors and truncated responses fail the quality gate. Set `DRY_RUN=1` to list the 24
+commands, or `LIMIT=4` for smoke runs that stay under `runs/`. `PROMPTS`, `EFFORTS`,
+`ANTHROPIC_CONCURRENCY`, and `MAX_TOKENS` can narrow or configure the sweep. Max effort defaults to
+128,000 output tokens and concurrency 32 (`MAX_CONCURRENCY`); other modes use 32,768 tokens and
+concurrency 64. Max-effort run IDs include the output cap to preserve earlier attempts.
+
+### Running GPT-6 Luna
+
+Use `--model gpt-6-luna` with `OPENAI_API_KEY`. Run all four prompts at `none`, `low`, `medium`,
+`high`, `xhigh`, and `max` effort with:
+
+```bash
+bash tools/cloud/run_luna_6.sh
+```
+
+The script uses the same verification and artifact-preservation rules as the Haiku sweep. Use
+`DRY_RUN=1`, `LIMIT=4`, `PROMPTS`, or `EFFORTS` to inspect or narrow it. `OPENAI_CONCURRENCY`
+defaults to 64; max effort uses `MAX_CONCURRENCY` (32). Output limits are 32,768 tokens, or 128,000
+at max effort, and can be overridden with `MAX_TOKENS`. The runner passes native OpenAI reasoning
+settings and includes reasoning tokens in the output limit. Max uses the Responses API because Chat
+Completions rejects that level. See the
+[official GPT-6 Luna documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).
+
 ### Running OpenRouter models
 
 SenseBench calls providers through LiteLLM, so any model available on

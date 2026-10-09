@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Evaluate Haiku 5.5 on all registered prompts and benchmark reasoning modes.
+# Usage: bash tools/cloud/run_haiku_5_5.sh [YYYYMMDD]
+# Optional environment: PROMPTS, EFFORTS, ANTHROPIC_CONCURRENCY, MAX_CONCURRENCY,
+# MAX_TOKENS, LIMIT, DRY_RUN=1. LIMIT runs are never copied into results/.
+# Full runs are verified before copying to results/. Existing runs are preserved.
+# Formatting errors are benchmark outcomes: retain retries and failed votes.
+# Reject transport errors and token truncation, which can invalidate the comparison.
+# The none baseline explicitly disables thinking at the default medium effort.
+# https://platform.claude.com/docs/en/build-with-claude/effort
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$REPO_ROOT"
+
+RUN_DATE="${1:-$(date -u +%Y%m%d)}"
+read -r -a PROMPT_IDS <<< "${PROMPTS:-p001 p002 p003 p004}"
+read -r -a REASONING_MODES <<< "${EFFORTS:-none low medium high xhigh max}"
+CONCURRENCY="${ANTHROPIC_CONCURRENCY:-64}"
+
+for prompt in "${PROMPT_IDS[@]}"; do
+  for effort in "${REASONING_MODES[@]}"; do
+    rid="claude-haiku-5.5-${effort}-reasoning-${prompt}-lexen-v1-${RUN_DATE}"
+    run_max_tokens="${MAX_TOKENS:-32768}"
+    run_concurrency="$CONCURRENCY"
+    if [[ "$effort" == max ]]; then
+      run_max_tokens="${MAX_TOKENS:-128000}"
+      run_concurrency="${MAX_CONCURRENCY:-32}"
+      # Separate the higher-cap runs from earlier attempts that exhausted 32k tokens.
+      rid="${rid}-${run_max_tokens}tokens"
+    fi
+    limit_args=()
+    if [[ -n "${LIMIT:-}" ]]; then
+      rid="smoke-${rid}-${LIMIT}"
+      limit_args=(--limit "$LIMIT")
+    fi
+    command=(uv run sensebench run
+      --model claude-haiku-5-5 --prompt "$prompt" --reasoning-effort "$effort"
+      --max-tokens "$run_max_tokens" --concurrency "$run_concurrency" --dataset lexen-v1
+      --hosting-kind cloud_api --api-provider Anthropic --vendor Anthropic
+      --source-kind proprietary --github-handle vassiliphilippov
+      --runner-name "Vassili Philippov" --run-id "$rid" "${limit_args[@]}")
+    if [[ "${DRY_RUN:-0}" == 1 ]]; then
+      printf '%q ' "${command[@]}"
+      printf '\n'
+      continue
+    fi
+    if [[ ! -d "runs/$rid" && ! -d "results/$rid" ]]; then
+      "${command[@]}"
+    else
+      existing_dir="runs/$rid"
+      [[ -d "results/$rid" ]] && existing_dir="results/$rid"
+      uv run python - "$existing_dir/run.json" "$run_max_tokens" <<'PY'
+from pathlib import Path
+from sys import argv
+
+from sensebench.runs.models import RunMetadata
+
+metadata = RunMetadata.model_validate_json(Path(argv[1]).read_text(encoding="utf-8"))
+if metadata.sampling.max_tokens != int(argv[2]):
+    raise SystemExit(
+        f"{metadata.run_id}: existing max_tokens={metadata.sampling.max_tokens}, "
+        f"requested max_tokens={argv[2]}; refusing to reuse this run"
+    )
+PY
+    fi
+    if [[ -n "${LIMIT:-}" ]]; then
+      continue
+    fi
+    run_dir="runs/$rid"
+    [[ -d "results/$rid" ]] && run_dir="results/$rid"
+    uv run python tools/verify_run_quality.py "$run_dir" --dataset lexen-v1 \
+      --allow-invalid-attempts 9722 --allow-invalid-votes 4861 --allow-final-no-valid 4861
+    if [[ ! -d "results/$rid" ]]; then
+      cp -R "$run_dir" "results/$rid"
+    fi
+  done
+done

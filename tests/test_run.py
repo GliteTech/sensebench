@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from asyncio import run as run_async
+from dataclasses import replace
 from json import dumps
 from pathlib import Path
+
+from pytest import mark
 
 from sensebench.datasets.models import ItemID
 from sensebench.prompts.models import SENSE_INDEX_FIELD, MessageRole
@@ -12,6 +15,7 @@ from sensebench.runner.run import (
     WARMUP_CALL_ID_PREFIX,
     RunConfig,
     _model_with_resolved_snapshots,
+    completion_parameters,
     run_benchmark,
 )
 from sensebench.runs.models import (
@@ -55,6 +59,11 @@ MODEL_SNAPSHOT_B: ModelID = "gpt-5.5-2026-05-01"
 MESSAGE_CONTENT: str = "choose"
 RUN_ID: str = "run-1"
 HOURLY_RATE_USD_FIELD: str = "hourly_rate_usd"
+HAIKU_MODEL: ModelID = "claude-haiku-5-5"
+LUNA_MODEL: ModelID = "gpt-6-luna"
+REQUESTED_MODEL_FIELD: str = "requested_model"
+REASONING_EFFORT_FIELD: str = "reasoning_effort"
+NO_REASONING_EFFORT: str = "none"
 
 
 def _cloud_reference() -> CloudLlmReference:
@@ -172,6 +181,63 @@ def _run_config(
         warmup_calls=warmup_calls,
         show_progress=False,
     )
+
+
+@mark.parametrize(argnames="model_id", argvalues=[HAIKU_MODEL, f"anthropic/{HAIKU_MODEL}"])
+def test_haiku_no_reasoning_explicitly_disables_default_thinking(
+    tmp_path: Path,
+    model_id: ModelID,
+) -> None:
+    model = _cloud_reference().model_copy(
+        update={REQUESTED_MODEL_FIELD: model_id, REASONING_EFFORT_FIELD: NO_REASONING_EFFORT},
+    )
+    config = _run_config(tmp_path=tmp_path, model=model, machine=None, warmup_calls=0)
+
+    assert completion_parameters(config=config) == {
+        "thinking": {"type": "disabled"},
+        "output_config": {"effort": "medium"},
+    }
+
+
+@mark.parametrize(argnames="effort", argvalues=["low", "medium", "high", "xhigh", "max"])
+def test_haiku_adaptive_efforts_use_litellm_translation(tmp_path: Path, effort: str) -> None:
+    model = _cloud_reference().model_copy(
+        update={REQUESTED_MODEL_FIELD: HAIKU_MODEL, REASONING_EFFORT_FIELD: effort},
+    )
+    config = _run_config(tmp_path=tmp_path, model=model, machine=None, warmup_calls=0)
+
+    assert completion_parameters(config=config) == {REASONING_EFFORT_FIELD: effort}
+
+
+def test_other_models_keep_native_no_reasoning_translation(tmp_path: Path) -> None:
+    model = _cloud_reference().model_copy(
+        update={REASONING_EFFORT_FIELD: NO_REASONING_EFFORT},
+    )
+    config = _run_config(tmp_path=tmp_path, model=model, machine=None, warmup_calls=0)
+
+    assert completion_parameters(config=config) == {REASONING_EFFORT_FIELD: NO_REASONING_EFFORT}
+
+
+@mark.parametrize(argnames="model_id", argvalues=[LUNA_MODEL, f"openai/{LUNA_MODEL}"])
+@mark.parametrize(argnames="effort", argvalues=["none", "low", "medium", "high", "xhigh", "max"])
+def test_luna_efforts_preserve_native_reasoning_and_output_budget(
+    tmp_path: Path,
+    model_id: ModelID,
+    effort: str,
+) -> None:
+    model = _cloud_reference().model_copy(
+        update={REQUESTED_MODEL_FIELD: model_id, REASONING_EFFORT_FIELD: effort},
+    )
+    config = replace(
+        _run_config(tmp_path=tmp_path, model=model, machine=None, warmup_calls=0),
+        sampling=SamplingParameters(max_tokens=128000),
+    )
+
+    assert completion_parameters(config=config) == {
+        REASONING_EFFORT_FIELD: effort,
+        "allowed_openai_params": [REASONING_EFFORT_FIELD],
+        "max_completion_tokens": 128000,
+    }
 
 
 def test_run_benchmark_shuffle_senses_per_vote_verifies_clean(tmp_path: Path) -> None:
