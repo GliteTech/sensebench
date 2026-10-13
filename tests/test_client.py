@@ -77,6 +77,25 @@ def test_luna_other_efforts_keep_chat_completions(effort: str) -> None:
     }
 
 
+@mark.parametrize(argnames="effort", argvalues=["low", "high"])
+def test_gemini_4_effort_becomes_thinking_level(effort: str) -> None:
+    request = CompletionRequest(
+        call_id=TEST_CALL_ID,
+        item_id=TEST_ITEM_ID,
+        vote_index=1,
+        attempt_index=1,
+        attempt_kind=AttemptKind.INITIAL,
+        model="gemini/gemini-4-argon",
+        messages=[],
+        parameters={REASONING_EFFORT_FIELD: effort},
+    )
+
+    assert _completion_arguments(request=request) == {
+        MODEL_FIELD: "gemini/gemini-4-argon",
+        "thinkingConfig": {"thinkingLevel": effort},
+    }
+
+
 class _FailingCostLiteLlm:
     model_cost: dict[str, dict[str, float]] = {}
 
