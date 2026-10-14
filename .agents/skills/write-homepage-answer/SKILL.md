@@ -4,7 +4,7 @@ description: "Rewrite the hand-written answer block on the SenseBench homepage f
 ---
 # Write the Homepage Answer Block
 
-**Version**: 1
+**Version**: 2
 
 ## Goal
 
@@ -52,8 +52,14 @@ Read before starting:
 4. Take the latest run date as `max(created_at)` across entries, for both the prose and the
    `<time datetime="...">` attribute.
 
-5. Write the block: an `<h2>` phrased as the question, one `<p class="intro">` paragraph, and a
-   `<p class="note">` counts line. Keep the five links and their targets.
+5. Write the block: an `<h2>` phrased as the question, a `<ul class="answer-list">` with the five
+   items below, and a `<p class="note">` counts line. Keep the five links and their targets.
+
+   1. **Best as of `<time>`**: the leader with effort, accuracy, CI, correct of total, prompt.
+   2. **Statistically tied**: every model at p >= 0.05, best run per model, with accuracy and p.
+   3. **Significantly lower**: the notable models just below, with accuracy and p.
+   4. **Non-LLM baselines**: MFS, ConSeC and LENS, with the LENS training-data qualifier.
+   5. **Labels**: the default scheme, and that coarser inventories score higher.
 
 6. Verify:
 
@@ -76,8 +82,8 @@ Read before starting:
   one.
 * **Prefer the number that goes down.** The residual error, the hard-subset score and the
   supervised-baseline gap are more informative, and more defensible, than a headline near ceiling.
-* Keep it one paragraph, roughly 110–130 words: dated, numeric, source-attributed, self-contained.
-  It should stand alone if lifted verbatim, because it will be.
+* Keep each item to one or two sentences: dated, numeric, source-attributed, self-contained. The
+  list should stand alone if lifted verbatim, because it will be.
 * Match the surrounding prose: British spelling, no marketing register, no superlatives that are not
   measurements.
 

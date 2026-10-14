@@ -765,6 +765,21 @@ mark {
   color: var(--muted);
 }
 
+.answer-list {
+  margin: 12px 0 0;
+  padding-left: 1.2em;
+  max-width: 72ch;
+  color: var(--muted);
+}
+
+.answer-list li + li {
+  margin-top: 6px;
+}
+
+.answer-list strong {
+  color: var(--text);
+}
+
 .cell-primary {
   font-weight: 600;
 }
@@ -779,6 +794,24 @@ mark {
 .badge-frontier {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
+}
+
+.badge-new {
+  min-height: 18px;
+  margin-left: 6px;
+  padding: 0 6px;
+  background: color-mix(in srgb, var(--accent-2) 18%, transparent);
+  color: var(--accent-2);
+  font-size: 0.7rem;
+  vertical-align: middle;
+}
+
+tbody tr.row-new {
+  background: color-mix(in srgb, var(--accent-2) 6%, transparent);
+}
+
+tbody tr.row-new:hover {
+  background: color-mix(in srgb, var(--accent-2) 12%, var(--surface-2));
 }
 
 .cost-flag {

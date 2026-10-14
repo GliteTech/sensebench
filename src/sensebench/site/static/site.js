@@ -59,6 +59,9 @@
   ];
   const DEFAULT_SCHEME_ID = "lexen_fine";
   const MACHINE_TIME_COST_SOURCE = "machine_time_estimate";
+  // Measured from the viewer's clock, not the build, so the marker expires without a rebuild.
+  const NEW_RUN_WINDOW_DAYS = 14;
+  const NEW_RUN_WINDOW_MS = NEW_RUN_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
   const runDetailCache = new Map();
   let pairwiseToken = 0;
@@ -402,6 +405,17 @@
     return `<span class="vendor-initial fam-${escapeHtml(String(family).toLowerCase())}">${escapeHtml(initial)}</span>`;
   }
 
+  function isNewRun(entry) {
+    const createdAt = Date.parse(entry.created_at);
+    return Number.isFinite(createdAt) && Date.now() - createdAt < NEW_RUN_WINDOW_MS;
+  }
+
+  function newBadgeHtml(entry) {
+    const day = String(entry.created_at).slice(0, 10);
+    const title = `Run on ${day}, within the last ${NEW_RUN_WINDOW_DAYS} days`;
+    return ` <span class="badge badge-new" title="${escapeHtml(title)}">new</span>`;
+  }
+
   function modelLabel(entry) {
     const base = entry.display_label || entry.model;
     if (entry.reasoning_effort) {
@@ -657,11 +671,12 @@
           vendorParts.push(escapeHtml(gpu));
         }
         const frontierHtml = row.onFrontier ? frontierBadgeHtml(entry) : "";
-        return `<tr>
+        const isNew = isNewRun(entry);
+        return `<tr${isNew ? ' class="row-new"' : ""}>
           <td class="col-rank"><div class="cell-primary">${row.displayRank}</div>${rangeHtml}</td>
           <td class="col-compare"><input class="compare-checkbox" type="checkbox" data-run-id="${escapeHtml(entry.run_id)}"${checked}${disabled}></td>
           <td class="col-model">
-            <div class="cell-primary">${logoHtml(entry)}<a class="model-link" href="${basePath}${escapeHtml(entry.run_url)}" title="${escapeHtml(entry.run_id)}">${escapeHtml(modelLabel(entry))}</a></div>
+            <div class="cell-primary">${logoHtml(entry)}<a class="model-link" href="${basePath}${escapeHtml(entry.run_url)}" title="${escapeHtml(entry.run_id)}">${escapeHtml(modelLabel(entry))}</a>${isNew ? newBadgeHtml(entry) : ""}</div>
             <div class="cell-secondary">${vendorParts.join(" · ")}</div>
             <div class="cell-secondary provenance-mobile"><a href="${basePath}prompts/${encodeURIComponent(entry.prompt_id)}/">${escapeHtml(entry.prompt_id)}</a></div>
           </td>
