@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from html import escape
 from importlib.resources import files
@@ -155,6 +155,13 @@ ENTRIES_CONTEXT_KEY: str = "entries"
 SITE_DATA_CONTEXT_KEY: str = "site_data"
 DATASETS_CONTEXT_KEY: str = "datasets"
 REFERENCE_RATE_SENTENCE_CONTEXT_KEY: str = "reference_rate_sentence"
+RECENT_UPDATES_CONTEXT_KEY: str = "recent_updates"
+RECENT_UPDATE_DAY_COUNT: int = 3
+WSD_EXAMPLE_CONTEXT_KEY: str = "wsd_example"
+# Hand-picked for the homepage explainer: short sentence, four WordNet senses, and the gold
+# (offspring) is not the first-listed sense (young person), which also looks plausible at a
+# glance. The explanation in index.html.j2 refers to this item, so change both together.
+WSD_EXAMPLE_ITEM_ID: ItemID = "senseval2.d002.s052.t002"
 ASSET_VERSION_GLOBAL_KEY: str = "asset_version"
 SOURCE_DATASET_METADATA_KEY: str = "source_dataset"
 ERROR_BUCKET_GROUP: str = "Error"
@@ -233,6 +240,19 @@ class ExampleCandidate(SiteModel):
 class ExamplePromptMessage(SiteModel):
     role: MessageRole
     content: str
+
+
+class WsdExampleSense(SiteModel):
+    index: int
+    definition: str | None
+    is_gold: bool
+
+
+class WsdExample(SiteModel):
+    item_id: ItemID
+    lemma: str
+    sentence_html: str
+    senses: list[WsdExampleSense]
 
 
 class RunExample(SiteModel):
@@ -432,6 +452,57 @@ def _hardware_labels(entry: LeaderboardEntry) -> list[str]:
 
 def _run_date_label(created_at: str) -> str:
     return datetime.fromisoformat(created_at).date().isoformat()
+
+
+class RecentUpdate(NamedTuple):
+    day: str
+    models: list[str]
+
+
+def _long_date_label(day: date) -> str:
+    return f"{day.day} {day:%B %Y}"
+
+
+def _recent_updates(*, entries: list[LeaderboardEntry]) -> list[RecentUpdate]:
+    # Best run first, so each day lists its strongest additions before the rest.
+    ranked = sorted(entries, key=lambda entry: -(entry.accuracy or 0.0))
+    models_by_day: dict[date, list[str]] = defaultdict(list)
+    for entry in ranked:
+        day = datetime.fromisoformat(entry.created_at).date()
+        label = entry.display_label or entry.model
+        if label not in models_by_day[day]:
+            models_by_day[day].append(label)
+    days = sorted(models_by_day, reverse=True)[:RECENT_UPDATE_DAY_COUNT]
+    return [RecentUpdate(day=_long_date_label(day), models=models_by_day[day]) for day in days]
+
+
+def _wsd_example(*, dataset: DatasetBundle) -> WsdExample | None:
+    item = next((item for item in dataset.items if item.item_id == WSD_EXAMPLE_ITEM_ID), None)
+    if item is None:
+        return None
+    index = build_dataset_index(bundle=dataset)
+    document = index.documents_by_id[item.document_id]
+    sentence_index = index.document_sentence_indexes[item.document_id][item.sentence_id]
+    gold = set(gold_fine_keys(item=item, gold_source=GoldSource.LEXEN))
+    return WsdExample(
+        item_id=item.item_id,
+        lemma=item.lemma,
+        sentence_html=_context_sentence_html(
+            sentence=document.sentences[sentence_index],
+            target_token_index=item.target_token_index,
+            detokenize=True,
+        ),
+        senses=[
+            WsdExampleSense(
+                index=position,
+                definition=candidate.definition,
+                is_gold=candidate.sense_key in gold,
+            )
+            for position, candidate in enumerate(
+                get_candidate_senses(lemma=item.lemma, pos=item.pos), start=1
+            )
+        ],
+    )
 
 
 def _index_description(*, summary: SiteSummary) -> str:
@@ -1664,6 +1735,7 @@ def _render_index(
     base_url: str,
     site_data: SiteData,
     frontier_run_ids: set[RunID],
+    wsd_example: WsdExample | None,
 ) -> str:
     path = ""
     html_text = _render(
@@ -1678,6 +1750,8 @@ def _render_index(
             DATASETS_CONTEXT_KEY: sorted(DATASET_RELEASES),
             FRONTIER_RUN_IDS_CONTEXT_KEY: frontier_run_ids,
             REFERENCE_RATE_SENTENCE_CONTEXT_KEY: _reference_rate_sentence(),
+            RECENT_UPDATES_CONTEXT_KEY: _recent_updates(entries=site_data.entries),
+            WSD_EXAMPLE_CONTEXT_KEY: wsd_example,
         },
     )
     _write_text(path=output_dir / INDEX_HTML_FILENAME, text=html_text)
@@ -1733,6 +1807,9 @@ def build_site(
             base_url=base_url,
             site_data=site_data,
             frontier_run_ids=_pareto_frontier_run_ids(entries=collection.entries),
+            wsd_example=_wsd_example(
+                dataset=_dataset_for_version(version=DEFAULT_LEXEN_RELEASE_ID, cache=dataset_cache)
+            ),
         )
     )
     paths.append(

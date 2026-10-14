@@ -2,17 +2,38 @@
 
 {% block content %}
 <section class="leaderboard-head">
-  <div>
-    <p class="eyebrow">English WSD benchmark</p>
-    <h1>SenseBench Leaderboard</h1>
-    <p class="intro">
-      SenseBench measures how well language models disambiguate English words: each model sees a
-      word in its sentence context together with its candidate WordNet senses and must answer with
-      the index of the correct sense. Every row is recomputed from verified, fully auditable run
-      artifacts on the <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN</a> dataset, and
-      anyone can <a href="{{ base_path }}submit/">submit a run</a> by pull request.
+  <p class="eyebrow">English WSD benchmark</p>
+  <h1>SenseBench Leaderboard</h1>
+  <p class="intro">
+    SenseBench measures how well language models disambiguate English words: each model sees a
+    word in its sentence context together with its candidate WordNet senses and must answer with
+    the index of the correct sense. Every row is recomputed from verified, fully auditable run
+    artifacts on the <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN</a> dataset, and
+    anyone can <a href="{{ base_path }}submit/">submit a run</a> by pull request.
+  </p>
+  {% if wsd_example %}
+  <details class="wsd-explainer">
+    <summary>What is word sense disambiguation?</summary>
+    <p>
+      Most words have several meanings. Word sense disambiguation (WSD) is choosing the one a
+      word carries in a particular sentence. Each SenseBench item gives the model a sentence with
+      the target word marked, plus that word's WordNet senses as a numbered list, and the model
+      answers with a number. This item is from lexEN v1:
     </p>
-  </div>
+    <blockquote class="wsd-example-sentence">{{ wsd_example.sentence_html|safe }}</blockquote>
+    <ol class="wsd-example-senses">
+      {% for sense in wsd_example.senses %}
+      <li{% if sense.is_gold %} class="is-gold"{% endif %}>{{ sense.definition }}{% if sense.is_gold %} <span class="badge badge-correct">correct</span>{% endif %}</li>
+      {% endfor %}
+    </ol>
+    <p>
+      Sense 1 looks plausible at a glance, but here "children" means the parents' sons and
+      daughters, whatever their age, so the answer is 2. The model also sees neighbouring
+      sentences and instructions; see <a href="{{ base_path }}prompts/p001/">prompt p001</a> for
+      the full message.
+    </p>
+  </details>
+  {% endif %}
   <dl class="summary-grid">
     <div>
       <dt>Verified Runs</dt>
@@ -30,6 +51,12 @@
       <dt>Dataset</dt>
       <dd>{{ site_data.summary.dataset_versions|join(", ") }}</dd>
     </div>
+    {% if recent_updates %}
+    <div>
+      <dt>Last Update</dt>
+      <dd>{{ recent_updates[0].day }}</dd>
+    </div>
+    {% endif %}
   </dl>
 </section>
 
@@ -41,25 +68,48 @@
 #}
 <section class="answer-block" aria-labelledby="answer-heading">
   <h2 id="answer-heading">Which LLM is best at word sense disambiguation?</h2>
-  <p class="intro">
-    As of <time datetime="2026-10-13">13 October 2026</time>, the best verified result under
-    the default <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN v1</a>
-    <a href="{{ base_path }}label-schemes/">WordNet fine-grained labels</a> is
-    <strong>95.66%</strong> (95% CI 95.08–96.22):
-    <a href="{{ base_path }}runs/gpt-6-astra-xhigh-reasoning-p001-lexen-v1-20260925/">GPT 6 Astra at
-    xhigh effort</a> with <a href="{{ base_path }}prompts/p001/">registered prompt p001</a>,
-    4,650 correct of 4,861 polysemous English items. GPT-5.5 (95.60%; exact McNemar p = 0.87),
-    Claude Opus 5.5 (95.33%; p = 0.27), Gemini 3.8 Flash (95.25%; p = 0.16), Claude Fable 5
-    with Opus 4.8 fallback (95.21%; p = 0.13) and Gemini 4 Argon (95.12%; p = 0.09) are
-    statistically indistinguishable; GPT 6 Sol, Gemini 3.1 Pro and Claude Opus 5 score
-    significantly lower. WordNet's first-sense baseline scores 61.55%.
-    ConSeC, trained on human-labelled SemCor, scores 84.88%; Glite's own LENS, retrained on
-    model-relabelled SemCor, scores 89.69%. Its training labels share a model family with
-    lexEN triage, making this a confirmatory comparison.
-    <a href="{{ base_path }}coarsening/">Coarser sense inventories</a> score higher.
-  </p>
-  <p class="note">292 verified runs · 82 models · latest run 13 October 2026</p>
+  <ul class="answer-list">
+    <li>
+      <strong>Best as of <time datetime="2026-10-13">13 October 2026</time>:</strong>
+      <a href="{{ base_path }}runs/gpt-6-astra-xhigh-reasoning-p001-lexen-v1-20260925/">GPT 6 Astra
+      at xhigh effort</a>, <strong>95.66%</strong> (95% CI 95.08–96.22), 4,650 correct of 4,861
+      polysemous English items with <a href="{{ base_path }}prompts/p001/">registered prompt
+      p001</a>.
+    </li>
+    <li>
+      <strong>Statistically tied</strong> (exact McNemar p &ge; 0.05): GPT-5.5 95.60% (p = 0.87),
+      Claude Opus 5.5 95.33% (p = 0.27), Gemini 3.8 Flash 95.25% (p = 0.16), Claude Fable 5 with
+      Opus 4.8 fallback 95.21% (p = 0.13), Gemini 4 Argon 95.12% (p = 0.09).
+    </li>
+    <li>
+      <strong>Significantly lower:</strong> GPT 6 Sol 95.00% (p &le; 0.03), Gemini 3.1 Pro 94.92%
+      (p = 0.02), Claude Opus 5 94.75% (p = 0.003).
+    </li>
+    <li>
+      <strong>Non-LLM baselines:</strong> WordNet's first sense scores 61.55%; ConSeC, trained on
+      human-labelled SemCor, 84.88%; Glite's own LENS, retrained on model-relabelled SemCor,
+      89.69%. LENS's training labels share a model family with lexEN triage, making this a
+      confirmatory comparison.
+    </li>
+    <li>
+      <strong>Labels:</strong> figures use the default
+      <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN v1</a>
+      <a href="{{ base_path }}label-schemes/">WordNet fine-grained labels</a>;
+      <a href="{{ base_path }}coarsening/">coarser sense inventories</a> score higher.
+    </li>
+  </ul>
 </section>
+
+{% if recent_updates %}
+<section class="recent-updates" aria-label="Last updates">
+  <p>Last updates:</p>
+  <ul>
+    {% for update in recent_updates %}
+    <li>{{ update.day }}: added {{ update.models|join(", ") }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 <section class="scheme-bar" aria-label="Score labels">
   <div class="scheme-bar-controls">
@@ -80,7 +130,11 @@
       </select>
     </label>
   </div>
-  <p class="scheme-bar-note">Re-scores the entire leaderboard — table, chart, Pareto frontier, ranks, and pairwise tests — against the chosen gold labels and sense granularity. Default is lexEN v1 · WordNet fine-grained. <a href="{{ base_path }}label-schemes/">What do these mean? →</a> <a href="{{ base_path }}coarsening/">About coarsening →</a></p>
+  <p class="scheme-bar-note">Re-scores the entire leaderboard — table, chart, Pareto frontier, ranks, and pairwise tests — against the chosen gold labels and sense granularity.</p>
+  <p class="scheme-bar-links">
+    <a href="{{ base_path }}label-schemes/">What do these mean? →</a>
+    <a href="{{ base_path }}coarsening/">About coarsening →</a>
+  </p>
 </section>
 
 <section class="toolbar" aria-label="Leaderboard controls">

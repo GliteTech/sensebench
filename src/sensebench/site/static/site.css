@@ -132,6 +132,18 @@ select {
   max-width: 880px;
 }
 
+.leaderboard-head {
+  display: block;
+}
+
+.leaderboard-head .intro {
+  max-width: none;
+}
+
+.leaderboard-head .summary-grid {
+  margin-top: 18px;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   color: var(--accent);
@@ -765,6 +777,83 @@ mark {
   color: var(--muted);
 }
 
+.answer-list {
+  margin: 12px 0 0;
+  padding-left: 1.2em;
+  color: var(--muted);
+}
+
+.recent-updates {
+  margin: 16px 0 24px;
+  color: var(--muted);
+}
+
+.recent-updates p {
+  margin: 0 0 4px;
+}
+
+.recent-updates ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.recent-updates li + li {
+  margin-top: 2px;
+}
+
+.wsd-explainer {
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.wsd-explainer summary {
+  cursor: pointer;
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.wsd-explainer p {
+  margin: 10px 0 0;
+}
+
+.wsd-example-sentence {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.wsd-example-senses {
+  margin: 10px 0 0;
+  padding-left: 1.6em;
+}
+
+.wsd-example-senses li + li {
+  margin-top: 4px;
+}
+
+.wsd-example-senses .is-gold {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.wsd-example-senses .badge {
+  min-height: 18px;
+  margin-left: 6px;
+  padding: 0 6px;
+  font-size: 0.7rem;
+  vertical-align: middle;
+}
+
+.answer-list li + li {
+  margin-top: 6px;
+}
+
+.answer-list strong {
+  color: var(--text);
+}
+
 .cell-primary {
   font-weight: 600;
 }
@@ -779,6 +868,24 @@ mark {
 .badge-frontier {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
+}
+
+.badge-new {
+  min-height: 18px;
+  margin-left: 6px;
+  padding: 0 6px;
+  background: color-mix(in srgb, var(--accent-2) 18%, transparent);
+  color: var(--accent-2);
+  font-size: 0.7rem;
+  vertical-align: middle;
+}
+
+tbody tr.row-new {
+  background: color-mix(in srgb, var(--accent-2) 6%, transparent);
+}
+
+tbody tr.row-new:hover {
+  background: color-mix(in srgb, var(--accent-2) 12%, var(--surface-2));
 }
 
 .cost-flag {
@@ -810,11 +917,16 @@ mark {
   filter: invert(1);
 }
 
+/* inline-block with hidden overflow puts the baseline at the bottom edge, like an <img>, so
+   the same vertical-align lines the letter tile up with the logos. inline-grid used the
+   letter's baseline instead and sat about 3px high. */
 .vendor-initial {
-  display: inline-grid;
-  place-items: center;
+  display: inline-block;
+  overflow: hidden;
   width: 18px;
   height: 18px;
+  line-height: 18px;
+  text-align: center;
   margin-right: 7px;
   vertical-align: -3px;
   border-radius: 4px;
@@ -1165,6 +1277,14 @@ mark {
 .scheme-bar-note {
   margin: 0;
   color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.scheme-bar-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 0;
   font-size: 0.85rem;
 }
 

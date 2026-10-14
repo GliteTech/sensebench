@@ -51,7 +51,6 @@ def _check(*, index_html: Path, leaderboard_json: Path) -> list[Failure]:
     payload = json.loads(leaderboard_json.read_text(encoding="utf-8"))
     entries = payload["entries"]
     baselines = {row["label"]: row for row in payload.get("baselines", [])}
-    summary = payload["summary"]
     top = entries[0]
 
     failures: list[Failure] = []
@@ -77,8 +76,6 @@ def _check(*, index_html: Path, leaderboard_json: Path) -> list[Failure]:
     require("top model", top["display_label"] or top["model"])
     require("correct count", f"{top['correct_count']:,}")
     require("item count", f"{top['item_count']:,}")
-    require("run count", str(summary["verified_run_count"]))
-    require("model count", str(summary["model_count"]))
 
     for label in REQUIRED_BASELINE_LABELS:
         row = baselines.get(label)

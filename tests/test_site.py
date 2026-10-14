@@ -173,6 +173,7 @@ CC_BY_NC_URL: str = "https://creativecommons.org/licenses/by-nc/4.0/"
 LICENSING_SECTION_TITLE: str = "Licensing"
 ABOUT_SLUG: str = "about"
 ANSWER_BLOCK_MARKER: str = '<section class="answer-block"'
+RECENT_UPDATES_HEADING_TEXT: str = "Last updates"
 ANSWER_HEADING_TEXT: str = "Which LLM is best at word sense disambiguation?"
 TITLE_HEAD_TERM: str = "Word Sense Disambiguation Leaderboard"
 DESCRIPTION_RUN_COUNT_TEXT: str = "1 audited runs"
@@ -767,6 +768,7 @@ def test_homepage_answers_the_question_in_static_html(
 
     assert ANSWER_BLOCK_MARKER in index_html
     assert ANSWER_HEADING_TEXT in index_html
+    assert RECENT_UPDATES_HEADING_TEXT in index_html
     assert TITLE_HEAD_TERM in _page_title(index_html)
     # The description is generated, so it must carry live counts rather than prose.
     assert DESCRIPTION_RUN_COUNT_TEXT in index_html
