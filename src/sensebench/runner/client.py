@@ -52,6 +52,26 @@ _MODEL_INFO_OVERRIDES: dict[str, dict[str, object]] = {
         "supports_prompt_caching": True,
     },
 }
+# Gemini 4 Argon (2026-10-13) at Google's standard $2/$10 per MTok in/out, matching
+# OpenRouter's google-ai-studio listing. The prefixed key prices the request; the bare key
+# is what the response reports as its model, which is where unit prices are looked up.
+_GEMINI_4_ARGON_INFO: dict[str, object] = {
+    "litellm_provider": "gemini",
+    "mode": "chat",
+    "max_input_tokens": 1_048_576,
+    "max_output_tokens": 32_768,
+    "max_tokens": 32_768,
+    "input_cost_per_token": 2e-06,
+    "output_cost_per_token": 1e-05,
+    "output_cost_per_reasoning_token": 1e-05,
+    "cache_read_input_token_cost": 1e-07,
+    "supports_reasoning": True,
+    "supports_response_schema": True,
+    "supports_function_calling": True,
+    "supports_tool_choice": True,
+}
+_MODEL_INFO_OVERRIDES["gemini/gemini-4-argon"] = _GEMINI_4_ARGON_INFO
+_MODEL_INFO_OVERRIDES["gemini-4-argon"] = _GEMINI_4_ARGON_INFO
 _model_overrides_registered: bool = False
 
 
@@ -89,6 +109,9 @@ OPENROUTER_COMPLETIONS_COST_FIELD: str = "upstream_inference_completions_cost"
 LUNA_6_MODEL: ModelID = "gpt-6-luna"
 REASONING_EFFORT_FIELD: str = "reasoning_effort"
 MAX_REASONING_EFFORT: str = "max"
+GEMINI_4_PREFIX: str = "gemini/gemini-4"
+GEMINI_THINKING_CONFIG_FIELD: str = "thinkingConfig"
+GEMINI_THINKING_LEVEL_FIELD: str = "thinkingLevel"
 
 
 class CompletionClient(Protocol):
@@ -108,6 +131,12 @@ def _completion_arguments(*, request: CompletionRequest) -> dict[str, object]:
         # max in older LiteLLM bridges that silently omit an unknown string effort.
         arguments[MODEL_FIELD] = f"openai/responses/{LUNA_6_MODEL}"
         arguments[REASONING_EFFORT_FIELD] = {"effort": MAX_REASONING_EFFORT}
+    if request.model.startswith(GEMINI_4_PREFIX) and REASONING_EFFORT_FIELD in arguments:
+        # litellm only maps effort to `thinkingLevel` for names containing "gemini-3";
+        # anything else gets the Gemini 2.5 `thinkingBudget`, which Gemini 4 ignores (low
+        # and medium both came back with zero thinking tokens). Send the native field.
+        effort = arguments.pop(REASONING_EFFORT_FIELD)
+        arguments[GEMINI_THINKING_CONFIG_FIELD] = {GEMINI_THINKING_LEVEL_FIELD: effort}
     return arguments
 
 
