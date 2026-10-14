@@ -2,17 +2,38 @@
 
 {% block content %}
 <section class="leaderboard-head">
-  <div>
-    <p class="eyebrow">English WSD benchmark</p>
-    <h1>SenseBench Leaderboard</h1>
-    <p class="intro">
-      SenseBench measures how well language models disambiguate English words: each model sees a
-      word in its sentence context together with its candidate WordNet senses and must answer with
-      the index of the correct sense. Every row is recomputed from verified, fully auditable run
-      artifacts on the <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN</a> dataset, and
-      anyone can <a href="{{ base_path }}submit/">submit a run</a> by pull request.
+  <p class="eyebrow">English WSD benchmark</p>
+  <h1>SenseBench Leaderboard</h1>
+  <p class="intro">
+    SenseBench measures how well language models disambiguate English words: each model sees a
+    word in its sentence context together with its candidate WordNet senses and must answer with
+    the index of the correct sense. Every row is recomputed from verified, fully auditable run
+    artifacts on the <a href="https://github.com/GliteTech/lexen" rel="noopener">lexEN</a> dataset, and
+    anyone can <a href="{{ base_path }}submit/">submit a run</a> by pull request.
+  </p>
+  {% if wsd_example %}
+  <details class="wsd-explainer">
+    <summary>What is word sense disambiguation?</summary>
+    <p>
+      Most words have several meanings. Word sense disambiguation (WSD) is choosing the one a
+      word carries in a particular sentence. Each SenseBench item gives the model a sentence with
+      the target word marked, plus that word's WordNet senses as a numbered list, and the model
+      answers with a number. This item is from lexEN v1:
     </p>
-  </div>
+    <blockquote class="wsd-example-sentence">{{ wsd_example.sentence_html|safe }}</blockquote>
+    <ol class="wsd-example-senses">
+      {% for sense in wsd_example.senses %}
+      <li{% if sense.is_gold %} class="is-gold"{% endif %}>{{ sense.definition }}{% if sense.is_gold %} <span class="badge badge-correct">correct</span>{% endif %}</li>
+      {% endfor %}
+    </ol>
+    <p>
+      Sense 1 looks plausible at a glance, but here "children" means the parents' sons and
+      daughters, whatever their age, so the answer is 2. The model also sees neighbouring
+      sentences and instructions; see <a href="{{ base_path }}prompts/p001/">prompt p001</a> for
+      the full message.
+    </p>
+  </details>
+  {% endif %}
   <dl class="summary-grid">
     <div>
       <dt>Verified Runs</dt>
@@ -30,6 +51,12 @@
       <dt>Dataset</dt>
       <dd>{{ site_data.summary.dataset_versions|join(", ") }}</dd>
     </div>
+    {% if recent_updates %}
+    <div>
+      <dt>Last Update</dt>
+      <dd>{{ recent_updates[0].day }}</dd>
+    </div>
+    {% endif %}
   </dl>
 </section>
 
@@ -71,8 +98,18 @@
       <a href="{{ base_path }}coarsening/">coarser sense inventories</a> score higher.
     </li>
   </ul>
-  <p class="note">292 verified runs · 82 models · latest run 13 October 2026</p>
 </section>
+
+{% if recent_updates %}
+<section class="recent-updates" aria-label="Last updates">
+  <p>Last updates:</p>
+  <ul>
+    {% for update in recent_updates %}
+    <li>{{ update.day }}: added {{ update.models|join(", ") }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 <section class="scheme-bar" aria-label="Score labels">
   <div class="scheme-bar-controls">
@@ -93,7 +130,11 @@
       </select>
     </label>
   </div>
-  <p class="scheme-bar-note">Re-scores the entire leaderboard — table, chart, Pareto frontier, ranks, and pairwise tests — against the chosen gold labels and sense granularity. Default is lexEN v1 · WordNet fine-grained. <a href="{{ base_path }}label-schemes/">What do these mean? →</a> <a href="{{ base_path }}coarsening/">About coarsening →</a></p>
+  <p class="scheme-bar-note">Re-scores the entire leaderboard — table, chart, Pareto frontier, ranks, and pairwise tests — against the chosen gold labels and sense granularity.</p>
+  <p class="scheme-bar-links">
+    <a href="{{ base_path }}label-schemes/">What do these mean? →</a>
+    <a href="{{ base_path }}coarsening/">About coarsening →</a>
+  </p>
 </section>
 
 <section class="toolbar" aria-label="Leaderboard controls">

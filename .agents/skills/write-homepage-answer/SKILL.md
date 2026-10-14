@@ -41,7 +41,7 @@ Read before starting:
 
 2. Read `_site/data/leaderboard.json`. Take the top entry's accuracy, both confidence bounds,
    `correct_count`, `item_count`, `display_label`, `reasoning_effort` and `prompt_id`; the baseline
-   accuracies; and `summary.verified_run_count` / `summary.model_count`.
+   accuracies. Run and model counts live in the generated header, not in this block.
 
 3. **Compute the statistical ties.** Load `results/<run-id>/predictions.jsonl` for the top run and
    for every run within a few points of it, and run an exact two-sided McNemar test over the
@@ -53,7 +53,7 @@ Read before starting:
    `<time datetime="...">` attribute.
 
 5. Write the block: an `<h2>` phrased as the question, a `<ul class="answer-list">` with the five
-   items below, and a `<p class="note">` counts line. Keep the five links and their targets.
+   items below. Keep the five links and their targets.
 
    1. **Best as of `<time>`**: the leader with effort, accuracy, CI, correct of total, prompt.
    2. **Statistically tied**: every model at p >= 0.05, best run per model, with accuracy and p.
